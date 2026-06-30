@@ -2,18 +2,23 @@ import os
 import json
 import re
 from datetime import datetime
-from crewai import Agent, Task, Crew
+from crewai import Agent, Task, Crew, LLM
 import google.generativeai as genai
 
 # Configure Gemini
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+
+# ─── LLM CONFIGURATION ───────────────────────────────
+gemini_llm = LLM(
+    model="gemini/gemini-1.5-flash",
+    api_key=os.environ.get("GEMINI_API_KEY")
+)
 
 # Load match data passed from n8n via GitHub Dispatch
 match_data_raw = os.environ.get("MATCH_DATA", "{}")
 match_data = json.loads(match_data_raw)
 
 # ─── AGENT DEFINITIONS ───────────────────────────────
-
 data_scout = Agent(
     role="Lead Cricket Performance Analyst",
     goal="Isolate high-leverage data anomalies within raw scorecard structures",
@@ -23,6 +28,7 @@ data_scout = Agent(
         "impact values: dot-ball percentages under pressure, boundary response "
         "rates against specific bowling angles, momentum shifts over by over."
     ),
+    llm=gemini_llm,
     verbose=True,
     allow_delegation=False
 )
@@ -36,12 +42,12 @@ chief_editor = Agent(
         "high-impact, analytical content. No clichés. No invented stats. "
         "Only use data provided to you."
     ),
+    llm=gemini_llm,
     verbose=True,
     allow_delegation=False
 )
 
 # ─── TASK DEFINITIONS ───────────────────────────────
-
 scouting_task = Task(
     description=f"""
     Analyze this match data and produce a tight, data-backed brief:
@@ -85,7 +91,6 @@ editorial_task = Task(
 )
 
 # ─── RUN CREW ───────────────────────────────────────
-
 crew = Crew(
     agents=[data_scout, chief_editor],
     tasks=[scouting_task, editorial_task],
@@ -95,7 +100,6 @@ crew = Crew(
 result = crew.kickoff()
 
 # ─── SAVE ARTICLE TO FILE ───────────────────────────
-
 article_text = str(result)
 
 # Extract title from frontmatter for filename
@@ -109,7 +113,6 @@ timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 filename = f"content/posts/{timestamp}-{slug}.md"
 
 os.makedirs("content/posts", exist_ok=True)
-
 with open(filename, "w", encoding="utf-8") as f:
     f.write(article_text)
 
