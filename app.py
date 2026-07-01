@@ -110,9 +110,9 @@ if title_match:
     slug = re.sub(r'[^a-z0-9]+', '-', slug).strip('-')[:60]
 
 timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-filename = f"content/posts/{timestamp}-{slug}.md"
+filename = f"src/content/posts/{timestamp}-{slug}.md"
 
-os.makedirs("content/posts", exist_ok=True)
+os.makedirs("src/content/posts", exist_ok=True)
 with open(filename, "w", encoding="utf-8") as f:
     f.write(article_text)
 
