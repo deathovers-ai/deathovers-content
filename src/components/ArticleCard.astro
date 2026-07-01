@@ -1,0 +1,10 @@
+---
+const { post } = Astro.props;
+const { title, category, date, excerpt } = post.data;
+---
+<a href={`/article/${post.slug}`} class="article-card">
+  <div class="category-tag">{category.replace('-', ' ')}</div>
+  <h2>{title}</h2>
+  {excerpt && <p class="excerpt">{excerpt}</p>}
+  {date && <div class="article-meta">{new Date(date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</div>}
+</a>

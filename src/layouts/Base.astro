@@ -1,0 +1,35 @@
+---
+import '../styles/global.css';
+
+const { title = "DeathOvers", description = "Every Ball Counts." } = Astro.props;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title} | DeathOvers</title>
+    <meta name="description" content={description} />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container">
+        <a href="/" class="logo">
+          <span class="death">DEATH</span><span class="overs">OVERS</span>
+        </a>
+        <div class="tagline">Every Ball Counts.</div>
+        <nav>
+          <a href="/press-box">Press Box</a>
+          <a href="/tactical-sheets">Tactical Sheets</a>
+          <a href="/simulations">Simulations</a>
+        </nav>
+      </div>
+    </header>
+    <main class="container">
+      <slot />
+    </main>
+    <footer>
+      DEATHOVERS &middot; AI-Powered Cricket Journalism &middot; {new Date().getFullYear()}
+    </footer>
+  </body>
+</html>

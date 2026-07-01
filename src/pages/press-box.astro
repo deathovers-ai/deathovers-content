@@ -1,0 +1,15 @@
+---
+import Base from '../layouts/Base.astro';
+import ArticleCard from '../components/ArticleCard.astro';
+import { getCollection } from 'astro:content';
+
+const posts = await getCollection('posts', ({ data }) => data.category === 'press-box' && !data.draft);
+const sorted = posts.sort((a, b) => (b.data.date ?? 0) - (a.data.date ?? 0));
+---
+<Base title="Press Box">
+  <h1 class="display" style="font-size: 2rem; margin-top: 2rem;">Press Box</h1>
+  <section class="article-grid">
+    {sorted.length === 0 && <p>No match updates yet.</p>}
+    {sorted.map((post) => <ArticleCard post={post} />)}
+  </section>
+</Base>
