@@ -1,4 +1,30 @@
-- name: Run CrewAI agents
+name: DeathOvers Pipeline
+
+on:
+  repository_dispatch:
+    types: [match_data_ready]
+
+concurrency:
+  group: deathovers-pipeline
+  cancel-in-progress: false
+
+jobs:
+  generate-article:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run CrewAI agents
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -6,3 +32,11 @@
           MATCH_DATA: ${{ toJson(github.event.client_payload) }}
         run: |
           python app.py
+
+      - name: Commit and push article
+        run: |
+          git config user.name "DeathOvers Bot"
+          git config user.email "deathovers.ai@gmail.com"
+          git add content/posts/*.md
+          git commit -m "DeathOvers Pipeline: Deployed Tactical Asset" || echo "No changes to commit"
+          git push
