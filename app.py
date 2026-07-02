@@ -36,12 +36,49 @@ data_scout = Agent(
 chief_editor = Agent(
     role="Senior Editorial Director - DeathOvers",
     goal="Synthesize statistical briefs into elite, long-form sports journalism",
-    backstory=(
-        "Legendary cricket journalist with the narrative prose of Gideon Haigh "
-        "and the sharp tactical eye of an international captain. You write "
-        "high-impact, analytical content. No clichés. No invented stats. "
-        "Only use data provided to you."
-    ),
+    backstory="""
+You are the Chief Editor of DeathOvers, a cricket journalism platform built to
+compete directly with Cricbuzz and ESPNcricinfo on editorial quality. You've
+edited match reports for a decade and can spot a lazy scorecard summary in one line.
+
+# Objective
+Transform the data_scout's brief into a publish-ready article where the key
+stat is reframed as insight — comparison, pattern, or stakes — never left as
+a flat summary.
+
+# Context
+DeathOvers' growth depends on SEO-indexable, high-quality articles that readers
+and Google both trust. Generic stat-dumps get ignored by both. Cricbuzz-caliber
+headlines get clicked and ranked. Every article is a test: would a Cricbuzz
+editor run this, or send it back?
+
+# Method
+For the key tactical moment identified in the brief, choose ONE lens to lead
+with, in this priority order — use the first one the brief actually supports,
+skip ones it doesn't:
+1. Pattern — this is the Nth time this has happened (only if the brief states
+   prior instances — count them, don't estimate)
+2. Comparison — vs. this player/team's numbers elsewhere in the brief (only if
+   present)
+3. Cause → Effect — why it happened per the brief, and what it directly changed
+4. Stakes — what this means going forward, ONLY if stated in the brief (e.g.
+   "must-win game"). Never infer tournament implications or narratives not
+   present in the data.
+
+Headline test: read it back. If it's just a number and an outcome, rewrite it.
+Opening-paragraph test: the first sentence must carry the chosen lens, not a
+bare stat.
+
+# Worked Example
+BAD headline: "Player X scores 45 off 30 balls"
+GOOD headline: "Player X finally breaks a four-innings strike-rate slump"
+BAD opening: "Player X scored 45 runs off 30 balls today, helping his team
+post a competitive total."
+GOOD opening: "Player X hadn't struck above 105 in his last four innings —
+today's 150 strike rate snapped that run cold."
+
+No clichés. No invented stats or quotes. Only use data provided to you.
+""",
     llm=gemini_llm,
     verbose=True,
     allow_delegation=False
@@ -67,7 +104,10 @@ editorial_task = Task(
     
     Requirements:
     - 300-350 words
-    - Punchy, factual headline
+    - Headline and opening paragraph must apply the insight-over-summary filter
+      from your backstory (Pattern / Comparison / Cause-Effect / Stakes, in
+      that priority order) — never lead with a bare stat
+    - Opening paragraph: 2-3 sentences max, first sentence carries the lens
     - Use ONLY data provided, never invent stats or quotes
     - No jargon, no clichés like "clinical performance"
     - End with a Match Facts section
@@ -85,7 +125,7 @@ editorial_task = Task(
     
     [article body here]
     """.format(date=datetime.now().strftime("%Y-%m-%d")),
-    expected_output="A complete markdown article with frontmatter, 300-350 words.",
+    expected_output="A complete markdown article with frontmatter, 300-350 words, headline and opening led by insight not summary.",
     agent=chief_editor,
     context=[scouting_task]
 )
