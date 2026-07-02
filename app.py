@@ -18,10 +18,14 @@ genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 # instead of retrying. The fallback is now enforced manually below.
 
 def build_llm_chain():
+    # (provider_name, model_string, env_var_name) — LLM objects are constructed
+    # lazily in the retry loop below, not here. Constructing all three upfront
+    # meant a missing/blank key on ANY provider (e.g. OpenRouter) crashed the
+    # whole run before Gemini or Groq were ever attempted.
     return [
-        LLM(model="gemini/gemini-2.5-flash-lite", api_key=os.environ.get("GEMINI_API_KEY")),
-        LLM(model="groq/llama-3.3-70b-versatile", api_key=os.environ.get("GROQ_API_KEY")),
-        LLM(model="openrouter/meta-llama/llama-3.3-70b-instruct", api_key=os.environ.get("OPENROUTER_API_KEY")),
+        ("gemini", "gemini/gemini-2.5-flash-lite", "GEMINI_API_KEY"),
+        ("groq", "groq/llama-3.3-70b-versatile", "GROQ_API_KEY"),
+        ("openrouter", "openrouter/meta-llama/llama-3.3-70b-instruct", "OPENROUTER_API_KEY"),
     ]
 
 RETRYABLE_MARKERS = ("UNAVAILABLE", "RESOURCE_EXHAUSTED", "503", "429", "overloaded", "quota")
@@ -39,7 +43,7 @@ match_data = json.loads(match_data_raw)
 # Rebuilt per-attempt so each provider attempt gets agents bound to that
 # attempt's LLM. Cheap to construct — no API calls happen until kickoff().
 
-def build_crew(llm):
+def build_crew(llm, match_data=match_data):
     data_scout = Agent(
         role="Lead Cricket Performance Analyst",
         goal="Isolate high-leverage data anomalies within raw scorecard structures",
@@ -160,25 +164,45 @@ No clichés. No invented stats or quotes. Only use data provided to you.
 # ─── RUN WITH FALLBACK ───────────────────────────────
 
 def run_crew_with_fallback():
-    llm_chain = build_llm_chain()
+    provider_chain = build_llm_chain()
     last_exception = None
+    attempted_any = False
 
-    for i, llm in enumerate(llm_chain):
-        provider_name = llm.model.split("/")[0]
+    for i, (provider_name, model_string, env_var_name) in enumerate(provider_chain):
+        api_key = os.environ.get(env_var_name)
+
+        # Skip cleanly if this provider's key isn't set — don't let a missing
+        # key on provider N crash providers we haven't even tried yet.
+        if not api_key:
+            logger.warning(
+                f"[fallback-chain] Skipping '{provider_name}': {env_var_name} is not set "
+                f"in the environment (check repo secrets)."
+            )
+            continue
+
         try:
-            logger.info(f"[fallback-chain] Attempt {i+1}/{len(llm_chain)} using provider: {provider_name}")
+            logger.info(f"[fallback-chain] Attempt {i+1}/{len(provider_chain)} using provider: {provider_name}")
+            llm = LLM(model=model_string, api_key=api_key)
             crew = build_crew(llm)
+            attempted_any = True
             result = crew.kickoff()
             logger.info(f"[fallback-chain] Success on provider: {provider_name}")
             return result
         except Exception as e:
             last_exception = e
+            attempted_any = True
             if is_retryable(e):
                 logger.warning(f"[fallback-chain] '{provider_name}' failed retryably: {e}")
                 continue
             else:
                 logger.error(f"[fallback-chain] Non-retryable error on '{provider_name}': {e}")
                 raise
+
+    if not attempted_any:
+        raise RuntimeError(
+            "No provider in the fallback chain had a usable API key set. "
+            "Check GEMINI_API_KEY, GROQ_API_KEY, and OPENROUTER_API_KEY in repo secrets."
+        )
 
     raise RuntimeError(f"All providers in fallback chain exhausted. Last error: {last_exception}")
 
