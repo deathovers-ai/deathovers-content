@@ -1,42 +1,63 @@
 import os
 import json
 import re
+import logging
 from datetime import datetime
 from crewai import Agent, Task, Crew, LLM
 import google.generativeai as genai
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Configure Gemini
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 
-# ─── LLM CONFIGURATION ───────────────────────────────
-gemini_llm = LLM(
-    model="gemini/gemini-2.5-flash-lite",
-    api_key=os.environ.get("GEMINI_API_KEY")
-)
+# ─── LLM FALLBACK CHAIN ──────────────────────────────
+# NOTE: LLM(fallbacks=[...]) does NOT catch Gemini's 503 UNAVAILABLE or
+# 429 RESOURCE_EXHAUSTED errors — both were observed crashing crew.kickoff()
+# instead of retrying. The fallback is now enforced manually below.
+
+def build_llm_chain():
+    return [
+        LLM(model="gemini/gemini-2.5-flash-lite", api_key=os.environ.get("GEMINI_API_KEY")),
+        LLM(model="groq/llama-3.3-70b-versatile", api_key=os.environ.get("GROQ_API_KEY")),
+        LLM(model="openrouter/meta-llama/llama-3.3-70b-instruct", api_key=os.environ.get("OPENROUTER_API_KEY")),
+    ]
+
+RETRYABLE_MARKERS = ("UNAVAILABLE", "RESOURCE_EXHAUSTED", "503", "429", "overloaded", "quota")
+
+def is_retryable(exc: Exception) -> bool:
+    msg = str(exc)
+    return any(marker in msg for marker in RETRYABLE_MARKERS)
 
 # Load match data passed from n8n via GitHub Dispatch
 match_data_raw = os.environ.get("MATCH_DATA", "{}")
 match_data = json.loads(match_data_raw)
 
-# ─── AGENT DEFINITIONS ───────────────────────────────
-data_scout = Agent(
-    role="Lead Cricket Performance Analyst",
-    goal="Isolate high-leverage data anomalies within raw scorecard structures",
-    backstory=(
-        "20-year veteran data scientist specializing in cricket metrics. "
-        "You ignore raw aggregates like total runs. You isolate situational "
-        "impact values: dot-ball percentages under pressure, boundary response "
-        "rates against specific bowling angles, momentum shifts over by over."
-    ),
-    llm=gemini_llm,
-    verbose=True,
-    allow_delegation=False
-)
 
-chief_editor = Agent(
-    role="Senior Editorial Director - DeathOvers",
-    goal="Synthesize statistical briefs into elite, long-form sports journalism",
-    backstory="""
+# ─── AGENT + TASK FACTORY ────────────────────────────
+# Rebuilt per-attempt so each provider attempt gets agents bound to that
+# attempt's LLM. Cheap to construct — no API calls happen until kickoff().
+
+def build_crew(llm):
+    data_scout = Agent(
+        role="Lead Cricket Performance Analyst",
+        goal="Isolate high-leverage data anomalies within raw scorecard structures",
+        backstory=(
+            "20-year veteran data scientist specializing in cricket metrics. "
+            "You ignore raw aggregates like total runs. You isolate situational "
+            "impact values: dot-ball percentages under pressure, boundary response "
+            "rates against specific bowling angles, momentum shifts over by over."
+        ),
+        llm=llm,
+        verbose=True,
+        allow_delegation=False
+    )
+
+    chief_editor = Agent(
+        role="Senior Editorial Director - DeathOvers",
+        goal="Synthesize statistical briefs into elite, long-form sports journalism",
+        backstory="""
 You are the Chief Editor of DeathOvers, a cricket journalism platform built to
 compete directly with Cricbuzz and ESPNcricinfo on editorial quality. You've
 edited match reports for a decade and can spot a lazy scorecard summary in one line.
@@ -79,65 +100,90 @@ today's 150 strike rate snapped that run cold."
 
 No clichés. No invented stats or quotes. Only use data provided to you.
 """,
-    llm=gemini_llm,
-    verbose=True,
-    allow_delegation=False
-)
+        llm=llm,
+        verbose=True,
+        allow_delegation=False
+    )
 
-# ─── TASK DEFINITIONS ───────────────────────────────
-scouting_task = Task(
-    description=f"""
-    Analyze this match data and produce a tight, data-backed brief:
-    
-    {json.dumps(match_data, indent=2)}
-    
-    Identify the ONE key tactical moment or pattern that decided this match.
-    Output only facts and numbers. No prose, no flowery language.
-    """,
-    expected_output="A factual data brief, 100-150 words, highlighting the key tactical insight.",
-    agent=data_scout
-)
+    scouting_task = Task(
+        description=f"""
+        Analyze this match data and produce a tight, data-backed brief:
 
-editorial_task = Task(
-    description="""
-    Take the data brief from the previous task and write a full article.
-    
-    Requirements:
-    - 300-350 words
-    - Headline and opening paragraph must apply the insight-over-summary filter
-      from your backstory (Pattern / Comparison / Cause-Effect / Stakes, in
-      that priority order) — never lead with a bare stat
-    - Opening paragraph: 2-3 sentences max, first sentence carries the lens
-    - Use ONLY data provided, never invent stats or quotes
-    - No jargon, no clichés like "clinical performance"
-    - End with a Match Facts section
-    
-    Output the article with this EXACT frontmatter block at the top:
-    
-    ---
-    title: "[headline here]"
-    date: "{date}"
-    category: "[press-box OR tactical-sheets OR simulations]"
-    targetEntity: "[team names]"
-    metricFocus: "[the key metric analyzed]"
-    confidenceScore: [number 0-100]
-    ---
-    
-    [article body here]
-    """.format(date=datetime.now().strftime("%Y-%m-%d")),
-    expected_output="A complete markdown article with frontmatter, 300-350 words, headline and opening led by insight not summary.",
-    agent=chief_editor,
-    context=[scouting_task]
-)
+        {json.dumps(match_data, indent=2)}
 
-# ─── RUN CREW ───────────────────────────────────────
-crew = Crew(
-    agents=[data_scout, chief_editor],
-    tasks=[scouting_task, editorial_task],
-    verbose=True
-)
+        Identify the ONE key tactical moment or pattern that decided this match.
+        Output only facts and numbers. No prose, no flowery language.
+        """,
+        expected_output="A factual data brief, 100-150 words, highlighting the key tactical insight.",
+        agent=data_scout
+    )
 
-result = crew.kickoff()
+    editorial_task = Task(
+        description="""
+        Take the data brief from the previous task and write a full article.
+
+        Requirements:
+        - 300-350 words
+        - Headline and opening paragraph must apply the insight-over-summary filter
+          from your backstory (Pattern / Comparison / Cause-Effect / Stakes, in
+          that priority order) — never lead with a bare stat
+        - Opening paragraph: 2-3 sentences max, first sentence carries the lens
+        - Use ONLY data provided, never invent stats or quotes
+        - No jargon, no clichés like "clinical performance"
+        - End with a Match Facts section
+
+        Output the article with this EXACT frontmatter block at the top:
+
+        ---
+        title: "[headline here]"
+        date: "{date}"
+        category: "[press-box OR tactical-sheets OR simulations]"
+        targetEntity: "[team names]"
+        metricFocus: "[the key metric analyzed]"
+        confidenceScore: [number 0-100]
+        ---
+
+        [article body here]
+        """.format(date=datetime.now().strftime("%Y-%m-%d")),
+        expected_output="A complete markdown article with frontmatter, 300-350 words, headline and opening led by insight not summary.",
+        agent=chief_editor,
+        context=[scouting_task]
+    )
+
+    return Crew(
+        agents=[data_scout, chief_editor],
+        tasks=[scouting_task, editorial_task],
+        verbose=True
+    )
+
+
+# ─── RUN WITH FALLBACK ───────────────────────────────
+
+def run_crew_with_fallback():
+    llm_chain = build_llm_chain()
+    last_exception = None
+
+    for i, llm in enumerate(llm_chain):
+        provider_name = llm.model.split("/")[0]
+        try:
+            logger.info(f"[fallback-chain] Attempt {i+1}/{len(llm_chain)} using provider: {provider_name}")
+            crew = build_crew(llm)
+            result = crew.kickoff()
+            logger.info(f"[fallback-chain] Success on provider: {provider_name}")
+            return result
+        except Exception as e:
+            last_exception = e
+            if is_retryable(e):
+                logger.warning(f"[fallback-chain] '{provider_name}' failed retryably: {e}")
+                continue
+            else:
+                logger.error(f"[fallback-chain] Non-retryable error on '{provider_name}': {e}")
+                raise
+
+    raise RuntimeError(f"All providers in fallback chain exhausted. Last error: {last_exception}")
+
+
+result = run_crew_with_fallback()
 
 # ─── SAVE ARTICLE TO FILE ───────────────────────────
 article_text = str(result)
