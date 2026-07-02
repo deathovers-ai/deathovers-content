@@ -4,6 +4,13 @@ import logging
 from datetime import datetime
 from crewai import Agent, Task, Crew, LLM
 
+# --- THE CREWAI GROQ FIX (Monkey Patch) ---
+# This safely intercepts CrewAI's caching mechanism to strip 
+# the unsupported Anthropic tags before they reach Groq.
+import crewai.llms.cache as _crewai_cache
+_crewai_cache.mark_cache_breakpoint = lambda msg: msg
+# ------------------------------------------
+
 # Configure logging to be highly visible
 logging.basicConfig(
     level=logging.INFO,
