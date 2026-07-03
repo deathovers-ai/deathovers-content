@@ -1,6 +1,7 @@
-crewai>=0.80.0
+crewai==1.14.4
+langchain-groq
 google-generativeai
 google-genai
 litellm
 pyyaml
-langchain-openai
+
