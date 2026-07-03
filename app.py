@@ -13,11 +13,11 @@ _crewai_cache.mark_cache_breakpoint = lambda msg: msg
 
 def load_llm_chain():
     """
-    Hardcoded to a highly stable, specific free model (Llama 3.1 8B)
-    to prevent 502 Bad Gateway crashes from OpenRouter's dynamic free pool.
+    Hardcoded to Google's Gemma 2 9B. 
+    Highly stable, excellent at Markdown, and a permanent fixture on the free tier.
     """
     return LLM(
-        model="openrouter/meta-llama/llama-3.1-8b-instruct:free", 
+        model="openrouter/google/gemma-2-9b-it:free", 
         api_key=os.getenv("OPENROUTER_API_KEY"),
         base_url="https://openrouter.ai/api/v1",
         max_tokens=800
