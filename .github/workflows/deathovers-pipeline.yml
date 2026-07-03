@@ -24,12 +24,11 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Run CrewAI agents
+      - name: Run CrewAI agents (via Groq)
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          MATCH_DATA: ${{ toJson(github.event.client_payload) }}
+          # Mapped perfectly to what app.py is looking for
+          MATCH_DATA_PAYLOAD: ${{ toJson(github.event.client_payload) }}
         run: |
           python app.py
 
@@ -37,6 +36,7 @@ jobs:
         run: |
           git config user.name "DeathOvers Bot"
           git config user.email "deathovers.ai@gmail.com"
-          git add content/posts/*.md
+          # Path updated to match Astro's strict routing
+          git add src/content/posts/*.md
           git commit -m "DeathOvers Pipeline: Deployed Tactical Asset" || echo "No changes to commit"
           git push
