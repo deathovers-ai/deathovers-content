@@ -1,17 +1,24 @@
 import os
 import sys
 import json
-from crewai import Agent, Task, Crew, Process
-from langchain_groq import ChatGroq
 
 # ---------------------------------------------------------------------
-# PRODUCTION ENGINE: Official Langchain Groq Integration
+# BUGFIX: The Monkey Patch
+# This MUST execute before CrewAI is imported. It stops CrewAI from 
+# injecting Anthropic-specific cache tags into our Groq payload.
 # ---------------------------------------------------------------------
+import crewai.llms.cache as _crewai_cache
+_crewai_cache.mark_cache_breakpoint = lambda msg: msg
+# ---------------------------------------------------------------------
+
+from crewai import Agent, Task, Crew, Process, LLM
+
 def load_llm():
-    return ChatGroq(
-        temperature=0.1,
-        groq_api_key=os.getenv("GROQ_API_KEY"),
-        model_name="llama-3.3-70b-versatile"
+    return LLM(
+        model="groq/llama-3.3-70b-versatile",
+        api_key=os.getenv("GROQ_API_KEY"),
+        max_tokens=1000,
+        temperature=0.1
     )
 
 def main():
@@ -106,7 +113,6 @@ draft: false
     # ---------------------------------------------------------------------
     # FILE GENERATION
     # ---------------------------------------------------------------------
-    # Save exactly where Astro looks for collections
     match_id = match_data.get('id', 'pending')
     filename = f"src/content/posts/article-{match_id}.md"
     
