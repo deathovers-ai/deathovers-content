@@ -31,8 +31,6 @@ jobs:
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           MATCH_DATA_PAYLOAD: ${{ toJson(github.event.client_payload) }}
-          # --- FIXES THE CREWAI/GROQ CACHE BUG ---
-          LITELLM_DROP_PARAMS: "true" 
         run: |
           python app.py
 
