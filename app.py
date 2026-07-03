@@ -1,14 +1,43 @@
 import os
 import sys
 import json
+import litellm
 
 # ---------------------------------------------------------------------
-# BUGFIX: The Monkey Patch
-# This MUST execute before CrewAI is imported. It stops CrewAI from 
-# injecting Anthropic-specific cache tags into our Groq payload.
+# BULLETPROOF BUGFIX: The LiteLLM Interceptor (Sync & Async)
+# We intercept the payload right before it hits the Groq API and scrub 
+# the unsupported Anthropic cache tags that CrewAI injects.
 # ---------------------------------------------------------------------
-import crewai.llms.cache as _crewai_cache
-_crewai_cache.mark_cache_breakpoint = lambda msg: msg
+_original_completion = litellm.completion
+_original_acompletion = litellm.acompletion
+
+def _patched_completion(*args, **kwargs):
+    messages = kwargs.get("messages")
+    if not messages and len(args) > 1:
+        messages = args[1]
+        
+    if messages:
+        for msg in messages:
+            if isinstance(msg, dict):
+                msg.pop("cache_breakpoint", None)
+                
+    return _original_completion(*args, **kwargs)
+
+async def _patched_acompletion(*args, **kwargs):
+    messages = kwargs.get("messages")
+    if not messages and len(args) > 1:
+        messages = args[1]
+        
+    if messages:
+        for msg in messages:
+            if isinstance(msg, dict):
+                msg.pop("cache_breakpoint", None)
+                
+    return await _original_acompletion(*args, **kwargs)
+
+# Apply the patches BEFORE CrewAI imports
+litellm.completion = _patched_completion
+litellm.acompletion = _patched_acompletion
 # ---------------------------------------------------------------------
 
 from crewai import Agent, Task, Crew, Process, LLM
@@ -114,6 +143,8 @@ draft: false
     # FILE GENERATION
     # ---------------------------------------------------------------------
     match_id = match_data.get('id', 'pending')
+    
+    # The STRICT Astro Content Collections path
     filename = f"src/content/posts/article-{match_id}.md"
     
     os.makedirs(os.path.dirname(filename), exist_ok=True)
