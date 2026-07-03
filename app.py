@@ -1,16 +1,17 @@
 import os
 import sys
 import json
-from crewai import Agent, Task, Crew, Process, LLM
+from crewai import Agent, Task, Crew, Process
+from langchain_groq import ChatGroq
 
 # ---------------------------------------------------------------------
-# PRODUCTION ENGINE: Groq (Llama 3.3 70B Versatile)
+# PRODUCTION ENGINE: Official Langchain Groq Integration
 # ---------------------------------------------------------------------
 def load_llm():
-    return LLM(
-        model="groq/llama-3.3-70b-versatile",
-        api_key=os.getenv("GROQ_API_KEY"),
-        max_tokens=1000
+    return ChatGroq(
+        temperature=0.1,
+        groq_api_key=os.getenv("GROQ_API_KEY"),
+        model_name="llama-3.3-70b-versatile"
     )
 
 def main():
