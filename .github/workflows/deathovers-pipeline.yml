@@ -11,6 +11,10 @@ concurrency:
 jobs:
   generate-article:
     runs-on: ubuntu-latest
+    # --- ADD THIS BLOCK TO GRANT WRITE ACCESS ---
+    permissions:
+      contents: write
+    # --------------------------------------------
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,7 +31,6 @@ jobs:
       - name: Run CrewAI agents (via Groq)
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          # Mapped perfectly to what app.py is looking for
           MATCH_DATA_PAYLOAD: ${{ toJson(github.event.client_payload) }}
         run: |
           python app.py
@@ -36,7 +39,6 @@ jobs:
         run: |
           git config user.name "DeathOvers Bot"
           git config user.email "deathovers.ai@gmail.com"
-          # Path updated to match Astro's strict routing
           git add src/content/posts/*.md
           git commit -m "DeathOvers Pipeline: Deployed Tactical Asset" || echo "No changes to commit"
           git push
