@@ -1,8 +1,7 @@
 import os
 import sys
 import json
-from crewai import Agent, Task, Crew, Process
-from langchain_openai import ChatOpenAI
+from crewai import Agent, Task, Crew, Process, LLM
 
 # ---------------------------------------------------------------------
 # CRITICAL COMPLIANCE PATCH: CrewAI Groq Prompt-Caching Fix
@@ -15,23 +14,22 @@ _crewai_cache.mark_cache_breakpoint = lambda msg: msg
 def load_llm_chain():
     """
     Automated Try-Except Fallback Engine
-    Ensures zero pipeline failure by gracefully failing over across models
-    when daily quotas or rate limits are hit.
+    Updated to use CrewAI's native LLM class instead of Langchain.
     """
-    # 1. Primary Model: Gemini (via OpenRouter or Native)
+    # 1. Primary Model: Gemini (via OpenRouter)
     try:
-        return ChatOpenAI(
-            model="google/gemini-2.5-pro", 
+        return LLM(
+            model="openrouter/google/gemini-2.5-pro", 
             api_key=os.getenv("OPENROUTER_API_KEY"),
             base_url="https://openrouter.ai/api/v1"
         )
     except Exception:
         pass
 
-    # 2. Secondary Model: Groq (Llama 3.3 70B)
+    # 2. Secondary Model: Groq (Llama 3.3 70B via OpenRouter)
     try:
-        return ChatOpenAI(
-            model="meta-llama/llama-3.3-70b-instruct",
+        return LLM(
+            model="openrouter/meta-llama/llama-3.3-70b-instruct",
             api_key=os.getenv("OPENROUTER_API_KEY"),
             base_url="https://openrouter.ai/api/v1"
         )
@@ -39,7 +37,7 @@ def load_llm_chain():
         pass
 
     # 3. Final Failover: General OpenRouter Provider
-    return ChatOpenAI(
+    return LLM(
         model="openrouter/auto",
         api_key=os.getenv("OPENROUTER_API_KEY"),
         base_url="https://openrouter.ai/api/v1"
@@ -47,7 +45,6 @@ def load_llm_chain():
 
 def main():
     # Load raw text payload sent by n8n
-    # n8n now uses JSON.stringify(), passing clean textual data
     try:
         raw_payload = os.getenv("MATCH_DATA_PAYLOAD", "{}")
         match_data = json.loads(raw_payload)
@@ -55,7 +52,7 @@ def main():
         print(f"Error parsing match payload JSON: {e}")
         sys.exit(1)
 
-    # Initialize the resilient LLM engine
+    # Initialize the resilient native LLM engine
     llm = load_llm_chain()
 
     # ---------------------------------------------------------------------
@@ -149,7 +146,6 @@ draft: false
     result = crew.kickoff()
 
     # Generate unique programmatic file name for static site injection
-    # Example: 20260703-match-analysis.md
     filename = f"content/posts/article-{match_data.get('id', 'pending')}.md"
     os.makedirs(os.path.dirname(filename), exist_ok=True)
 
