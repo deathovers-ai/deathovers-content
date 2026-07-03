@@ -14,14 +14,16 @@ _crewai_cache.mark_cache_breakpoint = lambda msg: msg
 def load_llm_chain():
     """
     Automated Try-Except Fallback Engine
-    Updated to use CrewAI's native LLM class instead of Langchain.
+    Updated to use CrewAI's native LLM class.
+    Capped at 1500 tokens to prevent OpenRouter 402 errors.
     """
     # 1. Primary Model: Gemini (via OpenRouter)
     try:
         return LLM(
             model="openrouter/google/gemini-2.5-pro", 
             api_key=os.getenv("OPENROUTER_API_KEY"),
-            base_url="https://openrouter.ai/api/v1"
+            base_url="https://openrouter.ai/api/v1",
+            max_tokens=1500
         )
     except Exception:
         pass
@@ -31,7 +33,8 @@ def load_llm_chain():
         return LLM(
             model="openrouter/meta-llama/llama-3.3-70b-instruct",
             api_key=os.getenv("OPENROUTER_API_KEY"),
-            base_url="https://openrouter.ai/api/v1"
+            base_url="https://openrouter.ai/api/v1",
+            max_tokens=1500
         )
     except Exception:
         pass
@@ -40,7 +43,8 @@ def load_llm_chain():
     return LLM(
         model="openrouter/auto",
         api_key=os.getenv("OPENROUTER_API_KEY"),
-        base_url="https://openrouter.ai/api/v1"
+        base_url="https://openrouter.ai/api/v1",
+        max_tokens=1500
     )
 
 def main():
