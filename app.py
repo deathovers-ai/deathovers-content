@@ -5,6 +5,7 @@ from crewai import Agent, Task, Crew, Process, LLM
 
 # ---------------------------------------------------------------------
 # CRITICAL COMPLIANCE PATCH: CrewAI Groq Prompt-Caching Fix
+# Intercepts and bypasses unsupported Anthropic caching tags in Groq
 # ---------------------------------------------------------------------
 import crewai.llms.cache as _crewai_cache
 _crewai_cache.mark_cache_breakpoint = lambda msg: msg
@@ -12,16 +13,18 @@ _crewai_cache.mark_cache_breakpoint = lambda msg: msg
 
 def load_llm_chain():
     """
-    Switched to OpenRouter's 100% FREE Gemini model to bypass 402 account limits.
+    Switched to OpenRouter's dynamic FREE router. 
+    It auto-selects a working free model so you never hit a 404 or 402 error.
     """
     return LLM(
-        model="openrouter/google/gemini-2.0-flash-exp:free", 
+        model="openrouter/free", 
         api_key=os.getenv("OPENROUTER_API_KEY"),
         base_url="https://openrouter.ai/api/v1",
         max_tokens=800
     )
 
 def main():
+    # Load raw text payload sent by n8n
     try:
         raw_payload = os.getenv("MATCH_DATA_PAYLOAD", "{}")
         match_data = json.loads(raw_payload)
@@ -29,6 +32,7 @@ def main():
         print(f"Error parsing match payload JSON: {e}")
         sys.exit(1)
 
+    # Initialize the resilient native LLM engine
     llm = load_llm_chain()
 
     # ---------------------------------------------------------------------
@@ -55,7 +59,7 @@ def main():
     )
 
     # ---------------------------------------------------------------------
-    # TASK DEFINITIONS
+    # TASK DEFINITIONS (Structured via Markdown Prompting Formula)
     # ---------------------------------------------------------------------
     scouting_task = Task(
         description=f"""
@@ -115,6 +119,7 @@ draft: false
 
     result = crew.kickoff()
 
+    # Generate unique programmatic file name mapped precisely to Astro's source folder
     filename = f"src/content/posts/article-{match_data.get('id', 'pending')}.md"
     os.makedirs(os.path.dirname(filename), exist_ok=True)
 
