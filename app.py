@@ -4,27 +4,18 @@ import json
 from crewai import Agent, Task, Crew, Process, LLM
 
 # ---------------------------------------------------------------------
-# CRITICAL COMPLIANCE PATCH: CrewAI Groq Prompt-Caching Fix
-# Intercepts and bypasses unsupported Anthropic caching tags in Groq
+# PRODUCTION ENGINE: Groq (Llama 3.3 70B Versatile)
+# Unmatched speed, massive rate limits, highly stable.
 # ---------------------------------------------------------------------
-import crewai.llms.cache as _crewai_cache
-_crewai_cache.mark_cache_breakpoint = lambda msg: msg
-# ---------------------------------------------------------------------
-
-def load_llm_chain():
-    """
-    Hardcoded to Google's Gemma 2 9B. 
-    Highly stable, excellent at Markdown, and a permanent fixture on the free tier.
-    """
+def load_llm():
     return LLM(
-        model="openrouter/google/gemma-2-9b-it:free", 
-        api_key=os.getenv("OPENROUTER_API_KEY"),
-        base_url="https://openrouter.ai/api/v1",
-        max_tokens=800
+        model="groq/llama-3.3-70b-versatile",
+        api_key=os.getenv("GROQ_API_KEY"),
+        max_tokens=1000
     )
 
 def main():
-    # Load raw text payload sent by n8n
+    # 1. Load the exact payload sent from the GitHub Action YAML
     try:
         raw_payload = os.getenv("MATCH_DATA_PAYLOAD", "{}")
         match_data = json.loads(raw_payload)
@@ -32,8 +23,7 @@ def main():
         print(f"Error parsing match payload JSON: {e}")
         sys.exit(1)
 
-    # Initialize the resilient native LLM engine
-    llm = load_llm_chain()
+    llm = load_llm()
 
     # ---------------------------------------------------------------------
     # AGENT DEFINITIONS
@@ -41,9 +31,8 @@ def main():
     data_scout = Agent(
         role="Lead Sports Performance Data Scout",
         goal="Extract high-leverage tactical anomalies from raw match metrics.",
-        backstory="""You are a veteran cricket quantitative analyst. You don't care about 
-        generic scores; you look for inflection points, tactical phase shifts, and non-obvious 
-        player matchups in the data feed.""",
+        backstory="""You are a veteran cricket quantitative analyst. You look for 
+        inflection points, tactical phase shifts, and non-obvious player matchups.""",
         verbose=True,
         llm=llm
     )
@@ -59,17 +48,17 @@ def main():
     )
 
     # ---------------------------------------------------------------------
-    # TASK DEFINITIONS (Structured via Markdown Prompting Formula)
+    # TASK DEFINITIONS
     # ---------------------------------------------------------------------
     scouting_task = Task(
         description=f"""
-# **Role:** Lead Sports Performance Data Scout
-# **Objective:** Identify the defining statistical anomaly from the raw match dataset.
-# **Context:** Match Data: {json.dumps(match_data, indent=2)}
-# **Instructions:**
-1. Parse the provided team names and scorecards.
-2. Isolate one specific phase-of-play metric that caused the win.
-3. Compile a bulleted data summary brief.
+Analyze this incoming match dataset:
+{json.dumps(match_data, indent=2)}
+
+Instructions:
+1. Parse the scorecard and match context.
+2. Isolate ONE specific phase-of-play metric that caused the winning team to dominate.
+3. Compile a detailed, bulleted data summary brief for the Editor.
 """,
         expected_output="A structured data brief highlighting key tactical metrics.",
         agent=data_scout
@@ -77,32 +66,27 @@ def main():
 
     editorial_task = Task(
         description="""
-# **Role:** Senior Cricket Intelligence Editor
-# **Objective:** Write a 300-word tactical match report for an Astro static site.
+Write a 300-word tactical match report based on the scout's data brief.
 
-# **Instructions:**
-1. Analyze the scout's brief and construct a compelling headline.
-2. Draft a 300-word analytical post.
-3. Start the output exactly with the required Astro metadata frontmatter.
-
-# **Notes:**
-* You MUST start your response with valid YAML frontmatter.
-* The absolute first characters of your output must be `---`.
-* Do NOT use markdown code blocks to wrap the response.
-* You MUST include the exact fields shown below:
+CRITICAL INSTRUCTIONS FOR ASTRO.JS:
+1. You MUST start your response with valid YAML frontmatter.
+2. The absolute first characters of your output must be `---`.
+3. Do NOT wrap the response in markdown code blocks (like ```markdown). 
+4. You MUST include the exact fields shown below:
 
 ---
-title: "[Your Catchy, Strategic Title Here]"
+title: "[Catchy, Strategic Title Here]"
 date: 2026-07-03
 category: press-box
-targetEntity: "[Name of the Key Player or Team]"
+targetEntity: "[Player/Team Name]"
 metricFocus: "[The core metric you focused on]"
 confidenceScore: 95
 draft: false
 ---
-[Your article content begins here...]
+
+[Your 300-word tactical article content begins immediately here...]
 """,
-        expected_output="Raw markdown string with YAML frontmatter and a 300-word analysis.",
+        expected_output="Raw markdown string starting strictly with YAML frontmatter.",
         agent=chief_editor,
         context=[scouting_task]
     )
@@ -119,8 +103,13 @@ draft: false
 
     result = crew.kickoff()
 
-    # Generate unique programmatic file name mapped precisely to Astro's source folder
-    filename = f"src/content/posts/article-{match_data.get('id', 'pending')}.md"
+    # ---------------------------------------------------------------------
+    # FILE GENERATION
+    # ---------------------------------------------------------------------
+    # Save exactly where Astro looks for collections, using a dynamic ID
+    match_id = match_data.get('id', 'pending')
+    filename = f"src/content/posts/article-{match_id}.md"
+    
     os.makedirs(os.path.dirname(filename), exist_ok=True)
 
     with open(filename, "w", encoding="utf-8") as f:
