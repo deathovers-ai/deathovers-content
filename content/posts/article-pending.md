@@ -1,6 +1,6 @@
 ---
-title: "The Spin Choke: How Rajasthan's Tactical Gambit Dismantled SRH's Batting Blueprint"
+title: "The Middle-Overs Lockdown: How Axar and Kuldeep Decimated Australia’s T20 Final Hopes"
 date: 2026-07-03
 draft: false
 ---
-This match wasn't won by individual heroics. It
+Australia detonated the powerplay. Scoring
