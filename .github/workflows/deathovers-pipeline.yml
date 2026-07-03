@@ -39,6 +39,10 @@ jobs:
           git config user.name "DeathOvers Bot"
           git config user.email "deathovers.ai@gmail.com"
           
+          # Force clean any leftover files to prevent 'unstaged changes' errors
+          git reset --hard HEAD
+          git clean -fd
+          
           # Fetch and integrate latest changes to avoid push rejection
           git pull origin main --rebase
           
