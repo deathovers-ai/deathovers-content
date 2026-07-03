@@ -5,7 +5,6 @@ from crewai import Agent, Task, Crew, Process, LLM
 
 # ---------------------------------------------------------------------
 # PRODUCTION ENGINE: Groq (Llama 3.3 70B Versatile)
-# Unmatched speed, massive rate limits, highly stable.
 # ---------------------------------------------------------------------
 def load_llm():
     return LLM(
@@ -106,7 +105,7 @@ draft: false
     # ---------------------------------------------------------------------
     # FILE GENERATION
     # ---------------------------------------------------------------------
-    # Save exactly where Astro looks for collections, using a dynamic ID
+    # Save exactly where Astro looks for collections
     match_id = match_data.get('id', 'pending')
     filename = f"src/content/posts/article-{match_id}.md"
     
