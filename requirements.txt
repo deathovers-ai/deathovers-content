@@ -1,3 +1,4 @@
 crewai==1.14.4
 litellm
 gunicorn==22.0.0
+flask
