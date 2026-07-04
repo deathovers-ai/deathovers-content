@@ -48,7 +48,7 @@ def load_llm():
     )
 
 # ---------------------------------------------------------------------
-# HEALTH CHECK / KEEP-ALIVE ROUTE (For cron-job.org)
+# 1. HEALTH CHECK / KEEP-ALIVE ROUTE
 # ---------------------------------------------------------------------
 @app.route('/', methods=['GET'])
 def home():
@@ -58,20 +58,36 @@ def home():
     }), 200
 
 # ---------------------------------------------------------------------
-# WEB AUTOMATION ROUTE (Called by n8n)
+# 2. LIVE SCORE STREAM (Replaces Serveo Tunnel)
+# ---------------------------------------------------------------------
+@app.route('/api/live-scores', methods=['GET'])
+def get_live_scores():
+    # This serves the raw live cricket data that your n8n workflow fetches every minute
+    mock_live_data = {
+        "id": "t20_final_01",
+        "match": "IND vs AUS",
+        "status": "Innings Break",
+        "batting_team": "IND",
+        "score": "184/5",
+        "overs": "20.0",
+        "run_rate": "9.20",
+        "top_scorer": "Kohli 82(53)",
+        "top_bowler": "Starc 2/32"
+    }
+    return jsonify({"data": mock_live_data}), 200
+
+# ---------------------------------------------------------------------
+# 3. AI ARTICLE GENERATOR (Called post-match)
 # ---------------------------------------------------------------------
 @app.route('/mock-live', methods=['POST', 'GET'])
 def run_ai_crew():
-    # 1. Grab incoming data payload safely (Handles GET fallback or incoming n8n POST data)
     if request.method == 'POST':
         match_data = request.get_json(silent=True) or {}
     else:
-        # Fallback empty structure if hit via standard browser GET
         match_data = {"id": "pending", "status": "no_incoming_payload"}
 
     llm = load_llm()
 
-    # 2. Define Agents
     data_scout = Agent(
         role="Lead Sports Performance Data Scout",
         goal="Extract high-leverage tactical anomalies from raw match metrics.",
@@ -86,7 +102,6 @@ def run_ai_crew():
         llm=llm
     )
 
-    # 3. Define Tasks
     scouting_task = Task(
         description=f"Analyze match dataset: {json.dumps(match_data, indent=2)}",
         expected_output="A structured tactical brief.",
@@ -112,7 +127,6 @@ draft: false
         context=[scouting_task]
     )
 
-    # 4. Run Crew
     crew = Crew(
         agents=[data_scout, chief_editor],
         tasks=[scouting_task, editorial_task],
@@ -125,12 +139,10 @@ draft: false
     except Exception as e:
         return jsonify({"status": "error", "message": f"CrewAI Execution Failed: {str(e)}"}), 500
 
-    # 5. Unique File Tracking Data Payload
     match_id = match_data.get('id', 'pending')
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     filename = f"src/content/posts/article-{match_id}-{timestamp}.md"
 
-    # Return structured output payload right back to n8n
     return jsonify({
         "status": "success",
         "generated_at": timestamp,
@@ -139,6 +151,5 @@ draft: false
     }), 200
 
 if __name__ == "__main__":
-    # Render binds dynamically to the system environment PORT variable
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
