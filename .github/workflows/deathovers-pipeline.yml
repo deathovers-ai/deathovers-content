@@ -11,12 +11,13 @@ concurrency:
 jobs:
   generate-article:
     runs-on: ubuntu-latest
-    # --- GRANTS GITHUB ACTION PERMISSION TO PUSH CODE ---
     permissions:
       contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetches full history so rebasing works perfectly
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -39,13 +40,23 @@ jobs:
           git config user.name "DeathOvers Bot"
           git config user.email "deathovers.ai@gmail.com"
           
-          # Force clean any leftover files to prevent 'unstaged changes' errors
-          git reset --hard HEAD
-          git clean -fd
+          # Stage ONLY the newly generated markdown posts
+          git add src/content/posts/*.md
           
-          # Fetch and integrate latest changes to avoid push rejection
+          # Stash the new files safely in memory for a moment
+          git stash
+          
+          # Pull down any changes that happened while the AI was thinking
           git pull origin main --rebase
           
+          # Pop your newly generated articles back into the folder
+          git stash pop || echo "No stashed files found"
+          
+          # Re-stage them for the final commit
           git add src/content/posts/*.md
-          git commit -m "DeathOvers Pipeline: Deployed Tactical Asset" || echo "No changes to commit"
+          
+          # Commit and push back to GitHub (adds [skip ci] so the bot doesn't trigger itself)
+          git diff-index --quiet HEAD || git commit -m "DeathOvers Pipeline: Deployed Tactical Asset [skip ci]"
           git push origin main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
