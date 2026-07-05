@@ -2,7 +2,9 @@ import os
 import sys
 import json
 import datetime
+import requests
 import litellm
+from bs4 import BeautifulSoup
 from flask import Flask, request, jsonify
 
 # ---------------------------------------------------------------------
@@ -48,7 +50,7 @@ def load_llm():
     )
 
 # ---------------------------------------------------------------------
-# 1. HEALTH CHECK / KEEP-ALIVE ROUTE
+# 1. HEALTH CHECK / KEEP-ALIVE ROUTE (For cron-job.org)
 # ---------------------------------------------------------------------
 @app.route('/', methods=['GET'])
 def home():
@@ -58,29 +60,64 @@ def home():
     }), 200
 
 # ---------------------------------------------------------------------
-# 2. LIVE SCORE STREAM (Replaces Serveo Tunnel)
+# 2. LIVE SCORE STREAM (The BeautifulSoup Scraper)
 # ---------------------------------------------------------------------
 @app.route('/api/live-scores', methods=['GET'])
 def get_live_scores():
-    # This serves the raw live cricket data that your n8n workflow fetches every minute
-    mock_live_data = {
-        "id": "t20_final_01",
-        "match": "IND vs AUS",
-        "status": "Innings Break",
-        "batting_team": "IND",
-        "score": "184/5",
-        "overs": "20.0",
-        "run_rate": "9.20",
-        "top_scorer": "Kohli 82(53)",
-        "top_bowler": "Starc 2/32"
-    }
-    return jsonify({"data": mock_live_data}), 200
+    try:
+        # Disguise our server as a standard Chrome browser
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+        }
+        url = "https://www.cricbuzz.com/cricket-match/live-scores"
+        
+        # Fetch the page (Timeout set to 5 seconds to prevent server hanging)
+        response = requests.get(url, headers=headers, timeout=5)
+        response.raise_for_status()
+        
+        # Parse the HTML
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Find the first active live match container
+        match_block = soup.find('div', class_='cb-lv-scrs-col')
+        
+        if not match_block:
+            return jsonify({"status": "error", "message": "No live matches found right now."}), 404
+
+        # Extract the critical data points safely
+        match_title = soup.find('h3', class_='cb-lv-scr-mtch-hdr')
+        batting_team_score = match_block.find('div', class_='cb-hmscg-bat-txt')
+        match_status = soup.find('div', class_='cb-text-live') or soup.find('div', class_='cb-text-complete')
+
+        # Fallback values if elements are missing from the DOM
+        title_text = match_title.text.strip() if match_title else "Live Match"
+        score_text = batting_team_score.text.strip() if batting_team_score else "Score Pending"
+        status_text = match_status.text.strip() if match_status else "In Progress"
+
+        live_data = {
+            "id": f"match_{datetime.datetime.now().strftime('%Y%m%d')}",
+            "match": title_text,
+            "status": status_text,
+            "score": score_text,
+            "source": "Scraped via Render Engine"
+        }
+
+        return jsonify({"data": live_data}), 200
+
+    except Exception as e:
+        # If the scraper fails, it won't crash your server
+        return jsonify({
+            "status": "error", 
+            "message": "Scraper failed to fetch data.", 
+            "error_details": str(e)
+        }), 500
 
 # ---------------------------------------------------------------------
-# 3. AI ARTICLE GENERATOR (Called post-match)
+# 3. AI ARTICLE GENERATOR (Called post-match by n8n)
 # ---------------------------------------------------------------------
 @app.route('/mock-live', methods=['POST', 'GET'])
 def run_ai_crew():
+    # Grab incoming data payload safely (Handles GET fallback or incoming n8n POST data)
     if request.method == 'POST':
         match_data = request.get_json(silent=True) or {}
     else:
@@ -88,6 +125,7 @@ def run_ai_crew():
 
     llm = load_llm()
 
+    # Define Agents
     data_scout = Agent(
         role="Lead Sports Performance Data Scout",
         goal="Extract high-leverage tactical anomalies from raw match metrics.",
@@ -102,6 +140,7 @@ def run_ai_crew():
         llm=llm
     )
 
+    # Define Tasks
     scouting_task = Task(
         description=f"Analyze match dataset: {json.dumps(match_data, indent=2)}",
         expected_output="A structured tactical brief.",
@@ -127,6 +166,7 @@ draft: false
         context=[scouting_task]
     )
 
+    # Run Crew
     crew = Crew(
         agents=[data_scout, chief_editor],
         tasks=[scouting_task, editorial_task],
@@ -139,10 +179,12 @@ draft: false
     except Exception as e:
         return jsonify({"status": "error", "message": f"CrewAI Execution Failed: {str(e)}"}), 500
 
+    # Unique File Tracking Data Payload
     match_id = match_data.get('id', 'pending')
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     filename = f"src/content/posts/article-{match_id}-{timestamp}.md"
 
+    # Return structured output payload right back to n8n
     return jsonify({
         "status": "success",
         "generated_at": timestamp,
@@ -151,5 +193,6 @@ draft: false
     }), 200
 
 if __name__ == "__main__":
+    # Render binds dynamically to the system environment PORT variable
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
