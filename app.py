@@ -4,7 +4,7 @@ import json
 import datetime
 import requests
 import litellm
-from bs4 import BeautifulSoup
+import xml.etree.ElementTree as ET
 from flask import Flask, request, jsonify
 
 # ---------------------------------------------------------------------
@@ -50,7 +50,7 @@ def load_llm():
     )
 
 # ---------------------------------------------------------------------
-# 1. HEALTH CHECK / KEEP-ALIVE ROUTE (For cron-job.org)
+# 1. HEALTH CHECK / KEEP-ALIVE ROUTE
 # ---------------------------------------------------------------------
 @app.route('/', methods=['GET'])
 def home():
@@ -60,59 +60,63 @@ def home():
     }), 200
 
 # ---------------------------------------------------------------------
-# 2. LIVE SCORE STREAM (Aggressive + Debug Mode)
+# 2. LIVE SCORE STREAM (The Secret Cricbuzz J2ME Backdoor)
 # ---------------------------------------------------------------------
 @app.route('/api/live-scores', methods=['GET'])
 def get_live_scores():
     try:
-        # Upgraded headers to look exactly like a real user on a modern browser
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Referer': 'https://www.google.com/'
-        }
-        url = "https://www.cricbuzz.com/cricket-match/live-scores"
+        # This is Cricbuzz's legacy XML feed for old mobile phones. 
+        # Zero JavaScript. Zero Cloudflare blocks. Real-time updates.
+        url = "http://synd.cricbuzz.com/j2me/1.0/livematches.xml"
         
-        response = requests.get(url, headers=headers, timeout=8)
+        response = requests.get(url, timeout=8)
         response.raise_for_status()
         
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # AGGRESSIVE SEARCH: Look for multiple known Cricbuzz live match containers
-        matches = soup.select('div.cb-mtch-lst, div.cb-lv-scrs-col, div.cb-schdl')
+        # Parse the raw XML data
+        root = ET.fromstring(response.content)
+        matches = root.findall('match')
         
         if not matches:
-            # DEBUG DIAGNOSTIC: If it fails, tell us what page it ACTUALLY loaded
-            page_title = soup.title.text.strip() if soup.title else "No Title Found"
-            return jsonify({
-                "status": "error", 
-                "message": "No live matches found right now.",
-                "diagnostic_page_title": page_title
-            }), 404
+            return jsonify({"status": "error", "message": "No live matches found right now."}), 404
 
-        first_match = matches[0]
+        # Prioritize finding a match that is actually in progress right now
+        live_match = None
+        for match in matches:
+            state = match.find('state')
+            if state is not None and state.get('mchState') in ['inprogress', 'innings break', 'rain', 'stump', 'tea']:
+                live_match = match
+                break
+                
+        # If no matches are currently being played, just grab the first one on the list
+        if not live_match:
+             live_match = matches[0]
 
-        # Extract safely using broad fallbacks
-        title_elem = first_match.find('h3') or first_match.find('a', class_='text-hvr-underline')
-        title_text = title_elem.text.strip() if title_elem else "Unknown Match"
-
-        score_elem = first_match.find('div', class_='cb-lv-scrs-col') or \
-                     first_match.find('div', class_='cb-hmscg-bat-txt') or \
-                     first_match.select_first('div[class*="bat-txt"]')
-        score_text = score_elem.text.strip() if score_elem else "Score Pending"
-
-        status_elem = first_match.find('div', class_='cb-text-live') or \
-                      first_match.find('div', class_='cb-text-complete') or \
-                      first_match.select_first('div[class*="cb-text-"]')
-        status_text = status_elem.text.strip() if status_elem else "In Progress"
+        # Extract Match Data safely from XML nodes
+        match_title = live_match.get('mchDesc', 'Live Match')
+        
+        state_node = live_match.find('state')
+        status = state_node.get('status', 'In Progress') if state_node is not None else "In Progress"
+        
+        # Extract the actual Live Score numbers
+        score_str = "Score pending"
+        mscr_node = live_match.find('mscr')
+        if mscr_node is not None:
+            bat_node = mscr_node.find('btTm')
+            if bat_node is not None:
+                team_name = bat_node.get('sName', 'Team')
+                inngs = bat_node.find('Inngs')
+                if inngs is not None:
+                    runs = inngs.get('run', '0')
+                    wkts = inngs.get('wkts', '0')
+                    ovs = inngs.get('Ovs', '0')
+                    score_str = f"{team_name} {runs}/{wkts} ({ovs} Ovs)"
 
         live_data = {
-            "id": f"match_{datetime.datetime.now().strftime('%Y%m%d')}",
-            "match": title_text,
-            "status": status_text,
-            "score": score_text,
-            "source": "Scraped via Render Engine"
+            "id": f"match_{datetime.datetime.now().strftime('%Y%m%d%H%M')}",
+            "match": match_title,
+            "status": status,
+            "score": score_str,
+            "source": "Cricbuzz XML Datapipe"
         }
 
         return jsonify({"data": live_data}), 200
@@ -120,7 +124,7 @@ def get_live_scores():
     except Exception as e:
         return jsonify({
             "status": "error", 
-            "message": "Scraper failed to fetch data.", 
+            "message": "XML Feed failed to fetch data.", 
             "error_details": str(e)
         }), 500
 
@@ -129,7 +133,7 @@ def get_live_scores():
 # ---------------------------------------------------------------------
 @app.route('/mock-live', methods=['POST', 'GET'])
 def run_ai_crew():
-    # Grab incoming data payload safely (Handles GET fallback or incoming n8n POST data)
+    # Grab incoming data payload safely
     if request.method == 'POST':
         match_data = request.get_json(silent=True) or {}
     else:
