@@ -60,7 +60,7 @@ def home():
     }), 200
 
 # ---------------------------------------------------------------------
-# 2. LIVE SCORE STREAM (The BeautifulSoup Scraper)
+# 2. LIVE SCORE STREAM (The Bulletproof Scraper)
 # ---------------------------------------------------------------------
 @app.route('/api/live-scores', methods=['GET'])
 def get_live_scores():
@@ -75,24 +75,30 @@ def get_live_scores():
         response = requests.get(url, headers=headers, timeout=5)
         response.raise_for_status()
         
-        # Parse the HTML
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Find the first active live match container
-        match_block = soup.find('div', class_='cb-lv-scrs-col')
+        # BULLETPROOF SELECTOR: Look for ANY match container (handles T20s, Tests, Women's matches)
+        matches = soup.select('div.cb-mtch-lst, div.cb-schdl')
         
-        if not match_block:
+        if not matches:
             return jsonify({"status": "error", "message": "No live matches found right now."}), 404
 
-        # Extract the critical data points safely
-        match_title = soup.find('h3', class_='cb-lv-scr-mtch-hdr')
-        batting_team_score = match_block.find('div', class_='cb-hmscg-bat-txt')
-        match_status = soup.find('div', class_='cb-text-live') or soup.find('div', class_='cb-text-complete')
+        # Grab the very first active match on the page
+        first_match = matches[0]
 
-        # Fallback values if elements are missing from the DOM
-        title_text = match_title.text.strip() if match_title else "Live Match"
-        score_text = batting_team_score.text.strip() if batting_team_score else "Score Pending"
-        status_text = match_status.text.strip() if match_status else "In Progress"
+        # Extract safely using broad fallbacks (Checks multiple possible Cricbuzz layouts)
+        title_elem = first_match.find('h3') or first_match.find('a', class_='text-hvr-underline')
+        title_text = title_elem.text.strip() if title_elem else "Unknown Match"
+
+        score_elem = first_match.find('div', class_='cb-lv-scrs-col') or \
+                     first_match.find('div', class_='cb-hmscg-bat-txt') or \
+                     first_match.select_first('div[class*="bat-txt"]')
+        score_text = score_elem.text.strip() if score_elem else "Score Pending"
+
+        status_elem = first_match.find('div', class_='cb-text-live') or \
+                      first_match.find('div', class_='cb-text-complete') or \
+                      first_match.select_first('div[class*="cb-text-"]')
+        status_text = status_elem.text.strip() if status_elem else "In Progress"
 
         live_data = {
             "id": f"match_{datetime.datetime.now().strftime('%Y%m%d')}",
