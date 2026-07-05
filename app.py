@@ -60,33 +60,40 @@ def home():
     }), 200
 
 # ---------------------------------------------------------------------
-# 2. LIVE SCORE STREAM (The Bulletproof Scraper)
+# 2. LIVE SCORE STREAM (Aggressive + Debug Mode)
 # ---------------------------------------------------------------------
 @app.route('/api/live-scores', methods=['GET'])
 def get_live_scores():
     try:
-        # Disguise our server as a standard Chrome browser
+        # Upgraded headers to look exactly like a real user on a modern browser
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': 'https://www.google.com/'
         }
         url = "https://www.cricbuzz.com/cricket-match/live-scores"
         
-        # Fetch the page (Timeout set to 5 seconds to prevent server hanging)
-        response = requests.get(url, headers=headers, timeout=5)
+        response = requests.get(url, headers=headers, timeout=8)
         response.raise_for_status()
         
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # BULLETPROOF SELECTOR: Look for ANY match container (handles T20s, Tests, Women's matches)
-        matches = soup.select('div.cb-mtch-lst, div.cb-schdl')
+        # AGGRESSIVE SEARCH: Look for multiple known Cricbuzz live match containers
+        matches = soup.select('div.cb-mtch-lst, div.cb-lv-scrs-col, div.cb-schdl')
         
         if not matches:
-            return jsonify({"status": "error", "message": "No live matches found right now."}), 404
+            # DEBUG DIAGNOSTIC: If it fails, tell us what page it ACTUALLY loaded
+            page_title = soup.title.text.strip() if soup.title else "No Title Found"
+            return jsonify({
+                "status": "error", 
+                "message": "No live matches found right now.",
+                "diagnostic_page_title": page_title
+            }), 404
 
-        # Grab the very first active match on the page
         first_match = matches[0]
 
-        # Extract safely using broad fallbacks (Checks multiple possible Cricbuzz layouts)
+        # Extract safely using broad fallbacks
         title_elem = first_match.find('h3') or first_match.find('a', class_='text-hvr-underline')
         title_text = title_elem.text.strip() if title_elem else "Unknown Match"
 
@@ -111,7 +118,6 @@ def get_live_scores():
         return jsonify({"data": live_data}), 200
 
     except Exception as e:
-        # If the scraper fails, it won't crash your server
         return jsonify({
             "status": "error", 
             "message": "Scraper failed to fetch data.", 
@@ -159,7 +165,7 @@ Write a 300-word tactical match report.
 Must start with:
 ---
 title: "[Catchy Title]"
-date: 2026-07-04
+date: 2026-07-05
 category: press-box
 targetEntity: "[Name]"
 metricFocus: "[Metric]"
