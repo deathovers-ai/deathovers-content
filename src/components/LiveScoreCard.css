@@ -1,0 +1,123 @@
+/* src/components/LiveScoreCard.css */
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+.do-card-wrapper {
+  --pitch-black: #080A0F;
+  --blood-red: #E8003A;
+  --bail-amber: #F5A623;
+  --crease-white: #F0F2F5;
+  --outfield: #16191F;
+  font-family: 'Inter', sans-serif;
+}
+
+@keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes scanline { 0% { transform: translateX(-150%); } 100% { transform: translateX(150%); } }
+
+.card {
+  width: 100%;
+  max-width: 480px;
+  background: var(--outfield);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(240,242,245,0.08);
+  box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+  position: relative;
+  margin: 0 auto;
+}
+
+.accent-bar {
+  height: 3px;
+  background: var(--blood-red);
+  position: relative;
+  overflow: hidden;
+}
+
+.accent-bar::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0;
+  width: 40%; height: 100%;
+  background: linear-gradient(90deg, transparent, var(--bail-amber), transparent);
+  animation: scanline 3s linear infinite;
+}
+
+.header {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid rgba(240,242,245,0.08);
+}
+
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.series {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: rgba(240,242,245,0.5);
+  text-transform: uppercase;
+}
+
+.live-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.live-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--blood-red);
+  animation: livePulse 1.2s ease-in-out infinite;
+}
+
+.live-label {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 15px;
+  letter-spacing: 0.05em;
+  color: var(--blood-red);
+}
+
+.venue {
+  font-size: 12px;
+  color: rgba(240,242,245,0.4);
+}
+
+.score-block { padding: 20px 20px 16px; }
+.team-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 10px 0;
+}
+.team-row.dim { opacity: 0.55; }
+.team-left { display: flex; align-items: baseline; gap: 10px; }
+.team-code {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 26px;
+  letter-spacing: 0.03em;
+  color: var(--crease-white);
+}
+.bat-arrow { color: var(--bail-amber); font-size: 16px; }
+.team-score {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--crease-white);
+}
+.team-score.dim { color: rgba(240,242,245,0.6); }
+.wkts { font-size: 16px; color: rgba(240,242,245,0.45); }
+.overs { font-size: 13px; color: rgba(240,242,245,0.35); margin-left: 8px; }
+
+.chase-banner {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(245,166,35,0.08);
+  border-left: 2px solid var(--bail-amber);
+  font-size: 13px;
+  color: var(--bail-amber);
+  font-family: 'JetBrains Mono', monospace;
+}
