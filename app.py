@@ -1,6 +1,7 @@
 import os
 import datetime
 from datetime import timezone
+import time
 import requests
 from flask import Flask, jsonify
 from flask_cors import CORS
@@ -8,8 +9,22 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
+# --- CACHE CONFIGURATION ---
+cache = {
+    "data": None,
+    "timestamp": 0
+}
+CACHE_DURATION = 60  # Cache memory lasts for 60 seconds
+
 @app.route('/api/live-scores', methods=['GET'])
 def get_live_scores():
+    current_time = time.time()
+    
+    # 1. Check if we have fresh data in the cache shield
+    if cache["data"] and (current_time - cache["timestamp"] < CACHE_DURATION):
+        return jsonify(cache["data"])
+
+    # 2. If cache is empty or expired, hit the RapidAPI
     rapid_key = os.getenv("RAPIDAPI_KEY")
     today_date = datetime.datetime.now(timezone.utc).strftime("%Y-%m-%d")
     
@@ -23,12 +38,13 @@ def get_live_scores():
         res = requests.get(url, headers=headers, timeout=10)
         if res.status_code == 200:
             matches = res.json().get("data", [])
-            
-            # 1. Look for live matches
             live_match = next((m for m in matches if m.get("state", {}).get("description") == "In play"), None)
             
+            # Prepare the response payload
+            response_payload = {}
+            
             if live_match:
-                return jsonify({
+                response_payload = {
                     "mode": "live",
                     "data": {
                         "id": live_match.get("id"),
@@ -38,20 +54,27 @@ def get_live_scores():
                         "homeLogo": live_match.get("homeTeam", {}).get("logo"),
                         "awayLogo": live_match.get("awayTeam", {}).get("logo")
                     }
-                })
-            
-            # 2. Fallback: Include names for upcoming matches
-            upcoming = [
-                {
-                    "id": m.get("id"),
-                    "matchName": f"{m.get('homeTeam', {}).get('name')} vs {m.get('awayTeam', {}).get('name')}",
-                    "startTime": m.get("startTime"),
-                    "venue": m.get("venue", {}).get("name", "TBD")
-                } for m in matches[:3] # Limit to top 3 upcoming matches today
-            ]
-            return jsonify({"mode": "scheduled", "data": {"upcoming": upcoming}})
+                }
+            else:
+                upcoming = [
+                    {
+                        "id": m.get("id"),
+                        "matchName": f"{m.get('homeTeam', {}).get('name')} vs {m.get('awayTeam', {}).get('name')}",
+                        "startTime": m.get("startTime"),
+                        "venue": m.get("venue", {}).get("name", "TBD")
+                    } for m in matches[:3]
+                ]
+                response_payload = {"mode": "scheduled", "data": {"upcoming": upcoming}}
+
+            # 3. Save to cache and return
+            cache["data"] = response_payload
+            cache["timestamp"] = current_time
+            return jsonify(response_payload)
             
     except Exception as e:
+        # If RapidAPI fails, try to serve stale cache data if we have it
+        if cache["data"]:
+            return jsonify(cache["data"])
         return jsonify({"status": "error", "message": str(e)}), 500
 
     return jsonify({"mode": "empty", "data": {}})
