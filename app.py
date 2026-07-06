@@ -22,7 +22,7 @@ def _patched_completion(*args, **kwargs):
         messages = args[1]
     if messages:
         for msg in messages:
-            if isinstance(dict, msg) if hasattr(msg, 'pop') else isinstance(msg, dict):
+            if isinstance(msg, dict):
                 try: msg.pop("cache_breakpoint", None)
                 except: pass
     return _original_completion(*args, **kwargs)
@@ -33,7 +33,7 @@ async def _patched_acompletion(*args, **kwargs):
         messages = args[1]
     if messages:
         for msg in messages:
-            if isinstance(dict, msg) if hasattr(msg, 'pop') else isinstance(msg, dict):
+            if isinstance(msg, dict):
                 try: msg.pop("cache_breakpoint", None)
                 except: pass
     return await _original_acompletion(*args, **kwargs)
@@ -41,7 +41,6 @@ async def _patched_acompletion(*args, **kwargs):
 litellm.completion = _patched_completion
 litellm.acompletion = _patched_acompletion
 
-# Clean, safe imports for CrewAI 0.28.0
 from crewai import Agent, Task, Crew, Process
 
 # Initialize Flask App
@@ -139,60 +138,86 @@ def home():
 # ---------------------------------------------------------------------
 @app.route('/api/live-scores', methods=['GET'])
 def get_live_scores():
+    # Production Browser-Spoofing Matrix
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Cache-Control": "max-age=0",
+        "Sec-Ch-Ua": '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": '"Windows"',
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Upgrade-Insecure-Requests": "1"
     }
+
+    session = requests.Session()
+    last_error_log = ""
 
     # --- PRIORITY 1: NEXT.JS RSC EXTRACTION (High Fidelity) ---
     try:
-        home_html = requests.get("https://www.cricbuzz.com/", headers=headers, timeout=8).text
-        matches = extract_homepage_matches(home_html)
+        home_res = session.get("https://www.cricbuzz.com/", headers=headers, timeout=8)
+        home_html = home_res.text
         
-        active_match_id = None
-        match_title = "Live Match"
-        for m in matches:
-            if m.get("state") in ["inprogress", "innings break", "rain", "stump", "tea"]:
-                active_match_id = m.get("matchId")
-                t1 = m.get("team1", {}).get("teamSName", "Team1")
-                t2 = m.get("team2", {}).get("teamSName", "Team2")
-                match_title = f"{t1} vs {t2}"
-                break
-        
-        if active_match_id:
-            match_url = f"https://www.cricbuzz.com/live-cricket-scores/{active_match_id}/match"
-            match_html = requests.get(match_url, headers=headers, timeout=8).text
-            miniscore = extract_live_match_miniscore(match_html)
+        # Check if Cloudflare challenged us
+        if "Just a moment..." in home_html or "cloudflare" in home_html.lower():
+            last_error_log += "[Priority 1] Blocked by Cloudflare Security Layer. "
+        else:
+            matches = extract_homepage_matches(home_html)
+            active_match_id = None
+            match_title = "Live Match"
             
-            if miniscore:
-                bat_team = miniscore.get("batTeam", {})
-                score_str = f"{bat_team.get('teamScore', 0)}/{bat_team.get('teamWkts', 0)} ({miniscore.get('overs', 0)})"
+            # Match scanning state array
+            for m in matches:
+                if m.get("state") in ["inprogress", "innings break", "rain", "stump", "tea", "preview"]:
+                    active_match_id = m.get("matchId")
+                    t1 = m.get("team1", {}).get("teamSName", "Team1")
+                    t2 = m.get("team2", {}).get("teamSName", "Team2")
+                    match_title = f"{t1} vs {t2}"
+                    break
+            
+            if active_match_id:
+                match_url = f"https://www.cricbuzz.com/live-cricket-scores/{active_match_id}/match"
+                match_html = session.get(match_url, headers=headers, timeout=8).text
+                miniscore = extract_live_match_miniscore(match_html)
                 
-                crr = miniscore.get("currentRunRate", 0)
-                recent = miniscore.get("recentOvsStats", "")
-                rich_score = f"{score_str} | CRR: {crr} | Recent: {recent}"
+                if miniscore:
+                    bat_team = miniscore.get("batTeam", {})
+                    score_str = f"{bat_team.get('teamScore', 0)}/{bat_team.get('teamWkts', 0)} ({miniscore.get('overs', 0)})"
+                    crr = miniscore.get("currentRunRate", 0)
+                    recent = miniscore.get("recentOvsStats", "")
+                    rich_score = f"{score_str} | CRR: {crr} | Recent: {recent}"
 
-                return jsonify({
-                    "data": {
-                        "id": f"match_{active_match_id}",
-                        "match": match_title,
-                        "status": miniscore.get("status", "In Progress"),
-                        "score": rich_score,
-                        "source": "Priority 1: RSC Extraction"
-                    }
-                }), 200
+                    return jsonify({
+                        "data": {
+                            "id": f"match_{active_match_id}",
+                            "match": match_title,
+                            "status": miniscore.get("status", "In Progress"),
+                            "score": rich_score,
+                            "source": "Priority 1: RSC Extraction"
+                        }
+                    }), 200
+            else:
+                last_error_log += "[Priority 1] No active matches found in the active layout array. "
     except Exception as e:
-        print(f"Priority 1 RSC Extraction Failed: {str(e)}")
+        last_error_log += f"[Priority 1 Error] {str(e)}. "
 
     # --- PRIORITY 2: THE LEGACY CRICBUZZ BACKDOOR ---
     try:
         fallback_url = "http://synd.cricbuzz.com/j2me/1.0/livematches.xml"
-        res = requests.get(fallback_url, timeout=8)
-        if res.status_code == 200:
+        # Legacy route uses lighter mobile headers
+        mobile_headers = {"User-Agent": "NokiaX2-01/5.0 (08.71) Profile/MIDP-2.1 Configuration/CLDC-1.1 Mozilla/5.0"}
+        res = session.get(fallback_url, headers=mobile_headers, timeout=8)
+        
+        if res.status_code == 200 and b"match" in res.content:
             root = ET.fromstring(res.content)
             matches = root.findall('match')
             
-            live_match = next((m for m in matches if m.find('state') is not None and m.find('state').get('mchState') in ['inprogress', 'innings break']), None)
+            live_match = next((m for m in matches if m.find('state') is not None and m.find('state').get('mchState') in ['inprogress', 'innings break', 'preview']), None)
             live_match = live_match or (matches[0] if matches else None)
 
             if live_match is not None:
@@ -213,10 +238,19 @@ def get_live_scores():
                         "source": "Priority 2: Cricbuzz Legacy XML"
                     }
                 }), 200
+            else:
+                last_error_log += "[Priority 2] XML empty or malformed match headers. "
+        else:
+            last_error_log += f"[Priority 2] Received bad status code: {res.status_code}. "
     except Exception as e:
-        print(f"Priority 2 Fallback Failed: {str(e)}")
+        last_error_log += f"[Priority 2 Error] {str(e)}. "
 
-    return jsonify({"status": "error", "message": "No live matches found or all pipelines blocked."}), 404
+    # --- ALL PIPELINES EXHAUSTED: DIAGNOSTIC RETRIEVAL ---
+    return jsonify({
+        "status": "error",
+        "message": "No live matches found or all pipelines blocked.",
+        "diagnostics": last_error_log
+    }), 404
 
 # ---------------------------------------------------------------------
 # 3. AI ARTICLE GENERATOR WITH STAGGERED EXECUTION
@@ -228,24 +262,20 @@ def run_ai_crew():
     else:
         match_data = {"id": "pending", "status": "no_incoming_payload"}
 
-    # In CrewAI 0.28.0, pass the model string straight to the agent via llm=
-    # LiteLLM routes "groq/..." perfectly under the hood.
     target_model = "groq/llama-3.3-70b-versatile"
 
     data_scout = Agent(
         role="Lead Sports Performance Data Scout",
         goal="Extract high-leverage tactical anomalies from raw match metrics without hallucinating.",
         backstory="Veteran quantitative analyst specializing in high-frequency statistical trend identification.",
-        llm=target_model,
-        verbose=True
+        llm=target_model
     )
 
     chief_editor = Agent(
         role="Senior Cricket Intelligence Editor",
         goal="Synthesize structured analytical findings into razor-sharp editorial journalism.",
         backstory="Chief Publisher for DeathOvers. Demands hard insights over derivative commentary.",
-        llm=target_model,
-        verbose=True
+        llm=target_model
     )
 
     scouting_task = Task(
@@ -278,7 +308,7 @@ draft: false
     )
 
     try:
-        time.sleep(2)  # Inject Operational Jitter
+        time.sleep(2)
         result = crew.kickoff()
         article_text = str(result)
     except Exception as e:
