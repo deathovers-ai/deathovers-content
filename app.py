@@ -6,13 +6,13 @@ import random
 import datetime
 from datetime import timezone
 import requests
-import litellm
 import xml.etree.ElementTree as ET
 from flask import Flask, request, jsonify
 
 # ---------------------------------------------------------------------
 # BULLETPROOF BUGFIX: The LiteLLM Interceptor (Sync & Async)
 # ---------------------------------------------------------------------
+import litellm
 _original_completion = litellm.completion
 _original_acompletion = litellm.acompletion
 
@@ -22,8 +22,9 @@ def _patched_completion(*args, **kwargs):
         messages = args[1]
     if messages:
         for msg in messages:
-            if isinstance(msg, dict):
-                msg.pop("cache_breakpoint", None)
+            if isinstance(dict, msg) if hasattr(msg, 'pop') else isinstance(msg, dict):
+                try: msg.pop("cache_breakpoint", None)
+                except: pass
     return _original_completion(*args, **kwargs)
 
 async def _patched_acompletion(*args, **kwargs):
@@ -32,25 +33,19 @@ async def _patched_acompletion(*args, **kwargs):
         messages = args[1]
     if messages:
         for msg in messages:
-            if isinstance(msg, dict):
-                msg.pop("cache_breakpoint", None)
+            if isinstance(dict, msg) if hasattr(msg, 'pop') else isinstance(msg, dict):
+                try: msg.pop("cache_breakpoint", None)
+                except: pass
     return await _original_acompletion(*args, **kwargs)
 
 litellm.completion = _patched_completion
 litellm.acompletion = _patched_acompletion
 
-from crewai import Agent, Task, Crew, Process, LLM
+# Clean, safe imports for CrewAI 0.28.0
+from crewai import Agent, Task, Crew, Process
 
 # Initialize Flask App
 app = Flask(__name__)
-
-def load_llm():
-    return LLM(
-        model="groq/llama-3.3-70b-versatile",
-        api_key=os.getenv("GROQ_API_KEY"),
-        max_tokens=1000,
-        temperature=0.1
-    )
 
 # ---------------------------------------------------------------------
 # RSC EXTRACTION ENGINE (Internalized for Monolithic Deployment)
@@ -151,7 +146,6 @@ def get_live_scores():
 
     # --- PRIORITY 1: NEXT.JS RSC EXTRACTION (High Fidelity) ---
     try:
-        # Step 1: Hit homepage to find the first active match ID
         home_html = requests.get("https://www.cricbuzz.com/", headers=headers, timeout=8).text
         matches = extract_homepage_matches(home_html)
         
@@ -166,7 +160,6 @@ def get_live_scores():
                 break
         
         if active_match_id:
-            # Step 2: Extract rich JSON directly from memory state
             match_url = f"https://www.cricbuzz.com/live-cricket-scores/{active_match_id}/match"
             match_html = requests.get(match_url, headers=headers, timeout=8).text
             miniscore = extract_live_match_miniscore(match_html)
@@ -175,7 +168,6 @@ def get_live_scores():
                 bat_team = miniscore.get("batTeam", {})
                 score_str = f"{bat_team.get('teamScore', 0)}/{bat_team.get('teamWkts', 0)} ({miniscore.get('overs', 0)})"
                 
-                # Add rich tactical data to the score string for CrewAI
                 crr = miniscore.get("currentRunRate", 0)
                 recent = miniscore.get("recentOvsStats", "")
                 rich_score = f"{score_str} | CRR: {crr} | Recent: {recent}"
@@ -190,9 +182,9 @@ def get_live_scores():
                     }
                 }), 200
     except Exception as e:
-        print(f"Priority 1 RSC Extraction Failed (Likely Cloudflare Block): {str(e)}")
+        print(f"Priority 1 RSC Extraction Failed: {str(e)}")
 
-    # --- PRIORITY 2: THE LEGACY CRICBUZZ BACKDOOR (Unblockable Anchor) ---
+    # --- PRIORITY 2: THE LEGACY CRICBUZZ BACKDOOR ---
     try:
         fallback_url = "http://synd.cricbuzz.com/j2me/1.0/livematches.xml"
         res = requests.get(fallback_url, timeout=8)
@@ -224,7 +216,6 @@ def get_live_scores():
     except Exception as e:
         print(f"Priority 2 Fallback Failed: {str(e)}")
 
-    # --- FATAL FAILURE ---
     return jsonify({"status": "error", "message": "No live matches found or all pipelines blocked."}), 404
 
 # ---------------------------------------------------------------------
@@ -237,20 +228,24 @@ def run_ai_crew():
     else:
         match_data = {"id": "pending", "status": "no_incoming_payload"}
 
-    llm = load_llm()
+    # In CrewAI 0.28.0, pass the model string straight to the agent via llm=
+    # LiteLLM routes "groq/..." perfectly under the hood.
+    target_model = "groq/llama-3.3-70b-versatile"
 
     data_scout = Agent(
         role="Lead Sports Performance Data Scout",
         goal="Extract high-leverage tactical anomalies from raw match metrics without hallucinating.",
         backstory="Veteran quantitative analyst specializing in high-frequency statistical trend identification.",
-        llm=llm
+        llm=target_model,
+        verbose=True
     )
 
     chief_editor = Agent(
         role="Senior Cricket Intelligence Editor",
         goal="Synthesize structured analytical findings into razor-sharp editorial journalism.",
         backstory="Chief Publisher for DeathOvers. Demands hard insights over derivative commentary.",
-        llm=llm
+        llm=target_model,
+        verbose=True
     )
 
     scouting_task = Task(
@@ -273,8 +268,7 @@ draft: false
 ---
 """,
         expected_output="Raw markdown string starting with YAML frontmatter.",
-        agent=chief_editor,
-        context=[scouting_task]
+        agent=chief_editor
     )
 
     crew = Crew(
@@ -284,8 +278,7 @@ draft: false
     )
 
     try:
-        # Step A: Inject Operational Jitter (Prevents bursting Groq rate limits)
-        time.sleep(2)
+        time.sleep(2)  # Inject Operational Jitter
         result = crew.kickoff()
         article_text = str(result)
     except Exception as e:
