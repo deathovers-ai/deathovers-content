@@ -3,8 +3,10 @@ import datetime
 from datetime import timezone
 import requests
 from flask import Flask, jsonify
+from flask_cors import CORS  # <-- NEW: Imports the CORS library
 
 app = Flask(__name__)
+CORS(app)  # <-- NEW: Tells Render to allow requests from your Vercel frontend
 
 @app.route('/api/live-scores', methods=['GET'])
 def get_live_scores():
@@ -34,7 +36,7 @@ def get_live_scores():
                         "match": f"{live_match.get('homeTeam', {}).get('name')} vs {live_match.get('awayTeam', {}).get('name')}",
                         "score": live_match.get("state", {}).get("teams", {}),
                         "status": "In play",
-                        "homeLogo": live_match.get("homeTeam", {}).get("logo"), # Logo extraction
+                        "homeLogo": live_match.get("homeTeam", {}).get("logo"),
                         "awayLogo": live_match.get("awayTeam", {}).get("logo")
                     }
                 })
