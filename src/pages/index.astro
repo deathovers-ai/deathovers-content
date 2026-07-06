@@ -1,14 +1,23 @@
 ---
 import Base from '../layouts/Base.astro';
 import ArticleCard from '../components/ArticleCard.astro';
+import LiveScoreCard from '../components/LiveScoreCard.jsx';
 import { getCollection } from 'astro:content';
 
 const allPosts = await getCollection('posts', ({ data }) => !data.draft);
-const sorted = allPosts.sort((a, b) => (b.data.date ?? 0) - (a.data.date ?? 0));
+const sorted = allPosts.sort((a, b) => (b.data.date ?? 0) - (a.data.date ?? 0)); 
 ---
 <Base title="Home">
+  
+  <!-- 1. THE COMMAND CENTER (Live Score React Component) -->
+  <div style="margin-bottom: 32px;">
+    <LiveScoreCard client:load />
+  </div>
+
+  <!-- 2. THE TACTICAL INTELLIGENCE GRID (Your existing articles) -->
   <section class="article-grid">
     {sorted.length === 0 && <p>No articles yet. Check back after the next match.</p>}
     {sorted.map((post) => <ArticleCard post={post} />)}
   </section>
+
 </Base>
