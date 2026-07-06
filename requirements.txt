@@ -1,6 +1,6 @@
-crewai==1.14.4
-litellm
-gunicorn==22.0.0
-flask
-requests
-beautifulsoup4
+Flask==3.0.0
+requests==2.31.0
+litellm==1.35.0
+crewai==0.28.0
+groq==0.5.0
+gunicorn==21.2.0
