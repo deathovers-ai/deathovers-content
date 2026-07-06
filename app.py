@@ -75,7 +75,10 @@ def get_live_scores():
     # --- PRODUCTION ENGINE: Accessing Highlightly's live data syndication grid ---
     if rapid_key:
         try:
-            url = "https://cricket-highlights-api.p.rapidapi.com/matches"
+            # Dynamically fetch today's date in UTC (YYYY-MM-DD) to satisfy Highlightly's primary parameter requirement
+            today_date = datetime.datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            url = f"https://cricket-highlights-api.p.rapidapi.com/matches?date={today_date}"
+            
             headers = {
                 "x-rapidapi-key": rapid_key,
                 "x-rapidapi-host": "cricket-highlights-api.p.rapidapi.com"
@@ -89,7 +92,7 @@ def get_live_scores():
                 # Filter for active matches based on the Highlightly 'state' schema
                 live_match = next((m for m in matches if m.get("state", {}).get("description") in ["In play", "Tea", "Lunch", "Drinks", "Stumps", "Innings break"]), None)
                 
-                # Backup: If no matches are live, pull the most current scheduled item
+                # Backup: If no matches are live today, pull the most current scheduled item
                 if not live_match and matches:
                     live_match = matches[0]
                     
