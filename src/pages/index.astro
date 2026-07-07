@@ -1,47 +1,131 @@
 ---
 // src/pages/index.astro
+import Navbar from '../components/Navbar.astro';
 import { getCollection } from 'astro:content';
 
-// Fetch all the markdown files n8n creates in src/content/posts/
 const allPosts = await getCollection('posts');
 ---
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DeathOvers Analytics</title>
-  </head>
-  <body style="background-color: #07080a; color: white; padding: 2rem; font-family: system-ui, sans-serif; line-height: 1.6;">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DeathOvers — Automated Analytics</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root { 
+      --pitch-black: #080A0F; 
+      --blood-red: #E8003A; 
+      --bail-amber: #F5A623; 
+      --crease-white: #F0F2F5; 
+      --outfield: #16191F; 
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { 
+      font-family: 'Inter', sans-serif; 
+      background: var(--pitch-black); 
+      color: var(--crease-white); 
+      min-height: 100vh; 
+      display: flex; 
+      justify-content: center; 
+      padding: 24px; 
+    }
+    .page { width: 100%; max-width: 900px; background: var(--pitch-black); }
+    .content-area { padding: 32px 24px; }
+    .section-title { 
+      font-family: 'Bebas Neue', sans-serif; 
+      font-size: 32px; 
+      color: #fff; 
+      border-bottom: 2px solid var(--blood-red); 
+      padding-bottom: 12px; 
+      margin-bottom: 32px; 
+    }
     
-    <main style="max-width: 800px; margin: 0 auto;">
+    .article-card {
+      background: var(--outfield);
+      border: 1px solid rgba(240,242,245,0.06);
+      padding: 24px;
+      margin-bottom: 16px;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+    .article-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--blood-red);
+    }
+    .meta-data { 
+      font-family: 'JetBrains Mono', monospace; 
+      font-size: 11px; 
+      color: var(--blood-red); 
+      margin-bottom: 12px; 
+      text-transform: uppercase;
+    }
+    .card-title { 
+      font-family: 'Bebas Neue', sans-serif; 
+      font-size: 28px; 
+      color: #fff; 
+      margin-bottom: 12px;
+      text-decoration: none;
+    }
+    .card-excerpt {
+      font-size: 14px; 
+      line-height: 1.6; 
+      color: rgba(240,242,245,0.7);
+      margin-bottom: 16px;
+    }
+    .read-more {
+      font-family: 'JetBrains Mono', monospace; 
+      font-size: 12px; 
+      color: var(--bail-amber); 
+      text-decoration: none;
+      font-weight: bold;
+    }
+    .read-more:hover { color: #fff; }
+    .footer { 
+      padding: 20px 24px; 
+      border-top: 1px solid rgba(240,242,245,0.06); 
+      display: flex; 
+      justify-content: space-between; 
+      margin-top: 60px; 
+    }
+    .footer span { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.3); }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <Navbar />
+    
+    <div class="content-area">
+      <h2 class="section-title">MATCH POST-MORTEMS</h2>
       
-      <header style="border-bottom: 1px solid #1e2330; padding-bottom: 1rem; margin-bottom: 2rem;">
-        <h1 style="text-transform: uppercase; letter-spacing: 2px; margin-bottom: 0.2rem;">Death Overs</h1>
-        <p style="color: #4f5e7c; font-size: 0.9rem; margin-top: 0;">Automated Cricket Analytics Engine</p>
-      </header>
-
-      <section>
-        <h2 style="font-size: 1.2rem; color: #a3b3d2; margin-bottom: 1.5rem;">Match Post-Mortem Reports</h2>
-        
-        {allPosts.length === 0 ? (
-          <div style="padding: 2rem; border: 1px dashed #1e2330; border-radius: 8px; text-align: center; color: #4f5e7c;">
-            Waiting for n8n to publish the first match report...
-          </div>
-        ) : (
-          <div style="display: flex; flex-direction: column; gap: 1rem;">
-            {allPosts.map((post) => (
-              <article style="background-color: #11141d; padding: 1.5rem; border-radius: 8px; border: 1px solid #1e2330;">
-                <h3 style="margin-top: 0; color: #60a5fa;">{post.data.title || 'Match Analysis'}</h3>
-                <p style="color: #a3b3d2; font-size: 0.9rem;">
-                  {post.body.substring(0, 150)}...
-                </p>
-                <a href={`/posts/${post.slug}`} style="color: #34d399; text-decoration: none; font-size: 0.85rem; font-weight: bold;">READ FULL REPORT →</a>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-
-    </main>
-  </body>
+      {allPosts.length === 0 ? (
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--bail-amber); text-align: center; padding: 40px; border: 1px dashed rgba(240,242,245,0.2);">
+          [ AWAITING LIVE DATA FROM SECURE UPLINK... ]
+        </div>
+      ) : (
+        <div style="display: flex; flex-direction: column;">
+          {allPosts.map((post) => (
+            <div class="article-card">
+              <div class="meta-data">{post.data.category || 'ANALYSIS'} · {post.data.date || 'LATEST'}</div>
+              <!-- THE 404 FIX IS HERE: Routing directly to the slug name based on standard Astro content mapping -->
+              <a href={`/posts/${post.slug}`} style="text-decoration: none;">
+                <h3 class="card-title">{post.data.title || 'In-Play Report'}</h3>
+              </a>
+              <p class="card-excerpt">
+                {post.body.substring(0, 160)}...
+              </p>
+              <a href={`/posts/${post.slug}`} class="read-more">DECRYPT FULL REPORT →</a>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+    
+    <div class="footer">
+      <span>© 2026 DEATHOVERS</span>
+      <span>POWERED BY GROQ + N8N</span>
+    </div>
+  </div>
+</body>
 </html>
