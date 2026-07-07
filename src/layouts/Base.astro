@@ -1,35 +1,48 @@
 ---
-import '../styles/global.css';
-
-const { title = "DeathOvers", description = "Every Ball Counts." } = Astro.props;
+interface Props {
+  title: string;
+}
+const { title } = Astro.props;
 ---
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{title} | DeathOvers</title>
-    <meta name="description" content={description} />
-  </head>
-  <body>
-    <header class="site-header">
-      <div class="container">
-        <a href="/" class="logo">
-          <span class="death">DEATH</span><span class="overs">OVERS</span>
-        </a>
-        <div class="tagline">Every Ball Counts.</div>
-        <nav>
-          <a href="/press-box">Press Box</a>
-          <a href="/tactical-sheets">Tactical Sheets</a>
-          <a href="/simulations">Simulations</a>
-        </nav>
-      </div>
-    </header>
-    <main class="container">
-      <slot />
-    </main>
-    <footer>
-      DEATHOVERS &middot; AI-Powered Cricket Journalism &middot; {new Date().getFullYear()}
-    </footer>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style is:global>
+    :root {
+      --pitch-black: #080A0F;
+      --blood-red: #E8003A;
+      --bail-amber: #F5A623;
+      --crease-white: #F0F2F5;
+      --outfield: #16191F;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--pitch-black);
+      color: var(--crease-white);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 24px;
+    }
+    .page {
+      width: 100%;
+      max-width: 900px;
+      background: var(--pitch-black);
+    }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    .bebas { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.03em; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <slot />
+  </div>
+</body>
 </html>
