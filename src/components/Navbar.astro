@@ -2,10 +2,12 @@
 ---
 <div class="nav">
   <div>
-    <div class="logo-row">
-      <span class="logo-death">DEATH</span>
-      <span class="logo-overs">OVERS</span>
-    </div>
+    <a href="/" class="logo-link">
+      <div class="logo-row">
+        <span class="logo-death">DEATH</span>
+        <span class="logo-overs">OVERS</span>
+      </div>
+    </a>
     <div class="tagline">EVERY BALL COUNTS.</div>
   </div>
   <div class="nav-links">
@@ -22,6 +24,10 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+  }
+  .logo-link {
+    text-decoration: none;
+    display: inline-block;
   }
   .logo-row {
     display: flex;
