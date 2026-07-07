@@ -1,5 +1,4 @@
 ---
-import Layout from '../layouts/Layout.astro';
 import Navbar from '../components/Navbar.astro';
 import LiveCarousel from '../components/LiveCarousel.jsx';
 
@@ -10,148 +9,181 @@ const featuredArticle = {
   desc: "AI breakdown of the 17th-over spell that swung GT v KKR — powerplay economy, matchup data, and the turning point in numbers."
 };
 ---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DeathOvers — Advanced Cricket Analytics Command Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --pitch-black: #080A0F;
+      --blood-red: #E8003A;
+      --bail-amber: #F5A623;
+      --crease-white: #F0F2F5;
+      --outfield: #16191F;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--pitch-black);
+      color: var(--crease-white);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 24px;
+    }
+    .page {
+      width: 100%;
+      max-width: 900px;
+      background: var(--pitch-black);
+    }
+    .chip-rail {
+      padding: 8px 24px 20px;
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+    }
+    .chip {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--crease-white);
+      background: rgba(240,242,245,0.06);
+      padding: 5px 12px;
+      border-radius: 14px;
+      flex-shrink: 0;
+    }
+    .featured-wrap { padding: 0 24px 20px; }
+    .featured-card {
+      background: var(--outfield);
+      border: 1px solid rgba(232,0,58,0.2);
+      border-radius: 4px;
+      padding: 20px;
+      position: relative;
+    }
+    .featured-card::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--blood-red), var(--bail-amber));
+    }
+    .featured-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      color: var(--blood-red);
+      letter-spacing: 0.05em;
+    }
+    .featured-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 26px;
+      color: var(--crease-white);
+      margin: 8px 0 6px;
+      letter-spacing: 0.01em;
+      line-height: 1.15;
+    }
+    .featured-desc {
+      font-size: 13px;
+      color: rgba(240,242,245,0.5);
+      line-height: 1.5;
+    }
+    .sheets-wrap { padding: 0 24px 24px; }
+    .section-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: rgba(240,242,245,0.4);
+      letter-spacing: 0.05em;
+      margin-bottom: 10px;
+    }
+    .sheets-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+    }
+    .sheet-card {
+      background: var(--outfield);
+      border: 1px solid rgba(240,242,245,0.08);
+      border-radius: 4px;
+      padding: 14px;
+    }
+    .sheet-kind {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      color: var(--bail-amber);
+      margin-bottom: 6px;
+    }
+    .sheet-title {
+      font-size: 13px;
+      color: var(--crease-white);
+      font-weight: 500;
+      line-height: 1.4;
+    }
+    .footer {
+      padding: 12px 24px 20px;
+      border-top: 1px solid rgba(240,242,245,0.06);
+      display: flex;
+      justify-content: space-between;
+    }
+    .footer span {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: rgba(240,242,245,0.3);
+    }
+    @media (max-width: 640px) {
+      .sheets-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <Navbar />
+    
+    {/* REACT COMPONENT FOR LIVE REALTIME STREAMING */}
+    <LiveCarousel client:load />
 
-<Layout title="DeathOvers — Advanced Cricket Analytics Command Center">
-  <Navbar />
-  
-  {/* REACT COMPONENT FOR LIVE REALTIME STREAMING */}
-  <LiveCarousel client:load />
+    {/* STATIC CHIP RAIL */}
+    <div class="chip-rail">
+      {["IND", "AUS", "ENG", "RCB", "CSK"].map((chip) => (
+        <span class="chip">{chip}</span>
+      ))}
+    </div>
 
-  {/* STATIC CHIP RAIL */}
-  <div class="chip-rail">
-    {["IND", "AUS", "ENG", "RCB", "CSK"].map((chip) => (
-      <span class="chip">{chip}</span>
-    ))}
-  </div>
+    {/* FEATURED INSIGHT COMPONENT */}
+    <div class="featured-wrap">
+      <div class="featured-card">
+        <span class="featured-tag">{featuredArticle.tag}</span>
+        <div class="featured-title">{featuredArticle.title}</div>
+        <div class="featured-desc">{featuredArticle.desc}</div>
+      </div>
+    </div>
 
-  {/* FEATURED INSIGHT COMPONENT */}
-  <div class="featured-wrap">
-    <div class="featured-card">
-      <span class="featured-tag">{featuredArticle.tag}</span>
-      <div class="featured-title">{featuredArticle.title}</div>
-      <div class="featured-desc">{featuredArticle.desc}</div>
+    {/* TACTICAL INDEX GRID */}
+    <div class="sheets-wrap">
+      <div class="section-label">TACTICAL SHEETS</div>
+      <div class="sheets-grid">
+        <div class="sheet-card">
+          <div class="sheet-kind">MATCHUP</div>
+          <div class="sheet-title">Bumrah vs left-handers at the death</div>
+        </div>
+        <div class="sheet-card">
+          <div class="sheet-kind">VENUE</div>
+          <div class="sheet-title">Chinnaswamy chase-win split, 5yr trend</div>
+        </div>
+        <div class="sheet-card">
+          <div class="sheet-kind">SIMULATION</div>
+          <div class="sheet-title">Win probability model, Q2 second innings</div>
+        </div>
+      </div>
+    </div>
+
+    {/* SYSTEM FOOTER */}
+    <div class="footer">
+      <span>© 2026 DEATHOVERS</span>
+      <span>POWERED BY GROQ + HIGHLIGHTLY</span>
     </div>
   </div>
-
-  {/* TACTICAL INDEX GRID */}
-  <div class="sheets-wrap">
-    <div class="section-label">TACTICAL SHEETS</div>
-    <div class="sheets-grid">
-      <div class="sheet-card">
-        <div class="sheet-kind">MATCHUP</div>
-        <div class="sheet-title">Bumrah vs left-handers at the death</div>
-      </div>
-      <div class="sheet-card">
-        <div class="sheet-kind">VENUE</div>
-        <div class="sheet-title">Chinnaswamy chase-win split, 5yr trend</div>
-      </div>
-      <div class="sheet-card">
-        <div class="sheet-kind">SIMULATION</div>
-        <div class="sheet-title">Win probability model, Q2 second innings</div>
-      </div>
-    </div>
-  </div>
-
-  {/* SYSTEM FOOTER */}
-  <div class="footer">
-    <span>© 2026 DEATHOVERS</span>
-    <span>POWERED BY GROQ + HIGHLIGHTLY</span>
-  </div>
-</Layout>
-
-<style>
-  .chip-rail {
-    padding: 8px 24px 20px;
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
-  }
-  .chip {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: var(--crease-white);
-    background: rgba(240,242,245,0.06);
-    padding: 5px 12px;
-    border-radius: 14px;
-    flex-shrink: 0;
-  }
-  .featured-wrap { padding: 0 24px 20px; }
-  .featured-card {
-    background: var(--outfield);
-    border: 1px solid rgba(232,0,58,0.2);
-    border-radius: 4px;
-    padding: 20px;
-    position: relative;
-  }
-  .featured-card::before {
-    content: "";
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 2px;
-    background: linear-gradient(90deg, var(--blood-red), var(--bail-amber));
-  }
-  .featured-tag {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
-    color: var(--blood-red);
-    letter-spacing: 0.05em;
-  }
-  .featured-title {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 26px;
-    color: var(--crease-white);
-    margin: 8px 0 6px;
-    letter-spacing: 0.01em;
-    line-height: 1.15;
-  }
-  .featured-desc {
-    font-size: 13px;
-    color: rgba(240,242,245,0.5);
-    line-height: 1.5;
-  }
-  .sheets-wrap { padding: 0 24px 24px; }
-  .section-label {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    color: rgba(240,242,245,0.4);
-    letter-spacing: 0.05em;
-    margin-bottom: 10px;
-  }
-  .sheets-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 12px;
-  }
-  .sheet-card {
-    background: var(--outfield);
-    border: 1px solid rgba(240,242,245,0.08);
-    border-radius: 4px;
-    padding: 14px;
-  }
-  .sheet-kind {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
-    color: var(--bail-amber);
-    margin-bottom: 6px;
-  }
-  .sheet-title {
-    font-size: 13px;
-    color: var(--crease-white);
-    font-weight: 500;
-    line-height: 1.4;
-  }
-  .footer {
-    padding: 12px 24px 20px;
-    border-top: 1px solid rgba(240,242,245,0.06);
-    display: flex;
-    justify-content: space-between;
-  }
-  .footer span {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    color: rgba(240,242,245,0.3);
-  }
-  @media (max-width: 640px) {
-    .sheets-grid { grid-template-columns: 1fr; }
-  }
-</style>
+</body>
+</html>
