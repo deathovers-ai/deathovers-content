@@ -52,10 +52,15 @@ const featuredArticle = dynamicPosts.length > 0 ? dynamicPosts[0].data : {
     .featured-desc { font-size: 13px; color: rgba(240,242,245,0.5); line-height: 1.5; }
     .sheets-wrap { padding: 0 24px 24px; }
     .section-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.4); letter-spacing: 0.05em; margin-bottom: 10px; }
+    
+    /* Dynamic active card link grids layout styling wrapper */
     .sheets-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
-    .sheet-card { background: var(--outfield); border: 1px solid rgba(240,242,245,0.08); border-radius: 4px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between; min-height: 100px; }
+    .sheet-link { text-decoration: none; display: flex; }
+    .sheet-card { background: var(--outfield); border: 1px solid rgba(240,242,245,0.08); border-radius: 4px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between; min-height: 120px; width: 100%; transition: border-color 0.2s, transform 0.2s; }
+    .sheet-link:hover .sheet-card { border-color: rgba(232,0,58,0.4); transform: translateY(-2px); }
+    
     .sheet-kind { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--bail-amber); margin-bottom: 6px; text-transform: uppercase; }
-    .sheet-title { font-size: 13px; color: var(--crease-white); font-weight: 500; line-height: 1.4; }
+    .sheet-title { font-size: 13px; color: var(--crease-white); font-weight: 500; line-height: 1.4; text-transform: uppercase; }
     .sheet-date { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.3); margin-top: 8px; }
     .footer { padding: 12px 24px 20px; border-top: 1px solid rgba(240,242,245,0.06); display: flex; justify-content: space-between; }
     .footer span { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.3); }
@@ -83,33 +88,47 @@ const featuredArticle = dynamicPosts.length > 0 ? dynamicPosts[0].data : {
     </div>
 
     <div class="sheets-wrap">
-      <div class="section-label">TACTICAL SHEETS INDEX</div>
+      <div class="section-label">PRESS BOX</div>
       <div class="sheets-grid">
         {dynamicPosts.length > 0 ? (
           dynamicPosts.map((post) => (
-            <div class="sheet-card">
-              <div>
-                <div class="sheet-kind">{post.data.kind || "MATCH ANALYSIS"}</div>
-                <div class="sheet-title">{post.data.title}</div>
+            <a href={`/article/${post.slug}`} class="sheet-link">
+              <div class="sheet-card">
+                <div>
+                  <div class="sheet-kind">{post.data.kind || "TACTICAL ANALYSIS"}</div>
+                  <div class="sheet-title">{post.data.title}</div>
+                </div>
+                <div class="sheet-date">{post.data.date}</div>
               </div>
-              <div class="sheet-date">{post.data.date}</div>
-            </div>
+            </a>
           ))
         ) : (
-          /* Hardcoded fallbacks only fire if the posts folder is completely empty */
+          /* High-Fidelity local static fallback slots remain running until dynamic posts populate */
           <>
-            <div class="sheet-card">
-              <div class="sheet-kind">MATCHUP</div>
-              <div class="sheet-title">Bumrah vs left-handers at the death</div>
-            </div>
-            <div class="sheet-card">
-              <div class="sheet-kind">VENUE</div>
-              <div class="sheet-title">Chinnaswamy chase-win split, 5yr trend</div>
-            </div>
-            <div class="sheet-card">
-              <div class="sheet-kind">SIMULATION</div>
-              <div class="sheet-title">Win probability model, Q2 second innings</div>
-            </div>
+            <a href="#" class="sheet-link">
+              <div class="sheet-card">
+                <div>
+                  <div class="sheet-kind">MATCHUP</div>
+                  <div class="sheet-title">Bumrah vs left-handers at the death</div>
+                </div>
+              </div>
+            </a>
+            <a href="#" class="sheet-link">
+              <div class="sheet-card">
+                <div>
+                  <div class="sheet-kind">VENUE</div>
+                  <div class="sheet-title">Chinnaswamy chase-win split, 5yr trend</div>
+                </div>
+              </div>
+            </a>
+            <a href="#" class="sheet-link">
+              <div class="sheet-card">
+                <div>
+                  <div class="sheet-kind">SIMULATION</div>
+                  <div class="sheet-title">Win probability model, Q2 second innings</div>
+                </div>
+              </div>
+            </a>
           </>
         )}
       </div>
