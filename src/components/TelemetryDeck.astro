@@ -1,0 +1,91 @@
+---
+// src/components/TelemetryDeck.astro
+interface PhaseLog {
+  phaseId: string;
+  title: string;
+  metrics: {
+    rpo: string;
+    boundaries: number;
+    wickets: number;
+    pressureIndex: string;
+  };
+  tacticalBlueprint: string;
+  winProbabilityDelta: number;
+}
+
+interface Props {
+  innings: number;
+  currentPhaseId: string;
+  phaseLogs: PhaseLog[];
+}
+
+const { innings, currentPhaseId, phaseLogs } = Astro.props;
+// Calculate exactly where to slide the track container
+const currentIndex = phaseLogs.findIndex(p => p.phaseId === currentPhaseId);
+const activeIndex = currentIndex >= 0 ? currentIndex : 0;
+---
+
+<div class="w-full bg-[#0d0f14] border border-[#1e2330] rounded-lg overflow-hidden shadow-2xl my-6">
+  <!-- Top Telemetry Status Header -->
+  <div class="bg-[#11141d] px-6 py-4 border-b border-[#1e2330] flex justify-between items-center">
+    <div class="flex items-center space-x-3">
+      <span class="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse"></span>
+      <h2 class="text-sm font-bold tracking-widest text-[#4f5e7c] uppercase font-mono">
+        LIVE PHASE TELEMETRY DECK
+      </h2>
+    </div>
+    <div class="text-xs bg-[#161b26] text-blue-400 font-mono px-2.5 py-1 rounded border border-blue-500/20">
+      INNINGS {innings} ACTIVE
+    </div>
+  </div>
+
+  <!-- Sliding Track Window Box -->
+  <div class="relative overflow-hidden w-full min-h-[220px]">
+    <div 
+      class="flex transition-transform duration-500 ease-in-out w-full" 
+      style={`transform: translateX(-${activeIndex * 100}%);`}
+    >
+      {phaseLogs.map((phase) => (
+        <div class="w-full flex-shrink-0 p-6 bg-[#0d0f14] box-border">
+          <!-- Slide Layout Header -->
+          <div class="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-4">
+            <div>
+              <span class="text-xs font-mono text-blue-500 tracking-wider uppercase font-bold">In-Play Track Data</span>
+              <h3 class="text-xl font-extrabold text-white mt-0.5 tracking-tight">{phase.title}</h3>
+            </div>
+            
+            <div class="flex space-x-6 font-mono text-xs bg-[#11141d] p-2 rounded border border-[#1e2330]">
+              <div>
+                <div class="text-[#4f5e7c]">PHASE RPO</div>
+                <div class="text-white font-bold text-sm mt-0.5">{phase.metrics.rpo}</div>
+              </div>
+              <div class="border-l border-[#1e2330] h-6 self-center"></div>
+              <div>
+                <div class="text-[#4f5e7c]">WKT / BDY</div>
+                <div class="text-white font-bold text-sm text-orange-400 mt-0.5">
+                  {phase.metrics.wickets}W / {phase.metrics.boundaries}x4
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Strategy Card -->
+          <div class="bg-[#131722] p-4 rounded border border-[#1e2330] mb-4">
+            <div class="text-xs font-mono font-bold text-blue-400 uppercase mb-1 tracking-wider">AI Tactical Directive</div>
+            <p class="text-sm text-[#a3b3d2] leading-relaxed font-sans">{phase.tacticalBlueprint}</p>
+          </div>
+
+          <!-- Live Status Bar -->
+          <div class="flex justify-between items-center border-t border-[#1e2330]/60 pt-3 font-mono text-xs">
+            <div class="text-[#576b91]">
+              PRESSURE COEFFICIENT: <span class="text-white font-bold">{phase.metrics.pressureIndex}</span>
+            </div>
+            <div class={`font-bold ${phase.winProbabilityDelta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              WP DELTA: {phase.winProbabilityDelta >= 0 ? '+' : ''}{phase.winProbabilityDelta}%
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</div>
