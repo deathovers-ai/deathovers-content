@@ -1,18 +1,22 @@
 from flask import Flask, jsonify, request
+from flask_cors import CORS
 import datetime
+import os
 
 app = Flask(__name__)
+
+# CRITICAL FIX: Enable CORS so your Vercel frontend can securely fetch data from your Render backend
+CORS(app, resources={r"/api/*": {"origins": "*"}}) 
 
 # Global in-memory state tracker simulating live database match-state storage
 LIVE_MATCH_DB = {
     "active_match_id": "ipl_2026_gt_kkr",
-    "status": "LIVE",               # LIVE, MID_INNINGS, CONCLUDED
-    "innings": 1,                   # 1 or 2
-    "currentPhaseId": "MID1",       # PP1, MID1, DEATH1, PP2, MID2, DEATH2
+    "status": "LIVE",               
+    "innings": 1,                   
+    "currentPhaseId": "MID1",       
     "team1_name": "GT",
     "team2_name": "KKR",
     
-    # Store dynamic logs for both innings independently to prevent pollution
     "innings1_logs": [
         {
             "phaseId": "PP1",
@@ -45,10 +49,8 @@ LIVE_MATCH_DB = {
 @app.route('/api/live-scores', methods=['GET'])
 def get_live_scores():
     """
-    Standard endpoint wired to your n8n intake pipeline.
-    Determines current phase routes based on active match state parameters.
+    Standard endpoint wired to your frontend and n8n intake pipeline.
     """
-    # Isolate phase logs to reflect ONLY the active innings inside the UI deck
     active_logs = (
         LIVE_MATCH_DB["innings1_logs"] 
         if LIVE_MATCH_DB["innings"] == 1 
@@ -72,13 +74,11 @@ def get_live_scores():
 def update_match_phase():
     """
     Control endpoint to simulate moving through the game's actual live phases.
-    Accepts JSON body payload to update the in-memory engine.
     """
     data = request.json
     if not data:
         return jsonify({"error": "No payload provided"}), 400
         
-    # Update core structural parameters if sent
     if "status" in data:
         LIVE_MATCH_DB["status"] = data["status"]
     if "innings" in data:
@@ -86,7 +86,6 @@ def update_match_phase():
     if "currentPhaseId" in data:
         LIVE_MATCH_DB["currentPhaseId"] = data["currentPhaseId"]
         
-    # Append a brand new telemetry slide to the active innings log list
     if "newLog" in data:
         log_target = "innings1_logs" if LIVE_MATCH_DB["innings"] == 1 else "innings2_logs"
         LIVE_MATCH_DB[log_target].append(data["newLog"])
@@ -96,7 +95,7 @@ def update_match_phase():
 @app.route('/api/admin/reset-match', methods=['POST'])
 def reset_match():
     """
-    Resets the telemetry deck to clean template basics for game initializations.
+    Resets the telemetry deck to clean template basics.
     """
     global LIVE_MATCH_DB
     LIVE_MATCH_DB = {
@@ -112,7 +111,6 @@ def reset_match():
     return jsonify({"message": "Telemetry memory track cleared completely."})
 
 if __name__ == '__main__':
-    # Bind to 0.0.0.0 and dynamically match environment port constraints for Render deployment
-    import os
+    # Cloud-native port binding for Render/Heroku
     port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=port, debug=False)
