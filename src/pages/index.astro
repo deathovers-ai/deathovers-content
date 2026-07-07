@@ -3,11 +3,9 @@ import Navbar from '../components/Navbar.astro';
 import LiveCarousel from '../components/LiveCarousel.jsx';
 import { getCollection } from 'astro:content';
 
-// Fetch real automated sheets, sorting freshest to oldest
 const rawPosts = await getCollection('posts');
 const dynamicPosts = rawPosts.sort((a, b) => new Date(b.data.date).getTime() - new Date(a.data.date).getTime());
 
-// Isolate the freshest entry to place on the main spotlight billboard
 const featuredArticle = dynamicPosts.length > 0 ? dynamicPosts[0].data : {
   tag: "PRESS BOX · FEATURED",
   title: "HOW RASHID KHAN TURNED THE QUALIFIER ON ITS HEAD",
@@ -24,23 +22,9 @@ const featuredArticle = dynamicPosts.length > 0 ? dynamicPosts[0].data : {
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
-    :root {
-      --pitch-black: #080A0F;
-      --blood-red: #E8003A;
-      --bail-amber: #F5A623;
-      --crease-white: #F0F2F5;
-      --outfield: #16191F;
-    }
+    :root { --pitch-black: #080A0F; --blood-red: #E8003A; --bail-amber: #F5A623; --crease-white: #F0F2F5; --outfield: #16191F; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Inter', sans-serif;
-      background: var(--pitch-black);
-      color: var(--crease-white);
-      min-height: 100vh;
-      display: flex;
-      justify-content: center;
-      padding: 24px;
-    }
+    body { font-family: 'Inter', sans-serif; background: var(--pitch-black); color: var(--crease-white); min-height: 100vh; display: flex; justify-content: center; padding: 24px; }
     .page { width: 100%; max-width: 900px; background: var(--pitch-black); }
     .chip-rail { padding: 8px 24px 20px; display: flex; gap: 8px; overflow-x: auto; }
     .chip { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--crease-white); background: rgba(240,242,245,0.06); padding: 5px 12px; border-radius: 14px; flex-shrink: 0; }
@@ -52,13 +36,10 @@ const featuredArticle = dynamicPosts.length > 0 ? dynamicPosts[0].data : {
     .featured-desc { font-size: 13px; color: rgba(240,242,245,0.5); line-height: 1.5; }
     .sheets-wrap { padding: 0 24px 24px; }
     .section-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.4); letter-spacing: 0.05em; margin-bottom: 10px; }
-    
-    /* Dynamic active card link grids layout styling wrapper */
     .sheets-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
     .sheet-link { text-decoration: none; display: flex; }
     .sheet-card { background: var(--outfield); border: 1px solid rgba(240,242,245,0.08); border-radius: 4px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between; min-height: 120px; width: 100%; transition: border-color 0.2s, transform 0.2s; }
     .sheet-link:hover .sheet-card { border-color: rgba(232,0,58,0.4); transform: translateY(-2px); }
-    
     .sheet-kind { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--bail-amber); margin-bottom: 6px; text-transform: uppercase; }
     .sheet-title { font-size: 13px; color: var(--crease-white); font-weight: 500; line-height: 1.4; text-transform: uppercase; }
     .sheet-date { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.3); margin-top: 8px; }
@@ -70,15 +51,10 @@ const featuredArticle = dynamicPosts.length > 0 ? dynamicPosts[0].data : {
 <body>
   <div class="page">
     <Navbar />
-    
     <LiveCarousel client:load />
-
     <div class="chip-rail">
-      {["IND", "AUS", "ENG", "RCB", "CSK"].map((chip) => (
-        <span class="chip">{chip}</span>
-      ))}
+      {["IND", "AUS", "ENG", "RCB", "CSK"].map((chip) => <span class="chip">{chip}</span>)}
     </div>
-
     <div class="featured-wrap">
       <div class="featured-card">
         <span class="featured-tag">{featuredArticle.tag || "PRESS BOX · AUTOMATED INSIGHT"}</span>
@@ -86,7 +62,6 @@ const featuredArticle = dynamicPosts.length > 0 ? dynamicPosts[0].data : {
         <div class="featured-desc">{featuredArticle.desc || "Click on tactical index metrics below to reveal deep system analytics."}</div>
       </div>
     </div>
-
     <div class="sheets-wrap">
       <div class="section-label">PRESS BOX</div>
       <div class="sheets-grid">
@@ -103,41 +78,15 @@ const featuredArticle = dynamicPosts.length > 0 ? dynamicPosts[0].data : {
             </a>
           ))
         ) : (
-          /* High-Fidelity local static fallback slots remain running until dynamic posts populate */
           <>
-            <a href="#" class="sheet-link">
-              <div class="sheet-card">
-                <div>
-                  <div class="sheet-kind">MATCHUP</div>
-                  <div class="sheet-title">Bumrah vs left-handers at the death</div>
-                </div>
-              </div>
-            </a>
-            <a href="#" class="sheet-link">
-              <div class="sheet-card">
-                <div>
-                  <div class="sheet-kind">VENUE</div>
-                  <div class="sheet-title">Chinnaswamy chase-win split, 5yr trend</div>
-                </div>
-              </div>
-            </a>
-            <a href="#" class="sheet-link">
-              <div class="sheet-card">
-                <div>
-                  <div class="sheet-kind">SIMULATION</div>
-                  <div class="sheet-title">Win probability model, Q2 second innings</div>
-                </div>
-              </div>
-            </a>
+            <a href="#" class="sheet-link"><div class="sheet-card"><div><div class="sheet-kind">MATCHUP</div><div class="sheet-title">Bumrah vs left-handers at the death</div></div></div></a>
+            <a href="#" class="sheet-link"><div class="sheet-card"><div><div class="sheet-kind">VENUE</div><div class="sheet-title">Chinnaswamy chase-win split, 5yr trend</div></div></div></a>
+            <a href="#" class="sheet-link"><div class="sheet-card"><div><div class="sheet-kind">SIMULATION</div><div class="sheet-title">Win probability model, Q2 second innings</div></div></div></a>
           </>
         )}
       </div>
     </div>
-
-    <div class="footer">
-      <span>© 2026 DEATHOVERS</span>
-      <span>POWERED BY GROQ + HIGHLIGHTLY</span>
-    </div>
+    <div class="footer"><span>© 2026 DEATHOVERS</span><span>POWERED BY GROQ + HIGHLIGHTLY</span></div>
   </div>
 </body>
 </html>
