@@ -1,92 +1,116 @@
 ---
-import Navbar from '../components/Navbar.astro';
-import LiveCarousel from '../components/LiveCarousel.jsx';
-import { getCollection } from 'astro:content';
+// src/pages/index.astro
+import TelemetryDeck from '../components/TelemetryDeck.astro';
 
-const rawPosts = await getCollection('posts');
-const dynamicPosts = rawPosts.sort((a, b) => new Date(b.data.date).getTime() - new Date(a.data.date).getTime());
-
-const featuredArticle = dynamicPosts.length > 0 ? dynamicPosts[0].data : {
-  tag: "PRESS BOX · FEATURED",
-  title: "HOW RASHID KHAN TURNED THE QUALIFIER ON ITS HEAD",
-  desc: "AI breakdown of the 17th-over spell that swung GT v KKR — powerplay economy, matchup data, and the turning point in numbers."
+// Initialize clean fallback schema data structures to prevent build crashes if the API is offline
+let matchData = {
+  innings: 1,
+  currentPhaseId: "PP1",
+  matchMeta: {
+    matchId: "loading_match",
+    matchName: "Fetching Live Data...",
+    date: "",
+    status: "LIVE"
+  },
+  phaseLogs: [
+    {
+      phaseId: "PP1",
+      title: "Establishing Live Telemetry Connection...",
+      metrics: {
+        rpo: "0.00",
+        boundaries: 0,
+        wickets: 0,
+        pressureIndex: "INITIALIZING"
+      },
+      tacticalBlueprint: "Synchronizing analytical tracking modules with Render data streams. Standby for live match telemetry metrics.",
+      winProbabilityDelta: 0
+    }
+  ]
 };
+
+// Fetch real-time data from your Python Render backend during the page request cycle
+try {
+  // Replace this placeholder link with your actual verified Render live-score URL
+  const response = await fetch('https://deathovers-ai-engine.onrender.com/api/live-scores', {
+    method: 'GET',
+    headers: {
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache'
+    }
+  });
+  
+  if (response.ok) {
+    matchData = await response.json();
+  }
+} catch (error) {
+  console.error("Telemetry Deck Data Extraction Failure:", error);
+}
 ---
-<!DOCTYPE html>
+
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DeathOvers — Advanced Cricket Analytics Command Center</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-  <style>
-    :root { --pitch-black: #080A0F; --blood-red: #E8003A; --bail-amber: #F5A623; --crease-white: #F0F2F5; --outfield: #16191F; }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Inter', sans-serif; background: var(--pitch-black); color: var(--crease-white); min-height: 100vh; display: flex; justify-content: center; padding: 24px; }
-    .page { width: 100%; max-width: 900px; background: var(--pitch-black); }
-    .chip-rail { padding: 8px 24px 20px; display: flex; gap: 8px; overflow-x: auto; }
-    .chip { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--crease-white); background: rgba(240,242,245,0.06); padding: 5px 12px; border-radius: 14px; flex-shrink: 0; }
-    .featured-wrap { padding: 0 24px 20px; }
-    .featured-card { background: var(--outfield); border: 1px solid rgba(232,0,58,0.2); border-radius: 4px; padding: 20px; position: relative; }
-    .featured-card::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--blood-red), var(--bail-amber)); }
-    .featured-tag { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--blood-red); letter-spacing: 0.05em; text-transform: uppercase; }
-    .featured-title { font-family: 'Bebas Neue', sans-serif; font-size: 26px; color: var(--crease-white); margin: 8px 0 6px; letter-spacing: 0.01em; line-height: 1.15; text-transform: uppercase; }
-    .featured-desc { font-size: 13px; color: rgba(240,242,245,0.5); line-height: 1.5; }
-    .sheets-wrap { padding: 0 24px 24px; }
-    .section-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.4); letter-spacing: 0.05em; margin-bottom: 10px; }
-    .sheets-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
-    .sheet-link { text-decoration: none; display: flex; }
-    .sheet-card { background: var(--outfield); border: 1px solid rgba(240,242,245,0.08); border-radius: 4px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between; min-height: 120px; width: 100%; transition: border-color 0.2s, transform 0.2s; }
-    .sheet-link:hover .sheet-card { border-color: rgba(232,0,58,0.4); transform: translateY(-2px); }
-    .sheet-kind { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--bail-amber); margin-bottom: 6px; text-transform: uppercase; }
-    .sheet-title { font-size: 13px; color: var(--crease-white); font-weight: 500; line-height: 1.4; text-transform: uppercase; }
-    .sheet-date { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.3); margin-top: 8px; }
-    .footer { padding: 12px 24px 20px; border-top: 1px solid rgba(240,242,245,0.06); display: flex; justify-content: space-between; }
-    .footer span { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.3); }
-    @media (max-width: 640px) { .sheets-grid { grid-template-columns: 1fr; } }
-  </style>
-</head>
-<body>
-  <div class="page">
-    <Navbar />
-    <LiveCarousel client:load />
-    <div class="chip-rail">
-      {["IND", "AUS", "ENG", "RCB", "CSK"].map((chip) => <span class="chip">{chip}</span>)}
-    </div>
-    <div class="featured-wrap">
-      <div class="featured-card">
-        <span class="featured-tag">{featuredArticle.tag || "PRESS BOX · AUTOMATED INSIGHT"}</span>
-        <div class="featured-title">{featuredArticle.title}</div>
-        <div class="featured-desc">{featuredArticle.desc || "Click on tactical index metrics below to reveal deep system analytics."}</div>
-      </div>
-    </div>
-    <div class="sheets-wrap">
-      <div class="section-label">PRESS BOX</div>
-      <div class="sheets-grid">
-        {dynamicPosts.length > 0 ? (
-          dynamicPosts.map((post) => (
-            <a href={`/article/${post.slug}`} class="sheet-link">
-              <div class="sheet-card">
-                <div>
-                  <div class="sheet-kind">{post.data.kind || "TACTICAL ANALYSIS"}</div>
-                  <div class="sheet-title">{post.data.title}</div>
-                </div>
-                <div class="sheet-date">{post.data.date}</div>
-              </div>
-            </a>
-          ))
-        ) : (
-          <>
-            <a href="#" class="sheet-link"><div class="sheet-card"><div><div class="sheet-kind">MATCHUP</div><div class="sheet-title">Bumrah vs left-handers at the death</div></div></div></a>
-            <a href="#" class="sheet-link"><div class="sheet-card"><div><div class="sheet-kind">VENUE</div><div class="sheet-title">Chinnaswamy chase-win split, 5yr trend</div></div></div></a>
-            <a href="#" class="sheet-link"><div class="sheet-card"><div><div class="sheet-kind">SIMULATION</div><div class="sheet-title">Win probability model, Q2 second innings</div></div></div></a>
-          </>
-        )}
-      </div>
-    </div>
-    <div class="footer"><span>© 2026 DEATHOVERS</span><span>POWERED BY GROQ + HIGHLIGHTLY</span></div>
-  </div>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DEATH OVERS // In-Play Telemetry Dashboard</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+  </head>
+  
+  <body class="bg-[#07080a] text-white min-h-screen antialiased selection:bg-blue-500/30 selection:text-blue-200">
+    
+    <main class="max-w-5xl mx-auto px-4 py-8 md:py-12 flex flex-col gap-6">
+      
+      <header class="flex justify-between items-center border-b border-[#1e2330] pb-6">
+        <div class="flex flex-col">
+          <h1 class="text-2xl font-extrabold tracking-tighter bg-gradient-to-r from-white via-[#cbd5e1] to-[#64748b] bg-clip-text text-transparent uppercase font-sans">
+            DEATH OVERS
+          </h1>
+          <p class="text-xs font-mono text-[#4f5e7c] uppercase tracking-widest mt-1">
+            Elite Cricket Data Analytics Engine
+          </p>
+        </div>
+        <div class="flex items-center space-x-2 bg-[#0d0f14] border border-[#1e2330] px-3 py-1.5 rounded-md">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+          <span class="text-[10px] font-mono tracking-wider text-emerald-400 font-bold uppercase">System Online</span>
+        </div>
+      </header>
+
+      <section class="w-full">
+        <TelemetryDeck 
+          innings={matchData.innings} 
+          currentPhaseId={matchData.currentPhaseId} 
+          phaseLogs={matchData.phaseLogs} 
+        />
+      </section>
+
+      <section class="mt-4 flex flex-col gap-4">
+        <div class="flex items-center space-x-2 border-b border-[#1e2330]/60 pb-2">
+          <h3 class="text-xs font-bold font-mono tracking-widest text-[#4f5e7c] uppercase">
+            Historical Post-Mortem Reports
+          </h3>
+        </div>
+        <div class="text-[#4f5e7c] text-xs font-mono py-8 text-center bg-[#0d0f14]/40 rounded border border-dashed border-[#1e2330]/60">
+          Completed match analytical summaries will automatically populate here via your n8n publishing engine.
+        </div>
+      </section>
+
+    </main>
+    
+  </body>
 </html>
+
+<style is:global>
+  :root {
+    --font-sans: 'Plus Jakarta Sans', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+  html {
+    font-family: var(--font-sans);
+  }
+  code, pre, .font-mono {
+    font-family: var(--font-mono) !important;
+  }
+</style>
