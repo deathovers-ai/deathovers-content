@@ -1,16 +1,17 @@
 import { defineCollection, z } from 'astro:content';
 
-const posts = defineCollection({
+const postsCollection = defineCollection({
   type: 'content',
   schema: z.object({
     title: z.string(),
-    date: z.coerce.date().optional(),
-    category: z.enum(['press-box', 'tactical-sheets', 'simulations']),
-    targetEntity: z.string().optional(),
-    metricFocus: z.string().optional(),
-    confidenceScore: z.number().optional(),
-    draft: z.boolean().optional().default(false)
+    date: z.coerce.date().transform((d) => d.toLocaleDateString('en-GB', {
+      day: 'numeric', month: 'short', year: 'numeric'
+    })),
+    category: z.string().default('PRESS BOX'),
+    kind: z.string().optional()
   })
 });
 
-export const collections = { posts };
+export const collections = {
+  'posts': postsCollection,
+};
