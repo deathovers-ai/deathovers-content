@@ -1,14 +1,10 @@
 ---
 import Navbar from '../components/Navbar.astro';
+import { getCollection } from 'astro:content';
 
-// Mock/Fetched Articles from collection
-const articles = [
-  { title: "India A Takes Control as Sri Lanka A Struggles to Keep Pace", date: "3 Jul 2026", category: "PRESS BOX" },
-  { title: "Sweden and Portugal Lock Horns in Thrilling T20I Tie", date: "3 Jul 2026", category: "PRESS BOX" },
-  { title: "Uncovering Hidden Patterns: A Tactical Match Report", date: "3 Jul 2026", category: "PRESS BOX" },
-  { title: "Tactical Match Report: Uncovering Hidden Patterns", date: "3 Jul 2026", category: "PRESS BOX" },
-  { title: "T20 Tactical Masterclass: Team A's Middle Overs Blitz", date: "3 Jul 2026", category: "PRESS BOX" }
-];
+// Connect Press box cleanly to Astro Collections cache layer
+const rawPosts = await getCollection('posts');
+const articles = rawPosts.sort((a, b) => new Date(b.data.date).getTime() - new Date(a.data.date).getTime());
 ---
 <!DOCTYPE html>
 <html lang="en">
@@ -37,71 +33,18 @@ const articles = [
       justify-content: center;
       padding: 24px;
     }
-    .page {
-      width: 100%;
-      max-width: 900px;
-      background: var(--pitch-black);
-    }
-    .content-wrap {
-      padding: 24px;
-    }
-    .page-title {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 36px;
-      letter-spacing: 0.05em;
-      margin-bottom: 20px;
-      color: var(--crease-white);
-      border-bottom: 2px solid var(--blood-red);
-      padding-bottom: 8px;
-    }
-    .articles-stack {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-    .article-card {
-      background: var(--outfield);
-      border: 1px solid rgba(240,242,245,0.08);
-      border-radius: 4px;
-      padding: 16px;
-      transition: border-color 0.2s;
-      cursor: pointer;
-    }
-    .article-card:hover {
-      border-color: rgba(232,0,58,0.4);
-    }
-    .meta-tag {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 9px;
-      color: var(--blood-red);
-      margin-bottom: 6px;
-      letter-spacing: 0.05em;
-    }
-    .article-title {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 22px;
-      color: var(--crease-white);
-      letter-spacing: 0.02em;
-      line-height: 1.2;
-      margin-bottom: 6px;
-    }
-    .article-date {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
-      color: rgba(240,242,245,0.4);
-    }
-    .footer {
-      padding: 20px 24px;
-      border-top: 1px solid rgba(240,242,245,0.06);
-      display: flex;
-      justify-content: space-between;
-      margin-top: 40px;
-    }
-    .footer span {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
-      color: rgba(240,242,245,0.3);
-    }
+    .page { width: 100%; max-width: 900px; background: var(--pitch-black); }
+    .content-wrap { padding: 24px; }
+    .page-title { font-family: 'Bebas Neue', sans-serif; font-size: 36px; letter-spacing: 0.05em; margin-bottom: 20px; color: var(--crease-white); border-bottom: 2px solid var(--blood-red); padding-bottom: 8px; }
+    .articles-stack { display: flex; flex-direction: column; gap: 16px; }
+    .article-card { background: var(--outfield); border: 1px solid rgba(240,242,245,0.08); border-radius: 4px; padding: 16px; transition: border-color 0.2s; }
+    .article-card:hover { border-color: rgba(232,0,58,0.4); }
+    .meta-tag { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--blood-red); margin-bottom: 6px; letter-spacing: 0.05em; text-transform: uppercase; }
+    .article-title { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: var(--crease-white); letter-spacing: 0.02em; line-height: 1.2; margin-bottom: 6px; text-transform: uppercase; }
+    .article-date { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.4); }
+    .empty-state { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: rgba(240,242,245,0.3); text-align: center; padding: 40px 0; }
+    .footer { padding: 20px 24px; border-top: 1px solid rgba(240,242,245,0.06); display: flex; justify-content: space-between; margin-top: 40px; }
+    .footer span { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.3); }
   </style>
 </head>
 <body>
@@ -112,13 +55,17 @@ const articles = [
       <h1 class="page-title">PRESS BOX BRIEFINGS</h1>
       
       <div class="articles-stack">
-        {articles.map((art) => (
-          <div class="article-card">
-            <div class="meta-tag">{art.category}</div>
-            <div class="article-title">{art.title}</div>
-            <div class="article-date">{art.date}</div>
-          </div>
-        ))}
+        {articles.length > 0 ? (
+          articles.map((art) => (
+            <div class="article-card">
+              <div class="meta-tag">{art.data.category}</div>
+              <div class="article-title">{art.data.title}</div>
+              <div class="article-date">{art.data.date}</div>
+            </div>
+          ))
+        ) : (
+          <div class="empty-state">NO RECENT BULLETINS IN CHANNELS.</div>
+        )}
       </div>
     </div>
 
