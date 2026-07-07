@@ -108,14 +108,15 @@ const allPosts = await getCollection('posts');
           {allPosts.map((post) => (
             <div class="article-card">
               <div class="meta-data">{post.data.category || 'ANALYSIS'} · {post.data.date || 'LATEST'}</div>
-              <!-- THE 404 FIX IS HERE: Routing directly to the slug name based on standard Astro content mapping -->
-              <a href={`/posts/${post.slug}`} style="text-decoration: none;">
+              <!-- Fix applied here: directly mapping to the root slug -->
+              <a href={`/${post.slug}`} style="text-decoration: none;">
                 <h3 class="card-title">{post.data.title || 'In-Play Report'}</h3>
               </a>
               <p class="card-excerpt">
                 {post.body.substring(0, 160)}...
               </p>
-              <a href={`/posts/${post.slug}`} class="read-more">DECRYPT FULL REPORT →</a>
+              <!-- Fix applied here: directly mapping to the root slug -->
+              <a href={`/${post.slug}`} class="read-more">DECRYPT FULL REPORT →</a>
             </div>
           ))}
         </div>
