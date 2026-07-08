@@ -57,7 +57,7 @@ export default function LiveCarousel() {
     return <div className="loading-state font-mono">ESTABLISHING SECURE UPLINK TO DATA CLUSTER...</div>;
   }
 
-  // --- UPDATED SORTING AND FILTERING LOGIC ---
+  // --- SORTING AND FILTERING LOGIC ---
   let displayMatches = [];
   if (matches.length > 0) {
     const live = matches.filter(m => m.status === 'LIVE');
@@ -181,11 +181,11 @@ export default function LiveCarousel() {
             </div>
             <div className="mp-team-line">
               <span className="mp-team-code">{activeMatchMeta.matchName.split(' vs ')[0]}</span>
-              <span className="mp-team-score">{activeMatchMeta.score.home.score} <span className="overs-sub">({activeMatchMeta.score.home.info})</span></span>
+              <span className="mp-team-score">{activeMatchMeta.score?.home?.score || '-'} <span className="overs-sub">({activeMatchMeta.score?.home?.info || ''})</span></span>
             </div>
             <div className="mp-team-line">
               <span className="mp-team-code">{activeMatchMeta.matchName.split(' vs ')[1]}</span>
-              <span className="mp-team-score">{activeMatchMeta.score.away.score} <span className="overs-sub">({activeMatchMeta.score.away.info})</span></span>
+              <span className="mp-team-score">{activeMatchMeta.score?.away?.score || '-'} <span className="overs-sub">({activeMatchMeta.score?.away?.info || ''})</span></span>
             </div>
             <div className="mp-chase">{activeMatchMeta.chaseNote}</div>
           </div>
@@ -196,16 +196,17 @@ export default function LiveCarousel() {
             <div className="over-block">
               <div className="over-toss-row">
                 <div>
-                  <div className="over-label">CURRENT OVER · {activeData.currentBowler}</div>
+                  <div className="over-label">CURRENT OVER · {activeData.currentBowler || 'TBD'}</div>
                   <div className="over-dots">
-                    {activeData.recentBalls.map((ball, idx) => (
+                    {/* CRASH FIX: Optional chaining on recentBalls */}
+                    {activeData.recentBalls?.map((ball, idx) => (
                       <div key={idx} className={`over-dot ${ball.c}`}>{ball.b}</div>
                     ))}
                   </div>
                 </div>
                 <div className="toss-strip">
                   <div className="toss-kicker">TOSS</div>
-                  <div className="toss-line">{activeData.toss}</div>
+                  <div className="toss-line">{activeData.toss || 'Waiting for toss'}</div>
                   <div className="toss-sub">{activeData.venue}</div>
                 </div>
               </div>
@@ -219,14 +220,16 @@ export default function LiveCarousel() {
                   {/* COLUMN 1: 1ST INNINGS (TARGET) */}
                   <div className="innings-col">
                     <div className="inn-heading highlight-inn1">
-                      1ST INNINGS: {activeData.innings1.team} · {activeData.innings1.score} ({activeData.innings1.overs})
+                      {/* CRASH FIX: Optional chaining on innings1 object */}
+                      1ST INNINGS: {activeData.innings1?.team || 'TBD'} · {activeData.innings1?.score || '0/0'} ({activeData.innings1?.overs || '0.0'})
                     </div>
                     
                     <div className="stat-kicker">BATTING</div>
                     <table className="stat-table">
                       <thead><tr><th>BATTER</th><th>R</th><th>B</th><th>SR</th></tr></thead>
                       <tbody>
-                        {activeData.innings1.batters.map((b, i) => (
+                        {/* CRASH FIX: Optional chaining on batters array */}
+                        {activeData.innings1?.batters?.map((b, i) => (
                           <tr key={i} className={b.dim ? 'dim' : ''}>
                             <td>{b.name}</td><td>{b.r}</td><td>{b.b}</td><td>{b.sr}</td>
                           </tr>
@@ -238,7 +241,8 @@ export default function LiveCarousel() {
                     <table className="stat-table">
                       <thead><tr><th>BOWLER</th><th>O</th><th>R</th><th>W</th><th>ECO</th></tr></thead>
                       <tbody>
-                        {activeData.innings1.bowlers.map((bw, i) => (
+                        {/* CRASH FIX: Optional chaining on bowlers array */}
+                        {activeData.innings1?.bowlers?.map((bw, i) => (
                           <tr key={i}>
                             <td>{bw.name}</td><td>{bw.o}</td><td>{bw.r}</td><td>{bw.w}</td><td>{bw.eco}</td>
                           </tr>
@@ -250,14 +254,14 @@ export default function LiveCarousel() {
                   {/* COLUMN 2: 2ND INNINGS (CHASE) */}
                   <div className="innings-col border-left">
                     <div className="inn-heading highlight-inn2">
-                      2ND INNINGS: {activeData.innings2.team} · {activeData.innings2.score} ({activeData.innings2.overs})
+                      2ND INNINGS: {activeData.innings2?.team || 'TBD'} · {activeData.innings2?.score || '0/0'} ({activeData.innings2?.overs || '0.0'})
                     </div>
                     
                     <div className="stat-kicker">BATTING</div>
                     <table className="stat-table">
                       <thead><tr><th>BATTER</th><th>R</th><th>B</th><th>SR</th></tr></thead>
                       <tbody>
-                        {activeData.innings2.batters.map((b, i) => (
+                        {activeData.innings2?.batters?.map((b, i) => (
                           <tr key={i} className={b.dim ? 'dim' : ''}>
                             <td>{b.name}</td><td>{b.r}</td><td>{b.b}</td><td>{b.sr}</td>
                           </tr>
@@ -269,7 +273,7 @@ export default function LiveCarousel() {
                     <table className="stat-table">
                       <thead><tr><th>BOWLER</th><th>O</th><th>R</th><th>W</th><th>ECO</th></tr></thead>
                       <tbody>
-                        {activeData.innings2.bowlers.map((bw, i) => (
+                        {activeData.innings2?.bowlers?.map((bw, i) => (
                           <tr key={i}>
                             <td>{bw.name}</td><td>{bw.o}</td><td>{bw.r}</td><td style={{color: 'var(--blood-red)', fontWeight: 'bold'}}>{bw.w}</td><td>{bw.eco}</td>
                           </tr>
@@ -282,7 +286,8 @@ export default function LiveCarousel() {
                   <div className="mp-commentary-rail border-left">
                     <div className="rail-label"><span className="live-dot"></span>LIVE COMMENTARY</div>
                     <div id="feed">
-                      {activeData.commentary.map((c, i) => {
+                      {/* CRASH FIX: Optional chaining on commentary array */}
+                      {activeData.commentary?.map((c, i) => {
                         const s = styleFor[c.type] || styleFor.dot;
                         return (
                           <div key={i} className="feed-row ball-new" style={{ background: s.bg, borderLeftColor: s.border }}>
@@ -318,16 +323,16 @@ export default function LiveCarousel() {
         .section-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.4); letter-spacing: 0.05em; margin-bottom: 10px; padding: 0 24px; }
         .carousel-wrap { padding: 20px 0; }
         
-        /* --- UPDATED CAROUSEL TRACK --- */
+        /* CAROUSEL TRACK */
         .carousel-track { display: flex; gap: 12px; overflow-x: auto; padding: 0 24px 12px; min-height: 160px; }
         
-        /* --- UPDATED MATCH CARD --- */
+        /* MATCH CARD */
         .match-card { 
           background: var(--outfield); 
           border: 1px solid rgba(240,242,245,0.08); 
           border-radius: 4px; 
           width: 280px; 
-          min-height: 135px; /* STOPS THE COLLAPSE */
+          min-height: 135px;
           flex-shrink: 0; 
           padding: 16px; 
           position: relative; 
