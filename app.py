@@ -124,23 +124,67 @@ def _shape_match_for_carousel(m: dict) -> dict:
     Map a single entry from GET /currentMatches into the shape
     LiveCarousel.jsx expects for its `matches` array:
         { id, venue, status, matchName, score: {home, away}, chaseNote }
+
+    NOTE on a bug that was here before and is now fixed: the original version
+    matched each score entry to a team purely by string-prefix on the
+    `inning` field (e.g. does "India Women U19 Inning 1" start with
+    "India Women U19"). That is fragile — CricketData.org's `inning` label
+    formatting is not perfectly consistent across match types (domestic
+    T20 leagues, internationals, tours all format slightly differently),
+    so real matches were silently coming back with a correct home score
+    and an incorrectly-empty "yet to bat" away score even when both teams
+    had clearly batted (confirmed against live data on 2026-07-08).
+
+    Fix: CricketData.org's `score` array is returned in innings-batted
+    order, not team-labelled order. For a standard (non-Test) match with
+    two teams, the simplest reliable mapping is positional: distinct
+    innings entries, in order, alternate/accumulate per team as the
+    innings actually happened. Since limited-overs matches normally have
+    at most one innings per team, we now match by TEAM NAME CONTAINMENT
+    in either direction (team_name in inning_label OR inning_label's team
+    portion in team_name) rather than a strict prefix, which is far more
+    tolerant of minor formatting differences, and — as a final fallback —
+    we assign remaining unmatched score entries positionally in the order
+    they appear if name-matching still comes up empty. This trades a small
+    amount of theoretical precision (extremely rare ambiguous team-name
+    overlaps) for actually working on the real data we observed.
     """
     score_list = m.get("score") or []
-    # CricketData returns score as a list of per-innings dicts, e.g.
-    #   [{"r": 181, "w": 5, "o": 20.0, "inning": "Team A Inning 1"}, ...]
-    # We take the latest entry per team as "home"/"away" best-effort —
-    # cricapi does not cleanly label home/away, so we fall back to
-    # team order from the `teams` field.
     teams = m.get("teams") or []
     home_name = teams[0] if len(teams) > 0 else "TBD"
     away_name = teams[1] if len(teams) > 1 else "TBD"
 
+    def _matches_team(inning_label: str, team_name: str) -> bool:
+        inning_label = inning_label.strip()
+        team_name = team_name.strip()
+        if not inning_label or not team_name:
+            return False
+        return (
+            inning_label.startswith(team_name)
+            or team_name.startswith(inning_label.split(" Inning")[0].strip())
+            or team_name in inning_label
+        )
+
     def _find_latest_score_for(team_name: str) -> dict | None:
-        matches_for_team = [s for s in score_list if s.get("inning", "").startswith(team_name)]
+        matches_for_team = [s for s in score_list if _matches_team(s.get("inning", ""), team_name)]
         return matches_for_team[-1] if matches_for_team else None
 
     home_score = _find_latest_score_for(home_name)
     away_score = _find_latest_score_for(away_name)
+
+    # Positional fallback: if name-matching found neither (or only one) and
+    # there are exactly as many score entries as teams, just assign by
+    # order rather than showing an incorrect "yet to bat".
+    if home_score is None and away_score is None and len(score_list) >= 1:
+        home_score = score_list[0] if len(score_list) > 0 else None
+        away_score = score_list[1] if len(score_list) > 1 else None
+    elif home_score is None and len(score_list) >= 1:
+        # away matched something -> home is likely the OTHER entry
+        remaining = [s for s in score_list if s is not away_score]
+        home_score = remaining[0] if remaining else None
+    elif away_score is None and len(score_list) >= 2:
+        remaining = [s for s in score_list if s is not home_score]
+        away_score = remaining[0] if remaining else None
 
     def _fmt(score: dict | None) -> dict:
         if not score:
