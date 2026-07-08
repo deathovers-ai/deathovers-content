@@ -352,11 +352,48 @@ def health():
 
 # ---------------------------------------------------------------------------
 # Boot
+#
+# IMPORTANT — why the background thread starts here and not at module import
+# time: gunicorn's default sync worker model imports this module once in the
+# MASTER process (to validate the app callable), then FORKS worker
+# processes. A thread started during that master-process import does NOT
+# survive into the forked worker — the worker gets a fresh, empty in-memory
+# state, including _cache, and never runs the thread that would fill it.
+# The master's background thread happily refreshes a _cache dict that no
+# HTTP request will ever read, while the worker serving real traffic has an
+# eternally empty one. This was the actual bug: 25 matches got cached in the
+# master process, zero requests ever saw them.
+#
+# Fix: start the background thread lazily, from inside a request handler,
+# the first time this worker process actually serves a request. A
+# threading.Lock + flag ensures it only starts once per worker even under
+# concurrent first requests.
 # ---------------------------------------------------------------------------
 
-_bg_thread = threading.Thread(target=_background_loop, daemon=True)
-_bg_thread.start()
+_bg_thread_lock = threading.Lock()
+_bg_thread_started = False
+
+
+def _ensure_background_thread_started() -> None:
+    global _bg_thread_started
+    if _bg_thread_started:
+        return
+    with _bg_thread_lock:
+        if _bg_thread_started:
+            return
+        t = threading.Thread(target=_background_loop, daemon=True)
+        t.start()
+        _bg_thread_started = True
+        log.info("Background refresh thread started in worker pid=%s", os.getpid())
+
+
+@app.before_request
+def _start_background_on_first_request():
+    _ensure_background_thread_started()
+
 
 if __name__ == "__main__":
+    # Local/dev run (not gunicorn) — start immediately since there's no fork.
+    _ensure_background_thread_started()
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
