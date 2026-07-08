@@ -8,6 +8,9 @@ export default function LiveCarousel() {
   const [activeMatchId, setActiveMatchId] = useState(null);
   const [matchDetails, setMatchDetails] = useState({});
   const [detailLoading, setDetailLoading] = useState(false);
+  
+  // Tab State
+  const [activeTab, setActiveTab] = useState('inn2');
 
   useEffect(() => {
     const fetchLiveCluster = async () => {
@@ -30,6 +33,7 @@ export default function LiveCarousel() {
   const openMatch = async (matchId) => {
     setActiveMatchId(matchId);
     setDetailLoading(true);
+    setActiveTab('inn2'); // Default to current chase
 
     try {
       const res = await fetch(`https://deathovers-ai-engine.onrender.com/api/match-details/${matchId}`);
@@ -95,7 +99,10 @@ export default function LiveCarousel() {
       { over: "17.1", type: "six", text: "SIX! Pulled into the crowd over midwicket!" },
       { over: "16.6", type: "wicket", text: "STARC STRIKES! Yorker, castled! Big wicket." },
       { over: "16.5", type: "dot", text: "Starc to Rana, dot ball, beaten outside off." },
-      { over: "16.4", type: "run", text: "Pushed to cover for a quick single." }
+      { over: "16.4", type: "run", text: "Pushed to cover for a quick single." },
+      { over: "16.3", type: "run", text: "Tucked away off the pads for one." },
+      { over: "16.2", type: "four", text: "FOUR! Brilliant timing, beats the diving fielder." },
+      { over: "16.1", type: "dot", text: "Play and a miss, excellent delivery." }
     ]
   }) : null;
   
@@ -325,72 +332,4 @@ export default function LiveCarousel() {
         .back-btn { background: none; border: none; color: rgba(240,242,245,0.5); font-size: 11px; font-family: 'JetBrains Mono', monospace; margin-bottom: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 0; transition: color 0.2s; }
         .back-btn:hover { color: var(--crease-white); }
 
-        .mp-header { background: var(--outfield); border: 1px solid rgba(240,242,245,0.08); border-radius: 4px 4px 0 0; padding: 16px; position: relative; }
-        .mp-header::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--blood-red); }
-        .mp-team-line { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
-        .mp-team-code { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: var(--crease-white); letter-spacing: 0.02em; }
-        .mp-team-score { font-family: 'JetBrains Mono', monospace; font-size: 19px; font-weight: 700; color: var(--crease-white); }
-        .mp-chase { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--bail-amber); margin-top: 8px; font-weight: bold; }
-
-        .mp-body { background: var(--pitch-black); border: 1px solid rgba(232,0,58,0.2); border-top: none; border-radius: 0 0 4px 4px; overflow: hidden; }
-
-        .over-block { padding: 12px 16px; border-bottom: 1px solid rgba(240,242,245,0.08); }
-        .over-toss-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
-        .over-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.4); margin-bottom: 6px; text-transform: uppercase; }
-        .over-dots { display: flex; gap: 5px; }
-        .over-dot { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: bold; background: #1c1c1f; color: var(--crease-white); }
-        .over-dot.wicket { background: var(--blood-red); color: #fff; box-shadow: 0 0 6px rgba(232,0,58,0.5); }
-        .over-dot.boundary { background: var(--bail-amber); color: #1a1206; }
-        .over-dot.latest { border: 1px solid rgba(232,0,58,0.6); }
-
-        .toss-strip { flex-shrink: 0; text-align: right; max-width: 140px; }
-        .toss-kicker { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.35); letter-spacing: 0.05em; margin-bottom: 3px; }
-        .toss-line { font-size: 11px; color: var(--crease-white); font-weight: 500; line-height: 1.3; }
-        .toss-sub { font-size: 10px; color: rgba(240,242,245,0.4); margin-top: 2px; line-height: 1.3; }
-
-        /* PANORAMIC GRID SYSTEM */
-        .mp-content-panoramic { display: grid; grid-template-columns: 1fr 1fr 1.2fr; align-items: stretch; min-height: 400px; }
-        .innings-col { padding: 16px; max-height: 440px; overflow-y: auto; }
-        .innings-col::-webkit-scrollbar { width: 4px; }
-        .innings-col::-webkit-scrollbar-thumb { background: rgba(240,242,245,0.1); border-radius: 4px; }
-        
-        .border-left { border-left: 1px solid rgba(240,242,245,0.08); }
-
-        /* HIGHLIGHTED HEADERS */
-        .highlight-inn1 { background: rgba(245,166,35,0.1); color: var(--bail-amber); padding: 8px 12px; border-left: 3px solid var(--bail-amber); border-radius: 2px; }
-        .highlight-inn2 { background: rgba(232,0,58,0.1); color: var(--blood-red); padding: 8px 12px; border-left: 3px solid var(--blood-red); border-radius: 2px; }
-        
-        .inn-heading { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.05em; margin-bottom: 16px; font-weight: bold; }
-        .stat-kicker { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.35); margin-bottom: 4px; font-weight: bold; }
-        
-        .stat-table { width: 100%; font-size: 11px; border-collapse: collapse; margin-bottom: 12px; color: var(--crease-white); }
-        .stat-table th { font-family: 'JetBrains Mono', monospace; color: rgba(240,242,245,0.35); font-size: 9px; font-weight: 400; text-align: right; padding: 4px 0; border-bottom: 1px solid rgba(240,242,245,0.05); }
-        .stat-table th:first-child { text-align: left; }
-        .stat-table td { padding: 6px 0; text-align: right; border-bottom: 1px solid rgba(240,242,245,0.03); }
-        .stat-table td:first-child { text-align: left; font-weight: 500; font-family: 'Inter', sans-serif; }
-        .stat-table td { font-family: 'JetBrains Mono', monospace; }
-        .stat-table .dim td { color: rgba(240,242,245,0.4); font-weight: 400; }
-
-        .mp-commentary-rail { background: #0e1015; padding: 16px; display: flex; flex-direction: column; max-height: 440px; }
-        .rail-label { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--blood-red); letter-spacing: 0.08em; font-weight: 700; }
-        
-        #feed { overflow-y: auto; display: flex; flex-direction: column; padding-right: 4px; flex-grow: 1; }
-        #feed::-webkit-scrollbar { width: 3px; }
-        #feed::-webkit-scrollbar-thumb { background: rgba(240,242,245,0.15); border-radius: 4px; }
-        .feed-row { padding: 10px 12px; margin-bottom: 8px; border-left: 2px solid rgba(240,242,245,0.08); border-radius: 0 4px 4px 0; }
-        .feed-over-tag { font-family: 'JetBrains Mono', monospace; color: var(--bail-amber); font-size: 9px; font-weight: 700; }
-        .feed-event-tag { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 9px; letter-spacing: 0.04em; margin-right: 5px; }
-        .feed-text { font-size: 11px; color: var(--crease-white); line-height: 1.4; margin-top: 4px; }
-        .loading-state { color: rgba(240,242,245,0.4); font-size: 11px; padding: 40px 0; text-align: center; width: 100%; grid-column: span 3; }
-
-        @media (max-width: 768px) {
-          .mp-content-panoramic { grid-template-columns: 1fr; }
-          .innings-col { max-height: none; overflow-y: visible; }
-          .mp-commentary-rail { max-height: none; border-left: none; border-top: 1px solid rgba(240,242,245,0.08); }
-          .border-left { border-left: none; border-top: 1px solid rgba(240,242,245,0.08); }
-          #feed { max-height: 300px; }
-        }
-      `}</style>
-    </div>
-  );
-}
+        .mp-header { background: var(--outfield); border: 1px solid rgba(240,242,245,0.08); border-radius: 4px 4px 0 0; padding:
