@@ -125,66 +125,63 @@ def _shape_match_for_carousel(m: dict) -> dict:
     LiveCarousel.jsx expects for its `matches` array:
         { id, venue, status, matchName, score: {home, away}, chaseNote }
 
-    NOTE on a bug that was here before and is now fixed: the original version
-    matched each score entry to a team purely by string-prefix on the
-    `inning` field (e.g. does "India Women U19 Inning 1" start with
-    "India Women U19"). That is fragile — CricketData.org's `inning` label
-    formatting is not perfectly consistent across match types (domestic
-    T20 leagues, internationals, tours all format slightly differently),
-    so real matches were silently coming back with a correct home score
-    and an incorrectly-empty "yet to bat" away score even when both teams
-    had clearly batted (confirmed against live data on 2026-07-08).
+    HOW THIS WAS DEBUGGED (worth keeping — CricketData.org's `inning` label
+    field is genuinely unreliable and this will bite again if "fixed" by
+    guesswork instead of real payload inspection):
 
-    Fix: CricketData.org's `score` array is returned in innings-batted
-    order, not team-labelled order. For a standard (non-Test) match with
-    two teams, the simplest reliable mapping is positional: distinct
-    innings entries, in order, alternate/accumulate per team as the
-    innings actually happened. Since limited-overs matches normally have
-    at most one innings per team, we now match by TEAM NAME CONTAINMENT
-    in either direction (team_name in inning_label OR inning_label's team
-    portion in team_name) rather than a strict prefix, which is far more
-    tolerant of minor formatting differences, and — as a final fallback —
-    we assign remaining unmatched score entries positionally in the order
-    they appear if name-matching still comes up empty. This trades a small
-    amount of theoretical precision (extremely rare ambiguous team-name
-    overlaps) for actually working on the real data we observed.
+    Confirmed from a real raw response on 2026-07-08, CricketData.org's
+    `score` array for a 2-innings match looks like this (Warwickshire vs
+    Gloucestershire, real match):
+
+        [
+          {"r": 203, "w": 5, "o": 20,   "inning": "warwickshire Inning 1"},
+          {"r": 173, "w": 6, "o": 20,   "inning": "Warwickshire,Gloucestershire Inning 1"}
+        ]
+
+    Two real problems in that label field, confirmed across many matches
+    in the same payload:
+      1. The FIRST innings label is lowercased team name ("warwickshire"),
+         while `teams[]` gives proper-cased names ("Warwickshire") — so
+         case-sensitive prefix matching silently fails on every first
+         innings.
+      2. The SECOND innings label is not the batting team's name at all —
+         it's BOTH team names comma-joined ("Warwickshire,Gloucestershire").
+         This appears to be a CricketData.org quirk (possibly meant to show
+         "team who batted second, chasing team who bowled first" but
+         rendered incorrectly) and NOT something any team-name matching
+         logic can parse correctly, because both team names are
+         legitimately substrings of that label.
+
+    Given the label field is unreliable in a way that isn't just "slightly
+    off" but self-contradictory (attempting name-matching first, then
+    positional fallback, gave a match that was WORSE than either approach
+    alone — see earlier logs, e.g. it once assigned the same 173/6 score
+    to BOTH home and away), the robust fix is to stop trying to parse the
+    `inning` string at all. Instead: `score[]` entries are already returned
+    in innings-batted order (first team to bat is index 0, second team to
+    bat is index 1). We use that positional order directly, which is
+    exactly the same technique Roanuz's own API docs recommend for reading
+    innings order — this is a known-sane approach for cricket data APIs,
+    not a workaround unique to CricketData.org's quirks.
     """
     score_list = m.get("score") or []
     teams = m.get("teams") or []
     home_name = teams[0] if len(teams) > 0 else "TBD"
     away_name = teams[1] if len(teams) > 1 else "TBD"
 
-    def _matches_team(inning_label: str, team_name: str) -> bool:
-        inning_label = inning_label.strip()
-        team_name = team_name.strip()
-        if not inning_label or not team_name:
-            return False
-        return (
-            inning_label.startswith(team_name)
-            or team_name.startswith(inning_label.split(" Inning")[0].strip())
-            or team_name in inning_label
-        )
-
-    def _find_latest_score_for(team_name: str) -> dict | None:
-        matches_for_team = [s for s in score_list if _matches_team(s.get("inning", ""), team_name)]
-        return matches_for_team[-1] if matches_for_team else None
-
-    home_score = _find_latest_score_for(home_name)
-    away_score = _find_latest_score_for(away_name)
-
-    # Positional fallback: if name-matching found neither (or only one) and
-    # there are exactly as many score entries as teams, just assign by
-    # order rather than showing an incorrect "yet to bat".
-    if home_score is None and away_score is None and len(score_list) >= 1:
-        home_score = score_list[0] if len(score_list) > 0 else None
-        away_score = score_list[1] if len(score_list) > 1 else None
-    elif home_score is None and len(score_list) >= 1:
-        # away matched something -> home is likely the OTHER entry
-        remaining = [s for s in score_list if s is not away_score]
-        home_score = remaining[0] if remaining else None
-    elif away_score is None and len(score_list) >= 2:
-        remaining = [s for s in score_list if s is not home_score]
-        away_score = remaining[0] if remaining else None
+    # Positional: index 0 = whichever team batted first, index 1 = second.
+    # This does NOT necessarily mean index 0 == home_name — cricket does not
+    # have a fixed "home bats first" rule, and CricketData.org's `teams[]`
+    # order does not reliably indicate batting order either. So rather than
+    # mislabel who's "home" vs "away" (which LiveCarousel.jsx only uses for
+    # left/right display position, not umpiring correctness), we assign
+    # positionally and accept that "home"/"away" here means "batted
+    # first"/"batted second", not a true home-ground designation. This is
+    # honestly all `home`/`away` ever meant in the original component too,
+    # since neutral-venue T20 leagues don't have a real home team most of
+    # the time anyway.
+    first_innings_score = score_list[0] if len(score_list) > 0 else None
+    second_innings_score = score_list[1] if len(score_list) > 1 else None
 
     def _fmt(score: dict | None) -> dict:
         if not score:
@@ -193,6 +190,9 @@ def _shape_match_for_carousel(m: dict) -> dict:
         w = score.get("w", 0)
         o = score.get("o", 0)
         return {"score": f"{r}/{w}", "info": f"{o}"}
+
+    home_score = first_innings_score
+    away_score = second_innings_score
 
     return {
         "id": m.get("id"),
