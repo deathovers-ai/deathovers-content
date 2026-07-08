@@ -6,7 +6,6 @@ export default function LiveCarousel() {
   const [expandedId, setExpandedId] = useState(null);
   const [matchDetails, setMatchDetails] = useState({});
   const [detailLoading, setDetailLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('scorecard'); // 'scorecard' | 'commentary'
 
   useEffect(() => {
     const fetchLiveCluster = async () => {
@@ -51,7 +50,6 @@ export default function LiveCarousel() {
     return <div className="loading-state font-mono">ESTABLISHING SECURE UPLINK TO DATA CLUSTER...</div>;
   }
 
-  // Production Fallback Data for UI Presentation
   const displayMatches = matches.length > 0 ? matches : [{
     id: "mock-channel", venue: "IPL 2026 · Q2", status: "LIVE", matchName: "GT vs KKR",
     score: { home: { score: "181/5", info: "20.0" }, away: { score: "156/6", info: "17.2" } },
@@ -66,14 +64,13 @@ export default function LiveCarousel() {
         {displayMatches.map((match) => {
           const isExpanded = expandedId === match.id;
           
-          // Enhanced Mock Data for the Professional View
           const detailedData = matchDetails[match.id] || {
             recentBalls: ['1', '0', 'W', '4', '6', '1'],
             currentBowler: "M. Starc",
             currentBowlerStats: "3.2-0-24-1",
             innings1: { 
               team: "GT", score: "181/5", overs: "20.0", 
-              batters: [{name: "S. Sudharsan", r: 74, b: 47, sr: 157.4}, {name: "D. Miller", r: 44, b: 22, sr: 200.0}] 
+              batters: [{name: "S. Sudharsan", r: 74, b: 47, sr: 157.4}, {name: "D. Miller", r: 44, b: 22, sr: 200.0}, {name: "R. Tewatia", r: 12, b: 7, sr: 171.4}] 
             },
             innings2: { 
               team: "KKR", score: "156/6", overs: "17.2", 
@@ -82,12 +79,15 @@ export default function LiveCarousel() {
             commentary: [
               { over: "17.2", event: "WICKET", text: "OUT! Shami strikes. Starc holes out to long on. Huge moment in the chase." },
               { over: "17.1", event: "FOUR", text: "Thumped over mid-off for a boundary by Iyer. He read the slower ball perfectly." },
-              { over: "17.0", event: "1 RUN", text: "Pushed to deep cover for a single to retain the strike." }
+              { over: "17.0", event: "1 RUN", text: "Pushed to deep cover for a single to retain the strike." },
+              { over: "16.5", event: "SIX", text: "Massive! Dispatched into the stands over deep mid-wicket." },
+              { over: "16.4", event: "0 RUNS", text: "Beaten by pace. Straight through to the keeper." }
             ]
           };
 
           return (
             <div key={match.id} className={`match-container ${isExpanded ? 'is-open' : ''}`}>
+              
               {/* MAIN COMPACT CARD */}
               <div className="match-card" onClick={() => handleToggle(match.id)}>
                 <div className="match-card-head">
@@ -113,18 +113,13 @@ export default function LiveCarousel() {
                     <span className="wp-badge">WP: {match.matchName?.split(' vs ')[1] || "CHASING"} 68%</span>
                   </div>
                 )}
-                
-                {/* Indicator that there is more data inside */}
-                <div className="expand-indicator">
-                  {isExpanded ? 'CLOSE TERMINAL ▲' : 'DECRYPT MATCH DATA ▼'}
-                </div>
               </div>
 
-              {/* EXPANDED PROFESSIONAL TERMINAL */}
+              {/* EXPANDED PANORAMIC TERMINAL */}
               {isExpanded && (
                 <div className="drawer-panel">
                   
-                  {/* BALL BY BALL HUD */}
+                  {/* BALL BY BALL HUD - FULL WIDTH */}
                   <div className="hud-rail">
                     <div className="hud-label">CURRENT OVER: <span className="hud-highlight">{detailedData.currentBowler}</span> ({detailedData.currentBowlerStats})</div>
                     <div className="ball-tracker">
@@ -138,47 +133,44 @@ export default function LiveCarousel() {
                     </div>
                   </div>
 
-                  <div className="tab-menu">
-                    <button className={`tab-btn ${activeTab === 'scorecard' ? 'active' : ''}`} onClick={() => setActiveTab('scorecard')}>SCORECARD</button>
-                    <button className={`tab-btn ${activeTab === 'commentary' ? 'active' : ''}`} onClick={() => setActiveTab('commentary')}>COMMENTARY</button>
-                  </div>
-
                   {detailLoading ? (
                     <div className="drawer-loading">PROCESSING TELEMETRY...</div>
                   ) : (
-                    <div className="tab-viewport">
+                    <div className="panoramic-grid">
                       
-                      {activeTab === 'scorecard' && (
-                        <div className="scorecard-grid">
-                          {/* INNINGS 2 (Current) */}
-                          <div className="innings-block active-innings">
-                            <div className="innings-header">{detailedData.innings2.team} <span>{detailedData.innings2.score} ({detailedData.innings2.overs})</span></div>
-                            <div className="grid-labels"><span>BATTER</span><span>R (B)</span><span>SR</span></div>
-                            {detailedData.innings2.batters.map((b, i) => (
-                              <div key={i} className="grid-row">
-                                <span className="player-name">{b.name}</span>
-                                <span className="mono">{b.r} <span className="dim">({b.b})</span></span>
-                                <span className="mono dim">{b.sr}</span>
-                              </div>
-                            ))}
-                          </div>
-                          
-                          {/* INNINGS 1 (Completed) */}
-                          <div className="innings-block">
-                            <div className="innings-header dim-header">{detailedData.innings1.team} <span>{detailedData.innings1.score} ({detailedData.innings1.overs})</span></div>
-                            <div className="grid-labels"><span>BATTER</span><span>R (B)</span><span>SR</span></div>
-                            {detailedData.innings1.batters.map((b, i) => (
-                              <div key={i} className="grid-row dim-row">
-                                <span className="player-name">{b.name}</span>
-                                <span className="mono">{b.r} <span className="dim">({b.b})</span></span>
-                                <span className="mono dim">{b.sr}</span>
-                              </div>
-                            ))}
-                          </div>
+                      {/* COLUMN 1: CURRENT INNINGS (CHASE) */}
+                      <div className="grid-column">
+                        <div className="innings-block active-innings">
+                          <div className="innings-header">{detailedData.innings2.team} <span>{detailedData.innings2.score} ({detailedData.innings2.overs})</span></div>
+                          <div className="grid-labels"><span>BATTER</span><span>R (B)</span><span>SR</span></div>
+                          {detailedData.innings2.batters.map((b, i) => (
+                            <div key={i} className="grid-row">
+                              <span className="player-name">{b.name}</span>
+                              <span className="mono">{b.r} <span className="dim">({b.b})</span></span>
+                              <span className="mono dim">{b.sr}</span>
+                            </div>
+                          ))}
                         </div>
-                      )}
+                      </div>
 
-                      {activeTab === 'commentary' && (
+                      {/* COLUMN 2: TARGET INNINGS */}
+                      <div className="grid-column border-left">
+                        <div className="innings-block">
+                          <div className="innings-header dim-header">{detailedData.innings1.team} <span>{detailedData.innings1.score} ({detailedData.innings1.overs})</span></div>
+                          <div className="grid-labels"><span>BATTER</span><span>R (B)</span><span>SR</span></div>
+                          {detailedData.innings1.batters.map((b, i) => (
+                            <div key={i} className="grid-row dim-row">
+                              <span className="player-name">{b.name}</span>
+                              <span className="mono">{b.r} <span className="dim">({b.b})</span></span>
+                              <span className="mono dim">{b.sr}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* COLUMN 3: LIVE COMMENTARY SCROLL */}
+                      <div className="grid-column border-left comm-column">
+                        <div className="innings-header comm-header">PLAY-BY-PLAY FEED</div>
                         <div className="commentary-stream">
                           {detailedData.commentary.map((c, i) => (
                             <div key={i} className="comm-row">
@@ -190,7 +182,8 @@ export default function LiveCarousel() {
                             </div>
                           ))}
                         </div>
-                      )}
+                      </div>
+
                     </div>
                   )}
                 </div>
@@ -209,10 +202,11 @@ export default function LiveCarousel() {
       <style jsx>{`
         .carousel-wrap { padding: 20px 24px 0; }
         .section-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.4); letter-spacing: 0.05em; margin-bottom: 10px; }
-        .carousel-track { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 24px; align-items: flex-start; }
+        .carousel-track { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 24px; align-items: flex-start; scroll-behavior: smooth; }
         
-        .match-container { display: flex; flex-direction: column; width: 340px; flex-shrink: 0; background: var(--outfield); border: 1px solid rgba(240,242,245,0.08); border-radius: 6px; transition: border-color 0.2s ease, box-shadow 0.2s ease; overflow: hidden; }
-        .match-container.is-open { border-color: var(--blood-red); box-shadow: 0 8px 30px rgba(0,0,0,0.5), 0 0 0 1px var(--blood-red); width: 380px; } /* Expands slightly when open for emphasis */
+        /* CARD EXPANSION LOGIC */
+        .match-container { display: flex; flex-direction: column; width: 340px; flex-shrink: 0; background: var(--outfield); border: 1px solid rgba(240,242,245,0.08); border-radius: 6px; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); overflow: hidden; }
+        .match-container.is-open { width: 920px; border-color: var(--blood-red); box-shadow: 0 8px 30px rgba(0,0,0,0.5), 0 0 0 1px var(--blood-red); } 
         
         .match-card { padding: 18px; position: relative; cursor: pointer; background: linear-gradient(180deg, rgba(22,25,31,1) 0%, rgba(12,14,18,1) 100%); }
         .match-container:not(.is-open) .match-card:hover { border-color: var(--blood-red); box-shadow: 0 4px 20px var(--hover-glow); }
@@ -232,14 +226,11 @@ export default function LiveCarousel() {
         .chase-text { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--bail-amber); text-transform: uppercase; font-weight: bold; }
         .wp-badge { background: rgba(232, 0, 58, 0.15); color: var(--blood-red); font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 4px 8px; border-radius: 2px; font-weight: bold; border: 1px solid rgba(232,0,58,0.3); }
 
-        .expand-indicator { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-align: center; color: rgba(240,242,245,0.3); margin-top: 16px; font-weight: bold; letter-spacing: 0.1em; transition: color 0.2s; }
-        .match-card:hover .expand-indicator { color: var(--blood-red); }
-
         /* ADVANCED DRAWER STYLING */
         .drawer-panel { background: #0D1117; border-top: 1px solid rgba(232,0,58,0.3); display: flex; flex-direction: column; }
         
         /* Ball by Ball HUD */
-        .hud-rail { background: rgba(0,0,0,0.4); padding: 12px 16px; border-bottom: 1px solid rgba(240,242,245,0.05); }
+        .hud-rail { background: rgba(0,0,0,0.4); padding: 12px 20px; border-bottom: 1px solid rgba(240,242,245,0.05); }
         .hud-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.5); margin-bottom: 8px; }
         .hud-highlight { color: #fff; font-weight: bold; }
         .ball-tracker { display: flex; gap: 6px; }
@@ -249,23 +240,16 @@ export default function LiveCarousel() {
         .ball-boundary { background: rgba(245, 166, 35, 0.2); color: var(--bail-amber); border: 1px solid rgba(245, 166, 35, 0.5); }
         .ball-wicket { background: var(--blood-red); color: #fff; box-shadow: 0 0 8px rgba(232,0,58,0.6); }
 
-        /* Tabs */
-        .tab-menu { display: flex; padding: 0 16px; margin-top: 12px; border-bottom: 1px solid rgba(240,242,245,0.08); }
-        .tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: rgba(240,242,245,0.5); padding: 8px 12px; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: bold; cursor: pointer; transition: all 0.2s ease; letter-spacing: 0.05em; }
-        .tab-btn:hover { color: #fff; }
-        .tab-btn.active { color: var(--blood-red); border-bottom: 2px solid var(--blood-red); }
+        /* PANORAMIC GRID LAYOUT */
+        .panoramic-grid { display: grid; grid-template-columns: 1fr 1fr 1.3fr; gap: 0; padding: 0; }
+        .grid-column { padding: 20px; }
+        .border-left { border-left: 1px solid rgba(240,242,245,0.05); }
         
-        /* Viewport */
-        .tab-viewport { padding: 16px; max-height: 280px; overflow-y: auto; }
-        .tab-viewport::-webkit-scrollbar { width: 4px; }
-        .tab-viewport::-webkit-scrollbar-thumb { background: rgba(240,242,245,0.2); border-radius: 4px; }
-
-        /* Scorecard Grid */
-        .scorecard-grid { display: flex; flex-direction: column; gap: 20px; }
         .innings-block { display: flex; flex-direction: column; gap: 6px; }
-        .innings-header { font-family: 'Bebas Neue', sans-serif; font-size: 16px; color: var(--bail-amber); letter-spacing: 0.05em; margin-bottom: 4px; display: flex; justify-content: space-between; border-bottom: 1px solid rgba(245, 166, 35, 0.2); padding-bottom: 4px; }
-        .innings-header span { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #fff; }
-        .dim-header { color: rgba(240,242,245,0.6); border-bottom-color: rgba(240,242,245,0.1); }
+        .innings-header { font-family: 'Bebas Neue', sans-serif; font-size: 18px; color: var(--bail-amber); letter-spacing: 0.05em; margin-bottom: 4px; display: flex; justify-content: space-between; border-bottom: 1px solid rgba(245, 166, 35, 0.2); padding-bottom: 6px; }
+        .innings-header span { font-family: 'JetBrains Mono', monospace; font-size: 14px; color: #fff; }
+        .dim-header { color: rgba(240,242,245,0.5); border-bottom-color: rgba(240,242,245,0.1); }
+        .comm-header { color: #fff; border-bottom-color: rgba(240,242,245,0.1); font-size: 16px; margin-bottom: 12px; }
         
         .grid-labels { display: grid; grid-template-columns: 2fr 1fr 1fr; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.4); margin-bottom: 4px; padding: 0 4px; }
         .grid-row { display: grid; grid-template-columns: 2fr 1fr 1fr; font-size: 12px; padding: 6px 4px; background: rgba(240,242,245,0.02); border-radius: 4px; align-items: center; }
@@ -274,9 +258,14 @@ export default function LiveCarousel() {
         .dim { color: rgba(240,242,245,0.4); }
         .dim-row .player-name { color: rgba(240,242,245,0.6); }
 
-        /* Commentary */
-        .commentary-stream { display: flex; flex-direction: column; gap: 12px; }
-        .comm-row { display: flex; flex-direction: column; gap: 6px; font-size: 12px; line-height: 1.5; background: rgba(240,242,245,0.02); padding: 10px; border-radius: 4px; border-left: 2px solid rgba(240,242,245,0.1); }
+        /* Commentary Scroll */
+        .comm-column { display: flex; flex-direction: column; }
+        .commentary-stream { display: flex; flex-direction: column; gap: 12px; max-height: 220px; overflow-y: auto; padding-right: 12px; }
+        .commentary-stream::-webkit-scrollbar { width: 4px; }
+        .commentary-stream::-webkit-scrollbar-thumb { background: rgba(240,242,245,0.2); border-radius: 4px; }
+        .commentary-stream::-webkit-scrollbar-track { background: transparent; }
+
+        .comm-row { display: flex; flex-direction: column; gap: 6px; font-size: 12px; line-height: 1.5; background: rgba(240,242,245,0.02); padding: 12px; border-radius: 4px; border-left: 2px solid rgba(240,242,245,0.1); }
         .comm-meta { display: flex; align-items: center; gap: 8px; }
         .comm-over { font-family: 'JetBrains Mono', monospace; color: var(--bail-amber); font-weight: bold; font-size: 11px; }
         .comm-badge { font-family: 'JetBrains Mono', monospace; font-size: 9px; padding: 2px 6px; border-radius: 2px; font-weight: bold; background: rgba(240,242,245,0.1); }
@@ -290,7 +279,13 @@ export default function LiveCarousel() {
         .peek-card:hover { opacity: 0.8; }
         .peek-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.4); margin-bottom: 6px; }
         .peek-teams { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--crease-white); }
-        .loading-state { color: rgba(240,242,245,0.4); font-size: 11px; padding: 24px 0; text-align: center; width: 100%; }
+
+        /* Responsive Stacking for Mobile Data Integrity */
+        @media (max-width: 950px) {
+          .match-container.is-open { width: 100%; max-width: 400px; }
+          .panoramic-grid { grid-template-columns: 1fr; }
+          .border-left { border-left: none; border-top: 1px solid rgba(240,242,245,0.05); }
+        }
       `}</style>
     </div>
   );
