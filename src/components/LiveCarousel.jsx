@@ -8,9 +8,6 @@ export default function LiveCarousel() {
   const [activeMatchId, setActiveMatchId] = useState(null);
   const [matchDetails, setMatchDetails] = useState({});
   const [detailLoading, setDetailLoading] = useState(false);
-  
-  // Tab State
-  const [activeTab, setActiveTab] = useState('inn2');
 
   useEffect(() => {
     const fetchLiveCluster = async () => {
@@ -33,7 +30,6 @@ export default function LiveCarousel() {
   const openMatch = async (matchId) => {
     setActiveMatchId(matchId);
     setDetailLoading(true);
-    setActiveTab('inn2'); // Default to current chase
 
     try {
       const res = await fetch(`https://deathovers-ai-engine.onrender.com/api/match-details/${matchId}`);
@@ -98,7 +94,8 @@ export default function LiveCarousel() {
       { over: "17.2", type: "four", text: "FOUR! Punched through covers, races away." },
       { over: "17.1", type: "six", text: "SIX! Pulled into the crowd over midwicket!" },
       { over: "16.6", type: "wicket", text: "STARC STRIKES! Yorker, castled! Big wicket." },
-      { over: "16.5", type: "dot", text: "Starc to Rana, dot ball, beaten outside off." }
+      { over: "16.5", type: "dot", text: "Starc to Rana, dot ball, beaten outside off." },
+      { over: "16.4", type: "run", text: "Pushed to cover for a quick single." }
     ]
   }) : null;
   
@@ -155,8 +152,7 @@ export default function LiveCarousel() {
         </div>
       )}
 
-
-      {/* ================= VIEW 2: MATCH PAGE ================= */}
+      {/* ================= VIEW 2: FULL WIDTH MATCH PAGE ================= */}
       {activeMatchId && activeData && activeMatchMeta && (
         <div className="matchpage">
           <button className="back-btn" onClick={closeMatch}>← BACK TO LIVE MATCHES</button>
@@ -198,111 +194,102 @@ export default function LiveCarousel() {
               </div>
             </div>
 
-            {/* Internal Tabs */}
-            <div className="tab-bar">
-              <button className={`tab-btn ${activeTab === 'inn1' ? 'active' : ''}`} onClick={() => setActiveTab('inn1')}>1ST INNINGS</button>
-              <button className={`tab-btn ${activeTab === 'inn2' ? 'active' : ''}`} onClick={() => setActiveTab('inn2')}>2ND INNINGS</button>
-            </div>
+            <div className="mp-content-panoramic">
+              {detailLoading ? (
+                <div className="loading-state font-mono">PULLING LIVE TELEMETRY...</div>
+              ) : (
+                <>
+                  {/* COLUMN 1: 1ST INNINGS (TARGET) */}
+                  <div className="innings-col">
+                    <div className="inn-heading highlight-inn1">
+                      1ST INNINGS: {activeData.innings1.team} · {activeData.innings1.score} ({activeData.innings1.overs})
+                    </div>
+                    
+                    <div className="stat-kicker">BATTING</div>
+                    <table className="stat-table">
+                      <thead><tr><th>BATTER</th><th>R</th><th>B</th><th>SR</th></tr></thead>
+                      <tbody>
+                        {activeData.innings1.batters.map((b, i) => (
+                          <tr key={i} className={b.dim ? 'dim' : ''}>
+                            <td>{b.name}</td><td>{b.r}</td><td>{b.b}</td><td>{b.sr}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    
+                    <div className="stat-kicker" style={{marginTop: '16px'}}>BOWLING</div>
+                    <table className="stat-table">
+                      <thead><tr><th>BOWLER</th><th>O</th><th>R</th><th>W</th><th>ECO</th></tr></thead>
+                      <tbody>
+                        {activeData.innings1.bowlers.map((bw, i) => (
+                          <tr key={i}>
+                            <td>{bw.name}</td><td>{bw.o}</td><td>{bw.r}</td><td>{bw.w}</td><td>{bw.eco}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
 
-            <div className="mp-content-row">
-              
-              {/* Data Panes */}
-              <div className="mp-tabpanes">
-                {detailLoading ? (
-                  <div className="loading-state font-mono">PULLING LIVE TELEMETRY...</div>
-                ) : (
-                  <>
-                    {activeTab === 'inn1' && (
-                      <div className="tab-pane active">
-                        <div className="inn-heading">1ST INNINGS: {activeData.innings1.team} · {activeData.innings1.score} ({activeData.innings1.overs})</div>
-                        
-                        <div className="stat-kicker">BATTING</div>
-                        <table className="stat-table">
-                          <thead><tr><th>BATTER</th><th>R</th><th>B</th><th>SR</th></tr></thead>
-                          <tbody>
-                            {activeData.innings1.batters.map((b, i) => (
-                              <tr key={i} className={b.dim ? 'dim' : ''}>
-                                <td>{b.name}</td><td>{b.r}</td><td>{b.b}</td><td>{b.sr}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        
-                        <div className="stat-kicker">BOWLING</div>
-                        <table className="stat-table">
-                          <thead><tr><th>BOWLER</th><th>O</th><th>R</th><th>W</th><th>ECO</th></tr></thead>
-                          <tbody>
-                            {activeData.innings1.bowlers.map((bw, i) => (
-                              <tr key={i}>
-                                <td>{bw.name}</td><td>{bw.o}</td><td>{bw.r}</td><td>{bw.w}</td><td>{bw.eco}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+                  {/* COLUMN 2: 2ND INNINGS (CHASE) */}
+                  <div className="innings-col border-left">
+                    <div className="inn-heading highlight-inn2">
+                      2ND INNINGS: {activeData.innings2.team} · {activeData.innings2.score} ({activeData.innings2.overs})
+                    </div>
+                    
+                    <div className="stat-kicker">BATTING</div>
+                    <table className="stat-table">
+                      <thead><tr><th>BATTER</th><th>R</th><th>B</th><th>SR</th></tr></thead>
+                      <tbody>
+                        {activeData.innings2.batters.map((b, i) => (
+                          <tr key={i} className={b.dim ? 'dim' : ''}>
+                            <td>{b.name}</td><td>{b.r}</td><td>{b.b}</td><td>{b.sr}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    
+                    <div className="stat-kicker" style={{marginTop: '16px'}}>BOWLING</div>
+                    <table className="stat-table">
+                      <thead><tr><th>BOWLER</th><th>O</th><th>R</th><th>W</th><th>ECO</th></tr></thead>
+                      <tbody>
+                        {activeData.innings2.bowlers.map((bw, i) => (
+                          <tr key={i}>
+                            <td>{bw.name}</td><td>{bw.o}</td><td>{bw.r}</td><td style={{color: 'var(--blood-red)', fontWeight: 'bold'}}>{bw.w}</td><td>{bw.eco}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
 
-                    {activeTab === 'inn2' && (
-                      <div className="tab-pane active">
-                        <div className="inn-heading">2ND INNINGS: {activeData.innings2.team} · {activeData.innings2.score} ({activeData.innings2.overs})</div>
-                        
-                        <div className="stat-kicker">BATTING</div>
-                        <table className="stat-table">
-                          <thead><tr><th>BATTER</th><th>R</th><th>B</th><th>SR</th></tr></thead>
-                          <tbody>
-                            {activeData.innings2.batters.map((b, i) => (
-                              <tr key={i} className={b.dim ? 'dim' : ''}>
-                                <td>{b.name}</td><td>{b.r}</td><td>{b.b}</td><td>{b.sr}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        
-                        <div className="stat-kicker">BOWLING</div>
-                        <table className="stat-table">
-                          <thead><tr><th>BOWLER</th><th>O</th><th>R</th><th>W</th><th>ECO</th></tr></thead>
-                          <tbody>
-                            {activeData.innings2.bowlers.map((bw, i) => (
-                              <tr key={i}>
-                                <td>{bw.name}</td><td>{bw.o}</td><td>{bw.r}</td><td>{bw.w}</td><td>{bw.eco}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-
-              {/* Broadcast Commentary Rail */}
-              <div className="mp-commentary-rail">
-                <div className="rail-label"><span className="live-dot"></span>LIVE COMMENTARY</div>
-                <div id="feed">
-                  {activeData.commentary.map((c, i) => {
-                    const s = styleFor[c.type] || styleFor.dot;
-                    return (
-                      <div key={i} className="feed-row ball-new" style={{ background: s.bg, borderLeftColor: s.border }}>
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '5px', marginBottom: '2px' }}>
-                          <span className="feed-over-tag">{c.over}</span>
-                          {s.labelText && <span className="feed-event-tag" style={{ color: s.label }}>{s.labelText}</span>}
-                        </div>
-                        <div className="feed-text" style={{ fontSize: s.size, fontWeight: s.weight }}>
-                          {c.text}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
+                  {/* COLUMN 3: LIVE COMMENTARY */}
+                  <div className="mp-commentary-rail border-left">
+                    <div className="rail-label"><span className="live-dot"></span>LIVE COMMENTARY</div>
+                    <div id="feed">
+                      {activeData.commentary.map((c, i) => {
+                        const s = styleFor[c.type] || styleFor.dot;
+                        return (
+                          <div key={i} className="feed-row ball-new" style={{ background: s.bg, borderLeftColor: s.border }}>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '5px', marginBottom: '2px' }}>
+                              <span className="feed-over-tag">{c.over}</span>
+                              {s.labelText && <span className="feed-event-tag" style={{ color: s.label }}>{s.labelText}</span>}
+                            </div>
+                            <div className="feed-text" style={{ fontSize: s.size, fontWeight: s.weight }}>
+                              {c.text}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
       )}
 
       <style jsx>{`
-        .live-engine-wrapper { width: 100%; max-width: 900px; }
+        .live-engine-wrapper { width: 100%; max-width: 1050px; margin: 0 auto; }
         
         @keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
         @keyframes ballIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
@@ -311,47 +298,48 @@ export default function LiveCarousel() {
         .ball-new { animation: ballIn 0.4s ease-out; }
 
         /* CAROUSEL STYLES */
-        .section-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.4); letter-spacing: 0.05em; margin-bottom: 10px; }
-        .carousel-wrap { padding: 20px 24px 0; }
-        .carousel-track { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 4px; }
+        .section-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.4); letter-spacing: 0.05em; margin-bottom: 10px; padding: 0 24px; }
+        .carousel-wrap { padding: 20px 0; }
+        .carousel-track { display: flex; gap: 12px; overflow-x: auto; padding: 0 24px 12px; }
         
-        .match-card { background: var(--outfield); border: 1px solid rgba(240,242,245,0.08); border-radius: 4px; width: 280px; flex-shrink: 0; padding: 16px; position: relative; cursor: pointer; transition: border-color 0.15s ease; }
-        .match-card:hover { border-color: rgba(232,0,58,0.4); }
+        .match-card { background: var(--outfield); border: 1px solid rgba(240,242,245,0.08); border-radius: 4px; width: 280px; flex-shrink: 0; padding: 16px; position: relative; cursor: pointer; transition: border-color 0.15s ease, transform 0.2s ease; }
+        .match-card:hover { border-color: rgba(232,0,58,0.4); transform: translateY(-2px); }
         .match-card::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--blood-red); }
         .match-card-head { display: flex; justify-content: space-between; margin-bottom: 10px; }
         .series-tag { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.5); }
-        .live-tag { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--blood-red); display: flex; align-items: center; gap: 5px; }
+        .live-tag { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--blood-red); display: flex; align-items: center; gap: 5px; font-weight: bold; }
         .team-line { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
         .team-code { font-family: 'Bebas Neue', sans-serif; font-size: 19px; color: var(--crease-white); }
         .team-score { font-family: 'JetBrains Mono', monospace; font-size: 17px; font-weight: 700; color: var(--crease-white); }
         .overs-sub { font-size: 12px; color: rgba(240,242,245,0.4); font-family: 'Inter', sans-serif; font-weight: 400; }
         .chase-line { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--bail-amber); margin-top: 8px; }
-        .tap-hint { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.35); margin-top: 10px; text-align: center; letter-spacing: 0.05em; }
+        .tap-hint { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.35); margin-top: 10px; text-align: center; letter-spacing: 0.05em; transition: color 0.2s; }
+        .match-card:hover .tap-hint { color: var(--blood-red); }
 
         .peek-card { background: var(--outfield); border: 1px solid rgba(240,242,245,0.08); border-radius: 4px; width: 140px; flex-shrink: 0; padding: 14px; opacity: 0.4; display: flex; flex-direction: column; justify-content: center; }
         .peek-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.4); margin-bottom: 6px; }
         .peek-teams { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--crease-white); }
 
         /* MATCH PAGE TAKEOVER */
-        .matchpage { padding: 20px 24px; animation: ballIn 0.3s ease-out; }
-        .back-btn { background: none; border: none; color: rgba(240,242,245,0.5); font-size: 11px; font-family: 'JetBrains Mono', monospace; margin-bottom: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 0; }
+        .matchpage { padding: 0 24px 20px; animation: ballIn 0.3s ease-out; }
+        .back-btn { background: none; border: none; color: rgba(240,242,245,0.5); font-size: 11px; font-family: 'JetBrains Mono', monospace; margin-bottom: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 0; transition: color 0.2s; }
         .back-btn:hover { color: var(--crease-white); }
 
         .mp-header { background: var(--outfield); border: 1px solid rgba(240,242,245,0.08); border-radius: 4px 4px 0 0; padding: 16px; position: relative; }
         .mp-header::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--blood-red); }
         .mp-team-line { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
-        .mp-team-code { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: var(--crease-white); }
+        .mp-team-code { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: var(--crease-white); letter-spacing: 0.02em; }
         .mp-team-score { font-family: 'JetBrains Mono', monospace; font-size: 19px; font-weight: 700; color: var(--crease-white); }
-        .mp-chase { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--bail-amber); margin-top: 8px; }
+        .mp-chase { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--bail-amber); margin-top: 8px; font-weight: bold; }
 
         .mp-body { background: var(--pitch-black); border: 1px solid rgba(232,0,58,0.2); border-top: none; border-radius: 0 0 4px 4px; overflow: hidden; }
 
         .over-block { padding: 12px 16px; border-bottom: 1px solid rgba(240,242,245,0.08); }
         .over-toss-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
-        .over-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.4); margin-bottom: 6px; }
+        .over-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.4); margin-bottom: 6px; text-transform: uppercase; }
         .over-dots { display: flex; gap: 5px; }
-        .over-dot { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 11px; background: #1c1c1f; color: var(--crease-white); }
-        .over-dot.wicket { background: var(--blood-red); color: #fff; }
+        .over-dot { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: bold; background: #1c1c1f; color: var(--crease-white); }
+        .over-dot.wicket { background: var(--blood-red); color: #fff; box-shadow: 0 0 6px rgba(232,0,58,0.5); }
         .over-dot.boundary { background: var(--bail-amber); color: #1a1206; }
         .over-dot.latest { border: 1px solid rgba(232,0,58,0.6); }
 
@@ -360,39 +348,47 @@ export default function LiveCarousel() {
         .toss-line { font-size: 11px; color: var(--crease-white); font-weight: 500; line-height: 1.3; }
         .toss-sub { font-size: 10px; color: rgba(240,242,245,0.4); margin-top: 2px; line-height: 1.3; }
 
-        .tab-bar { display: flex; border-bottom: 1px solid rgba(240,242,245,0.08); }
-        .tab-btn { flex: 1; padding: 9px 0; font-size: 10px; letter-spacing: 0.05em; font-family: 'JetBrains Mono', monospace; background: none; border: none; border-bottom: 2px solid transparent; color: rgba(240,242,245,0.45); cursor: pointer; }
-        .tab-btn.active { border-bottom-color: var(--blood-red); color: var(--blood-red); }
+        /* PANORAMIC GRID SYSTEM */
+        .mp-content-panoramic { display: grid; grid-template-columns: 1fr 1fr 1.2fr; align-items: stretch; min-height: 400px; }
+        .innings-col { padding: 16px; max-height: 440px; overflow-y: auto; }
+        .innings-col::-webkit-scrollbar { width: 4px; }
+        .innings-col::-webkit-scrollbar-thumb { background: rgba(240,242,245,0.1); border-radius: 4px; }
+        
+        .border-left { border-left: 1px solid rgba(240,242,245,0.08); }
 
-        .mp-content-row { display: flex; align-items: stretch; }
-        .mp-tabpanes { flex: 1 1 0; min-width: 0; padding: 14px 16px; max-height: 360px; overflow-y: auto; }
-        .mp-tabpanes::-webkit-scrollbar { width: 4px; }
-        .mp-tabpanes::-webkit-scrollbar-thumb { background: rgba(240,242,245,0.2); border-radius: 4px; }
-
-        .inn-heading { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--bail-amber); letter-spacing: 0.05em; margin-bottom: 10px; }
-        .stat-kicker { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.35); margin-bottom: 4px; }
+        /* HIGHLIGHTED HEADERS */
+        .highlight-inn1 { background: rgba(245,166,35,0.1); color: var(--bail-amber); padding: 8px 12px; border-left: 3px solid var(--bail-amber); border-radius: 2px; }
+        .highlight-inn2 { background: rgba(232,0,58,0.1); color: var(--blood-red); padding: 8px 12px; border-left: 3px solid var(--blood-red); border-radius: 2px; }
+        
+        .inn-heading { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.05em; margin-bottom: 16px; font-weight: bold; }
+        .stat-kicker { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.35); margin-bottom: 4px; font-weight: bold; }
+        
         .stat-table { width: 100%; font-size: 11px; border-collapse: collapse; margin-bottom: 12px; color: var(--crease-white); }
-        .stat-table th { font-family: 'JetBrains Mono', monospace; color: rgba(240,242,245,0.35); font-size: 9px; font-weight: 400; text-align: right; padding: 3px 0; }
+        .stat-table th { font-family: 'JetBrains Mono', monospace; color: rgba(240,242,245,0.35); font-size: 9px; font-weight: 400; text-align: right; padding: 4px 0; border-bottom: 1px solid rgba(240,242,245,0.05); }
         .stat-table th:first-child { text-align: left; }
-        .stat-table td { padding: 5px 0; text-align: right; border-top: 1px solid rgba(240,242,245,0.06); }
+        .stat-table td { padding: 6px 0; text-align: right; border-bottom: 1px solid rgba(240,242,245,0.03); }
         .stat-table td:first-child { text-align: left; font-weight: 500; font-family: 'Inter', sans-serif; }
         .stat-table td { font-family: 'JetBrains Mono', monospace; }
         .stat-table .dim td { color: rgba(240,242,245,0.4); font-weight: 400; }
 
-        .mp-commentary-rail { width: 240px; flex-shrink: 0; border-left: 1px solid rgba(240,242,245,0.08); background: #0e1015; padding: 14px 16px; display: flex; flex-direction: column; }
-        .rail-label { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--blood-red); letter-spacing: 0.08em; font-weight: 700; }
-        #feed { max-height: 310px; overflow-y: auto; display: flex; flex-direction: column; padding-right: 4px; }
+        .mp-commentary-rail { background: #0e1015; padding: 16px; display: flex; flex-direction: column; max-height: 440px; }
+        .rail-label { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--blood-red); letter-spacing: 0.08em; font-weight: 700; }
+        
+        #feed { overflow-y: auto; display: flex; flex-direction: column; padding-right: 4px; flex-grow: 1; }
         #feed::-webkit-scrollbar { width: 3px; }
         #feed::-webkit-scrollbar-thumb { background: rgba(240,242,245,0.15); border-radius: 4px; }
-        .feed-row { padding: 7px; margin-bottom: 6px; border-left: 2px solid rgba(240,242,245,0.08); border-radius: 0 3px 3px 0; }
+        .feed-row { padding: 10px 12px; margin-bottom: 8px; border-left: 2px solid rgba(240,242,245,0.08); border-radius: 0 4px 4px 0; }
         .feed-over-tag { font-family: 'JetBrains Mono', monospace; color: var(--bail-amber); font-size: 9px; font-weight: 700; }
         .feed-event-tag { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 9px; letter-spacing: 0.04em; margin-right: 5px; }
-        .feed-text { font-size: 11px; color: var(--crease-white); line-height: 1.35; margin-top: 4px; }
-        .loading-state { color: rgba(240,242,245,0.4); font-size: 11px; padding: 24px 0; text-align: center; width: 100%; }
+        .feed-text { font-size: 11px; color: var(--crease-white); line-height: 1.4; margin-top: 4px; }
+        .loading-state { color: rgba(240,242,245,0.4); font-size: 11px; padding: 40px 0; text-align: center; width: 100%; grid-column: span 3; }
 
-        @media (max-width: 640px) {
-          .mp-content-row { flex-direction: column; }
-          .mp-commentary-rail { width: auto; border-left: none; border-top: 1px solid rgba(240,242,245,0.08); }
+        @media (max-width: 768px) {
+          .mp-content-panoramic { grid-template-columns: 1fr; }
+          .innings-col { max-height: none; overflow-y: visible; }
+          .mp-commentary-rail { max-height: none; border-left: none; border-top: 1px solid rgba(240,242,245,0.08); }
+          .border-left { border-left: none; border-top: 1px solid rgba(240,242,245,0.08); }
+          #feed { max-height: 300px; }
         }
       `}</style>
     </div>
