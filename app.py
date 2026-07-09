@@ -40,6 +40,7 @@ account throttled by CricketData.org itself.
 from __future__ import annotations
 
 import os
+import re
 import threading
 import time
 import logging
@@ -59,6 +60,25 @@ log = logging.getLogger("deathovers-backend")
 CRICKETDATA_API_KEY = os.environ.get("CRICKETDATA_API_KEY", "")
 CRICKETDATA_BASE = "https://api.cricapi.com/v1"
 
+# Second data source, used ONLY for match-detail drilldowns (toss, full
+# scorecard, and — the reason this was added — ball-by-ball commentary,
+# which CricketData.org's free tier does not provide at all. Cricbuzz uses
+# its own numeric match IDs that do NOT correspond to CricketData.org's
+# UUID-style match IDs — there is no shared key between the two providers
+# for the same real-world match. See _resolve_cricbuzz_match_id() for how
+# that gap is bridged (team-name + date matching against Cricbuzz's own
+# live-match list).
+RAPIDAPI_KEY = os.environ.get("RAPIDAPI_KEY", "")
+CRICBUZZ_HOST = "cricbuzz-cricket2.p.rapidapi.com"
+CRICBUZZ_BASE = f"https://{CRICBUZZ_HOST}"
+
+# Also a 100/day hard limit (confirmed on RapidAPI's Basic/free plan for
+# this API, 2026-07-09) — a SEPARATE budget from CricketData.org's 100/day,
+# since these are different providers. Same discipline applies: never call
+# from inside a request handler, only from the background refresh loop,
+# and only for matches someone has actually opened.
+CRICBUZZ_DETAIL_REFRESH_SECONDS = int(os.environ.get("CRICBUZZ_DETAIL_REFRESH_SECONDS", 1800))  # 30 min
+
 # See budget math in the module docstring before changing these.
 REFRESH_INTERVAL_SECONDS = int(os.environ.get("REFRESH_INTERVAL_SECONDS", 900))       # 15 min
 DETAIL_REFRESH_INTERVAL_SECONDS = int(os.environ.get("DETAIL_REFRESH_INTERVAL_SECONDS", 1800))  # 30 min
@@ -69,6 +89,13 @@ if not CRICKETDATA_API_KEY:
         "CRICKETDATA_API_KEY is not set. The backend will run but every "
         "refresh cycle will fail and the API will keep serving the last "
         "known cache (empty on first boot). Set this env var on Render."
+    )
+
+if not RAPIDAPI_KEY:
+    log.warning(
+        "RAPIDAPI_KEY is not set. Match detail pages will show scores and "
+        "innings but NOT live commentary — that feature requires this key "
+        "(Cricbuzz Cricket2 on RapidAPI). Set this env var on Render."
     )
 
 app = Flask(__name__)
@@ -117,6 +144,235 @@ def _cricketdata_get(path: str, params: dict) -> dict | None:
     except ValueError:
         log.error("CricketData.org returned non-JSON response for %s", path)
         return None
+
+
+def _cricbuzz_get(path: str, params: dict | None = None) -> dict | None:
+    """
+    Shared fetch helper for the Cricbuzz Cricket2 RapidAPI. Same pattern as
+    _cricketdata_get: never called from inside a request handler, only
+    from the background refresh loop, so real usage stays inside the
+    100/day free-tier budget.
+    """
+    if not RAPIDAPI_KEY:
+        return None
+    url = f"{CRICBUZZ_BASE}{path}"
+    headers = {
+        "x-rapidapi-key": RAPIDAPI_KEY,
+        "x-rapidapi-host": CRICBUZZ_HOST,
+    }
+    try:
+        resp = requests.get(url, headers=headers, params=params or {}, timeout=REQUEST_TIMEOUT_SECONDS)
+        resp.raise_for_status()
+        return resp.json()
+    except requests.RequestException as e:
+        log.error("Cricbuzz request failed (%s): %s", path, e)
+        return None
+    except ValueError:
+        log.error("Cricbuzz returned non-JSON response for %s", path)
+        return None
+
+
+def _normalize_team_name(name: str) -> str:
+    """Lowercase + strip common noise words so team names from two
+    different providers can be compared for a match. CricketData and
+    Cricbuzz occasionally differ on things like 'Women' placement or
+    trailing tour/series descriptors, so this is intentionally loose."""
+    return " ".join(name.lower().replace("-", " ").split())
+
+
+def _resolve_cricbuzz_match_id(team1_name: str, team2_name: str) -> str | None:
+    """
+    Bridge the gap between CricketData.org's UUID match IDs and Cricbuzz's
+    numeric match IDs — there is no shared identifier between the two
+    providers for the same real-world match, confirmed 2026-07-09. This
+    fetches Cricbuzz's own live-match list and finds the entry whose two
+    team names both appear (in either order) among our target names.
+
+    This costs one Cricbuzz API call. It is only invoked from the
+    background refresh loop (never from a request handler), and only the
+    first time a given CricketData match_id's detail view is opened —
+    the resolved numeric ID is cached alongside the rest of that match's
+    detail data, so repeat views cost zero additional resolution calls.
+    """
+    data = _cricbuzz_get("/mcenter/v1/matches/live")
+    if data is None:
+        return None
+
+    target1 = _normalize_team_name(team1_name)
+    target2 = _normalize_team_name(team2_name)
+
+    try:
+        for type_block in data.get("typeMatches", []):
+            for series in type_block.get("seriesMatches", []):
+                wrapper = series.get("seriesAdWrapper", {})
+                for match in wrapper.get("matches", []):
+                    info = match.get("matchInfo", {})
+                    t1 = _normalize_team_name(info.get("team1", {}).get("teamName", ""))
+                    t2 = _normalize_team_name(info.get("team2", {}).get("teamName", ""))
+                    names_here = {t1, t2}
+                    if {target1, target2} == names_here or (target1 in names_here and target2 in names_here):
+                        return str(info.get("matchId"))
+    except (KeyError, TypeError) as e:
+        log.warning("Unexpected shape from Cricbuzz live-matches while resolving id: %s", e)
+
+    return None
+
+
+def _resolve_commentary_placeholders(text: str, commentary_formats: list) -> str:
+    """
+    Replace Cricbuzz's literal "B0$", "B1$", etc. placeholder tokens in
+    commtxt with the actual bold text they refer to, pulled from the
+    matching commentaryformats entry. Confirmed real shape:
+        commentaryformats: [ {type: "", value: []}, {type: "bold", value: [{id: "B0$", value: "SIX"}]}, ... ]
+    Falls back to stripping the raw token if no matching format entry is
+    found, rather than leaving something like "B0$" visible to a reader.
+    """
+    if "$" not in text:
+        return text
+
+    replacements = {}
+    for fmt in commentary_formats or []:
+        for item in fmt.get("value", []) or []:
+            token = item.get("id")
+            value = item.get("value")
+            if token and value is not None:
+                replacements[token] = value
+
+    result = text
+    for token, value in replacements.items():
+        result = result.replace(token, value)
+
+    # Any leftover unresolved tokens (format list didn't cover them) —
+    # strip rather than show raw "B2$" etc. to the reader.
+    result = re.sub(r"B\d+\$", "", result)
+    result = " ".join(result.split())
+
+    # Wicket rows carry TWO placeholders: a short one ("out") plus a
+    # descriptive phrase inline where the ball is described ("Caught by
+    # X!!" / "Run Out!!" / "Bowled!!" / "Stumped!!"), and a longer one
+    # with the full dismissal detail tacked on after (e.g. "<Batter> c
+    # <Fielder> b <Bowler> 14(7) [4s-1 6s-1]" for a catch, or "<Batter>
+    # run out (<Fielder>) 0(1)" for a run out). Resolving both literally
+    # produces an awkward doubled-up sentence repeating the dismissal type
+    # twice. Since the long form already contains everything meaningful,
+    # this drops everything up to and including the redundant short
+    # descriptive phrase, keeping only the clean scorecard-style line.
+    # Confirmed against real caught AND run-out rows on 2026-07-09.
+    dismissal_lead_pattern = r".*?(?:caught by [^!]*!!|run out!!|bowled!!|stumped!!)\s*"
+    cleaned = re.sub(dismissal_lead_pattern, "", result, flags=re.IGNORECASE)
+    if cleaned and cleaned != result:
+        result = cleaned.strip()
+    else:
+        # Fallback for the plain "out <full detail>" shape with no
+        # descriptive phrase in between (still redundant: "out" + a full
+        # sentence that already states the dismissal).
+        result = re.sub(r"^(.*?),\s*out\s+", r"\1, ", result, count=1, flags=re.IGNORECASE)
+
+    return result
+
+
+def _is_system_announcement(text: str) -> bool:
+    """
+    Filter out Cricbuzz's short duplicate/system rows that carry no new
+    information beyond the real commentary row for the same ball —
+    confirmed from real data: "THATS OUT!!", "Caught!!", "Bowled!!",
+    "Run Out!!", and player-arrival lines like "<Name> comes to the
+    crease" or bowler-change lines like "<Name> is back into the attack".
+    These arrive as separate comwrapper entries alongside the real ball
+    commentary and would otherwise show as confusing near-duplicate lines
+    in the feed.
+
+    Checked as SUBSTRINGS, not exact-string matches — after placeholder
+    resolution (_resolve_commentary_placeholders), these system phrases
+    often appear inside a longer string like "Bowler to Batter, THATS
+    OUT!! Caught!!" rather than standing alone, since Cricbuzz sometimes
+    emits the bowler/batter prefix even on what is otherwise a pure
+    system-announcement row. An exact-match check missed these; confirmed
+    against real data on 2026-07-09.
+    """
+    t = text.strip().lower()
+    system_phrases = ("thats out!!", "caught!!", "bowled!!", "run out!!", "stumped!!")
+    if any(phrase in t for phrase in system_phrases) and len(t) < 60:
+        # Length guard: a genuine wicket-detail row can legitimately
+        # contain "out" as part of a dismissal description, but those
+        # rows are long (bowler+batter+shot description). Short rows
+        # containing these phrases are the redundant system announcements.
+        return True
+    if "comes to the crease" in t:
+        return True
+    if "is back into the attack" in t or "into the attack" in t:
+        return True
+    return False
+
+
+def _fetch_cricbuzz_commentary(cricbuzz_match_id: str, innings_id: int = 1) -> list[dict]:
+    """
+    Fetch ball-by-ball commentary for one innings and shape it into the
+    { over, type, text } list LiveCarousel.jsx's commentary rail expects.
+    Real field names confirmed against a live match (KNDM vs RRR,
+    2026-07-09): commtxt, overnum, eventtype ("WICKET", "FOUR", "SIX",
+    "over-break", "NONE", or comma-combinations like "over-break,WICKET").
+
+    TWO REAL QUIRKS FOUND IN THE RAW DATA that needed handling, not just
+    passed through — confirmed from the live payload, not guessed:
+
+    1. `commtxt` contains literal placeholder tokens like "B0$" where
+       Cricbuzz's own frontend would substitute in the bold text from the
+       matching `commentaryformats` entry (e.g. "B0$" -> "SIX", or for
+       wickets, "B0$"->"out", "B1$"->"Rahul Radesh c ... b ... 14(7)").
+       Passed through raw, the feed would literally show "...to Rahul
+       Radesh, B0$" instead of "...to Rahul Radesh, SIX" — visibly broken.
+       Fixed below by resolving each B{n}$ token against
+       commentaryformats[n].value[0].value.
+
+    2. Cricbuzz emits duplicate/near-duplicate ROWS for the same ball: one
+       row with the real commentary text and eventtype set (e.g. "WICKET"),
+       immediately followed or preceded by a short system-announcement row
+       with generic text like "THATS OUT!!" and eventtype "NONE" that adds
+       no information beyond what the real row already says. These are
+       filtered out (see _is_system_announcement below) so the feed reads
+       as one clean line per ball, not two.
+    """
+    data = _cricbuzz_get(f"/mcenter/v1/{cricbuzz_match_id}/comm", params={"iid": innings_id})
+    if data is None:
+        return []
+
+    entries = data.get("comwrapper", [])
+    shaped = []
+    for entry in entries:
+        c = entry.get("commentary", {})
+        raw_text = (c.get("commtxt") or "").strip()
+        if not raw_text:
+            continue
+
+        text = _resolve_commentary_placeholders(raw_text, c.get("commentaryformats", []))
+
+        if _is_system_announcement(text):
+            continue
+
+        event = (c.get("eventtype") or "NONE").upper()
+        if "WICKET" in event:
+            ctype = "wicket"
+        elif "SIX" in event:
+            ctype = "six"
+        elif "FOUR" in event:
+            ctype = "four"
+        elif text.lower().startswith("no run"):
+            ctype = "dot"
+        else:
+            ctype = "run"
+
+        over = c.get("overnum", 0)
+        shaped.append({
+            "over": f"{over:.1f}" if isinstance(over, (int, float)) and over else "",
+            "type": ctype,
+            "text": text,
+        })
+
+    # Cricbuzz returns most-recent-first already (confirmed from real
+    # response ordering) — keep that order since LiveCarousel's feed
+    # renders top-to-bottom as "most recent ball at the top".
+    return shaped[:30]  # cap to keep payload light; feed doesn't need full match history
 
 
 def _shape_match_for_carousel(m: dict) -> dict:
@@ -228,19 +484,24 @@ def _refresh_live_matches() -> None:
     log.info("Refreshed live matches: %d matches cached.", len(shaped))
 
 
-def _shape_match_details(match_id: str, data: dict) -> dict:
+def _shape_match_details(match_id: str, data: dict, commentary: list[dict] | None = None) -> dict:
     """
     Map GET /match_info?id=... into the shape LiveCarousel.jsx expects
     for a single match drilldown:
         { toss, venue, recentBalls, currentBowler, innings1, innings2, commentary }
 
-    NOTE: CricketData.org's free tier match_info endpoint does NOT include
+    CricketData.org's free tier match_info endpoint does NOT include
     ball-by-ball commentary text (that's a paid-tier feature on most
-    cricket data providers, this one included, as far as the public docs
-    show). So `recentBalls` and `commentary` will come back EMPTY on the
-    free tier — this is a real data gap, not a bug. See the note in the
-    project overview doc. Everything else (toss, venue, innings, batting/
-    bowling figures) IS available on the free tier and is mapped below.
+    cricket data providers, this one included). Everything else (toss,
+    venue, innings, batting/bowling figures) IS available on the free tier
+    and is mapped from CricketData below.
+
+    `commentary`, if provided, comes from a SEPARATE source — the Cricbuzz
+    Cricket2 API on RapidAPI — since that's the only one of our sources
+    that actually has ball-by-ball text. See _resolve_cricbuzz_match_id()
+    and _fetch_cricbuzz_commentary() for how that's fetched and matched to
+    this CricketData match by team name (the two providers use unrelated
+    ID schemes, so there's no direct lookup).
     """
     d = data.get("data", {})
     innings_list = d.get("scorecard", [])  # list of innings, cricapi shape
@@ -273,15 +534,19 @@ def _shape_match_details(match_id: str, data: dict) -> dict:
             ],
         }
 
-    innings1 = _shape_innings(innings_list[0]) if len(innings_list) > 0 else {}
-    innings2 = _shape_innings(innings_list[1]) if len(innings_list) > 1 else {}
+    # IMPORTANT: return None (not {}) for an innings that hasn't started yet.
+    # An empty {} was previously indistinguishable from "data temporarily
+    # missing", so the frontend rendered a fake "TBD · 0/0" card for an
+    # innings that simply hasn't begun. None lets the frontend cleanly
+    # decide to hide that column entirely instead of showing a placeholder.
+    innings1 = _shape_innings(innings_list[0]) if len(innings_list) > 0 else None
+    innings2 = _shape_innings(innings_list[1]) if len(innings_list) > 1 else None
 
     return {
         "toss": d.get("tossWinner", "") and f"{d.get('tossWinner')} won, elected to {d.get('tossChoice', '')}",
         "venue": d.get("venue", ""),
-        # Not available on CricketData.org free tier — see docstring above.
-        "recentBalls": [],
-        "commentary": [],
+        "recentBalls": [],  # not available from either source in a shape recentBalls expects yet
+        "commentary": commentary or [],
         "currentBowler": "",  # not reliably present on free tier match_info
         "innings1": innings1,
         "innings2": innings2,
@@ -294,13 +559,45 @@ def _refresh_match_detail(match_id: str) -> None:
         log.warning("Match detail refresh failed for %s; serving stale cache (if any).", match_id)
         return
 
-    shaped = _shape_match_details(match_id, data)
+    # Resolve (or reuse a previously resolved) Cricbuzz numeric match id for
+    # commentary. Resolution costs one Cricbuzz API call and only needs to
+    # happen once per match — cache it on the detail entry so repeat
+    # refreshes don't re-spend that call.
+    with _detail_cache_lock:
+        existing_entry = _detail_cache.get(match_id)
+        cached_cricbuzz_id = existing_entry.get("cricbuzz_match_id") if existing_entry else None
+
+    cricbuzz_match_id = cached_cricbuzz_id
+    if cricbuzz_match_id is None and RAPIDAPI_KEY:
+        teams = (data.get("data", {}) or {}).get("teams", [])
+        if len(teams) >= 2:
+            cricbuzz_match_id = _resolve_cricbuzz_match_id(teams[0], teams[1])
+            if cricbuzz_match_id:
+                log.info("Resolved Cricbuzz match id %s for %s vs %s", cricbuzz_match_id, teams[0], teams[1])
+            else:
+                log.info("Could not resolve a Cricbuzz match id for %s vs %s (commentary will stay empty)", teams[0], teams[1])
+
+    commentary = []
+    if cricbuzz_match_id:
+        # Innings id 1 = first innings. Fetching the currently-relevant
+        # innings' commentary is enough for the feed — if this needs to
+        # follow innings 2 during a chase, bump this based on
+        # innings_list length from CricketData's own response instead of
+        # hardcoding, once that's needed.
+        innings_list = (data.get("data", {}) or {}).get("scorecard", [])
+        innings_id = 2 if len(innings_list) > 1 else 1
+        commentary = _fetch_cricbuzz_commentary(cricbuzz_match_id, innings_id=innings_id)
+
+    shaped = _shape_match_details(match_id, data, commentary=commentary)
     with _detail_cache_lock:
         _detail_cache[match_id] = {
             "data": shaped,
             "last_refreshed": datetime.now(timezone.utc).isoformat(),
+            "cricbuzz_match_id": cricbuzz_match_id,
         }
-    log.info("Refreshed match detail for %s", match_id)
+    log.info("Refreshed match detail for %s (commentary rows: %d)", match_id, len(commentary))
+
+
 
 
 # ---------------------------------------------------------------------------
