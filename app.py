@@ -193,8 +193,16 @@ def _resolve_cricbuzz_match_id(team1_name: str, team2_name: str) -> str | None:
     first time a given CricketData match_id's detail view is opened —
     the resolved numeric ID is cached alongside the rest of that match's
     detail data, so repeat views cost zero additional resolution calls.
+
+    FIX (2026-07-09): the live-matches list endpoint path is
+    "/matches/v1/live", NOT "/mcenter/v1/matches/live". The "mcenter"
+    prefix is only for match-center calls that take a specific matchId
+    (commentary, scorecard, etc) — the live matches list itself sits
+    directly under "/matches/v1/". The old guessed path was returning a
+    404 from Cricbuzz, confirmed via Render logs:
+        [ERROR] Cricbuzz request failed (/mcenter/v1/matches/live): 404 Client Error: Not Found
     """
-    data = _cricbuzz_get("/mcenter/v1/matches/live")
+    data = _cricbuzz_get("/matches/v1/live")
     if data is None:
         return None
 
@@ -332,6 +340,12 @@ def _fetch_cricbuzz_commentary(cricbuzz_match_id: str, innings_id: int = 1) -> l
        no information beyond what the real row already says. These are
        filtered out (see _is_system_announcement below) so the feed reads
        as one clean line per ball, not two.
+
+    NOTE: this endpoint ("/mcenter/v1/{id}/comm") is a match-center call
+    that takes a specific matchId, so the "mcenter" prefix is correct here
+    — this is unrelated to the wrong-path bug fixed in
+    _resolve_cricbuzz_match_id() above (that one was the live-list
+    endpoint, which does NOT take a matchId and does NOT use "mcenter").
     """
     data = _cricbuzz_get(f"/mcenter/v1/{cricbuzz_match_id}/comm", params={"iid": innings_id})
     if data is None:
