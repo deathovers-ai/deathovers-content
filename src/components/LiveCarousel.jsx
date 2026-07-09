@@ -3,14 +3,11 @@ import React, { useState, useEffect } from 'react';
 export default function LiveCarousel() {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+
   // State for Full-Page Takeover
   const [activeMatchId, setActiveMatchId] = useState(null);
   const [matchDetails, setMatchDetails] = useState({});
   const [detailLoading, setDetailLoading] = useState(false);
-  
-  // Tab State
-  const [activeTab, setActiveTab] = useState('inn2');
 
   useEffect(() => {
     const fetchLiveCluster = async () => {
@@ -33,7 +30,6 @@ export default function LiveCarousel() {
   const openMatch = async (matchId) => {
     setActiveMatchId(matchId);
     setDetailLoading(true);
-    setActiveTab('inn2'); // Default to current chase
 
     try {
       const res = await fetch(`https://deathovers-ai-engine.onrender.com/api/match-details/${matchId}`);
@@ -58,12 +54,16 @@ export default function LiveCarousel() {
   }
 
   // --- SORTING AND FILTERING LOGIC ---
+  // LIVE matches always surface first (deterministic, not incidental —
+  // filtered explicitly by status rather than relying on API ordering),
+  // then UPCOMING, then a capped tail of recently COMPLETED matches so the
+  // rail doesn't get flooded with old results.
   let displayMatches = [];
   if (matches.length > 0) {
     const live = matches.filter(m => m.status === 'LIVE');
     const upcoming = matches.filter(m => m.status === 'UPCOMING');
     const completed = matches.filter(m => m.status === 'COMPLETED').slice(0, 3);
-    
+
     displayMatches = [...live, ...upcoming, ...completed];
   } else {
     displayMatches = [{
@@ -73,92 +73,67 @@ export default function LiveCarousel() {
     }];
   }
 
-  const activeData = activeMatchId ? (matchDetails[activeMatchId] || {
-    toss: "GT won, elected to bat",
-    venue: "Narendra Modi Stadium, Ahmedabad",
-    recentBalls: [{b: '1', c: ''}, {b: '0', c: ''}, {b: 'W', c: 'wicket'}, {b: '4', c: 'boundary'}, {b: '6', c: 'boundary'}, {b: '1', c: 'latest'}],
-    currentBowler: "M. Starc (3.2-0-24-1)",
-    innings1: { 
-      team: "GT", score: "181/5", overs: "20.0", 
-      batters: [
-        {name: "S. Gill*", r: 72, b: 45, sr: "160.0"}, 
-        {name: "B. Sai Sudharsan", r: 58, b: 39, sr: "148.7"},
-        {name: "D. Miller", r: 24, b: 14, sr: "171.4"},
-        {name: "R. Tewatia", r: 11, b: 9, sr: "122.2", dim: true}
-      ],
-      bowlers: [
-        {name: "S. Narine", o: "4.0", r: "28", w: "1", eco: "7.0"},
-        {name: "A. Russell", o: "4.0", r: "41", w: "2", eco: "10.2"}
-      ]
-    },
-    innings2: { 
-      team: "KKR", score: "156/6", overs: "17.2", 
-      batters: [
-        {name: "V. Iyer*", r: 62, b: 34, sr: "182.3"}, 
-        {name: "R. Singh", r: 19, b: 11, sr: "172.7"},
-        {name: "S. Rana", r: 28, b: 16, sr: "175.0", dim: true}
-      ],
-      bowlers: [
-        {name: "M. Starc*", o: "3.2", r: "24", w: "1", eco: "7.2"},
-        {name: "R. Sai Kishore", o: "4.0", r: "22", w: "2", eco: "5.5"}
-      ]
-    },
-    commentary: [
-      { over: "17.3", type: "run", text: "Driven for 1, good running." },
-      { over: "17.2", type: "four", text: "FOUR! Punched through covers, races away." },
-      { over: "17.1", type: "six", text: "SIX! Pulled into the crowd over midwicket!" },
-      { over: "16.6", type: "wicket", text: "STARC STRIKES! Yorker, castled! Big wicket." },
-      { over: "16.5", type: "dot", text: "Starc to Rana, dot ball, beaten outside off." },
-      { over: "16.4", type: "run", text: "Pushed to cover for a quick single." },
-      { over: "16.3", type: "run", text: "Tucked away off the pads for one." },
-      { over: "16.2", type: "four", text: "FOUR! Brilliant timing, beats the diving fielder." },
-      { over: "16.1", type: "dot", text: "Play and a miss, excellent delivery." }
-    ]
-  }) : null;
-  
+  const activeData = activeMatchId ? (matchDetails[activeMatchId] || null) : null;
   const activeMatchMeta = displayMatches.find(m => m.id === activeMatchId);
 
-  // Dynamic Commentary Styling Engine
-  const styleFor = {
-    wicket: { bg: 'rgba(232,0,58,0.12)',  border: '#E8003A', label: '#E8003A', labelText: 'WICKET', size: '11px', weight: '700' },
-    six:    { bg: 'rgba(245,166,35,0.12)', border: '#F5A623', label: '#F5A623', labelText: 'SIX',    size: '11px', weight: '700' },
-    four:   { bg: 'rgba(245,166,35,0.08)', border: '#F5A623', label: '#F5A623', labelText: 'FOUR',   size: '11px', weight: '500' },
-    run:    { bg: 'transparent', border: 'rgba(240,242,245,0.08)', label: 'rgba(240,242,245,0.4)', labelText: '', size: '11px', weight: '400' },
-    dot:    { bg: 'transparent', border: 'rgba(240,242,245,0.08)', label: 'rgba(240,242,245,0.3)', labelText: '', size: '11px', weight: '400' }
-  };
+  // An innings that has not started yet comes back as `null` from the
+  // backend (see app.py) rather than an empty object — that's the signal
+  // to hide the column/card entirely instead of rendering a fake
+  // "TBD · 0/0" placeholder, which is what made the detail view look
+  // broken whenever a match was still in its first innings.
+  const inn1 = activeData?.innings1 || null;
+  const inn2 = activeData?.innings2 || null;
+  const hasCommentary = (activeData?.commentary?.length || 0) > 0;
 
   return (
     <div className="live-engine-wrapper">
-      
+
       {/* ================= VIEW 1: CAROUSEL ================= */}
       {!activeMatchId && (
         <div className="carousel-wrap">
           <div className="section-label">LIVE NOW</div>
           <div className="carousel-track">
-            
-            {displayMatches.map((match) => (
-              <div key={match.id} className="match-card" onClick={() => openMatch(match.id)}>
-                <div className="match-card-head">
-                  <span className="series-tag">{match.venue || "INTERNATIONAL"}</span>
-                  <span className="live-tag">
-                    {match.status === 'LIVE' && <span className="live-dot"></span>}
-                    {match.status}
-                  </span>
-                </div>
-                
-                <div className="team-line">
-                  <span className="team-code">{match.matchName?.split(' vs ')[0] || "HOME"}</span>
-                  <span className="team-score">{match.score?.home?.score || '-'} <span className="overs-sub">({match.score?.home?.info || ''})</span></span>
-                </div>
-                <div className="team-line">
-                  <span className="team-code">{match.matchName?.split(' vs ')[1] || "AWAY"}</span>
-                  <span className="team-score">{match.score?.away?.score || '-'} <span className="overs-sub">({match.score?.away?.info || ''})</span></span>
-                </div>
 
-                <div className="chase-line">{match.chaseNote || "IN PROGRESS"}</div>
-                <div className="tap-hint">TAP FOR FULL SCORECARD ▾</div>
-              </div>
-            ))}
+            {displayMatches.map((match) => {
+              const isLive = match.status === 'LIVE';
+              const awayIsPending = !match.score?.away || match.score.away.score === 'yet to bat';
+              return (
+                <div
+                  key={match.id}
+                  className={`match-card ${isLive ? 'is-live' : ''}`}
+                  onClick={() => openMatch(match.id)}
+                >
+                  <div className="match-card-head">
+                    <span className="series-tag">{match.venue || "INTERNATIONAL"}</span>
+                    <span className={`status-tag ${isLive ? 'status-live' : 'status-done'}`}>
+                      {isLive && <span className="live-dot"></span>}
+                      {match.status}
+                    </span>
+                  </div>
+
+                  <div className="team-line">
+                    <span className="team-code">{match.matchName?.split(' vs ')[0] || "HOME"}</span>
+                    <span className="team-score">
+                      {match.score?.home?.score || '-'}
+                      <span className="overs-sub"> ({match.score?.home?.info || ''})</span>
+                    </span>
+                  </div>
+                  <div className={`team-line ${awayIsPending ? 'team-line-pending' : ''}`}>
+                    <span className="team-code">{match.matchName?.split(' vs ')[1] || "AWAY"}</span>
+                    <span className="team-score">
+                      {awayIsPending ? (
+                        <span className="pending-label">yet to bat</span>
+                      ) : (
+                        <>{match.score.away.score}<span className="overs-sub"> ({match.score.away.info || ''})</span></>
+                      )}
+                    </span>
+                  </div>
+
+                  <div className="chase-line">{match.chaseNote || "IN PROGRESS"}</div>
+                  <div className="tap-hint">TAP FOR FULL SCORECARD ▾</div>
+                </div>
+              );
+            })}
 
             <div className="peek-card">
               <div className="peek-label">NEXT ▸</div>
@@ -170,128 +145,81 @@ export default function LiveCarousel() {
       )}
 
       {/* ================= VIEW 2: FULL WIDTH MATCH PAGE ================= */}
-      {activeMatchId && activeData && activeMatchMeta && (
+      {activeMatchId && activeMatchMeta && (
         <div className="matchpage">
           <button className="back-btn" onClick={closeMatch}>← BACK TO LIVE MATCHES</button>
 
-          <div className="mp-header">
-            <div className="match-card-head">
-              <span className="series-tag">{activeMatchMeta.venue}</span>
-              <span className="live-tag"><span className="live-dot"></span>LIVE</span>
+          {detailLoading || !activeData ? (
+            <div className="mp-header mp-header-loading">
+              <div className="loading-state font-mono">PULLING LIVE TELEMETRY...</div>
             </div>
-            <div className="mp-team-line">
-              <span className="mp-team-code">{activeMatchMeta.matchName.split(' vs ')[0]}</span>
-              <span className="mp-team-score">{activeMatchMeta.score?.home?.score || '-'} <span className="overs-sub">({activeMatchMeta.score?.home?.info || ''})</span></span>
-            </div>
-            <div className="mp-team-line">
-              <span className="mp-team-code">{activeMatchMeta.matchName.split(' vs ')[1]}</span>
-              <span className="mp-team-score">{activeMatchMeta.score?.away?.score || '-'} <span className="overs-sub">({activeMatchMeta.score?.away?.info || ''})</span></span>
-            </div>
-            <div className="mp-chase">{activeMatchMeta.chaseNote}</div>
-          </div>
+          ) : (
+            <>
+              {/* GLANCE SCOREBOARD — the whole match state in one look */}
+              <div className="scoreboard">
+                <div className="scoreboard-top">
+                  <span className="series-tag">{activeMatchMeta.venue}</span>
+                  <span className={`status-tag ${activeMatchMeta.status === 'LIVE' ? 'status-live' : 'status-done'}`}>
+                    {activeMatchMeta.status === 'LIVE' && <span className="live-dot"></span>}
+                    {activeMatchMeta.status}
+                  </span>
+                </div>
 
-          <div className="mp-body">
-            
-            {/* HUD / Toss Block */}
-            <div className="over-block">
-              <div className="over-toss-row">
-                <div>
-                  <div className="over-label">CURRENT OVER · {activeData.currentBowler || 'TBD'}</div>
-                  <div className="over-dots">
-                    {/* CRASH FIX: Optional chaining on recentBalls */}
-                    {activeData.recentBalls?.map((ball, idx) => (
-                      <div key={idx} className={`over-dot ${ball.c}`}>{ball.b}</div>
-                    ))}
+                <div className="scoreboard-grid">
+                  <div className={`scoreboard-team ${!inn2 ? 'scoreboard-team-batting' : ''}`}>
+                    <div className="sb-team-name">{inn1?.team || activeMatchMeta.matchName?.split(' vs ')[0]}</div>
+                    <div className="sb-team-score">
+                      {activeMatchMeta.score?.home?.score || '0/0'}
+                      <span className="sb-overs">({activeMatchMeta.score?.home?.info || '0.0'})</span>
+                    </div>
+                  </div>
+
+                  <div className="scoreboard-divider">
+                    <span>VS</span>
+                  </div>
+
+                  <div className={`scoreboard-team scoreboard-team-right ${inn2 ? 'scoreboard-team-batting' : 'scoreboard-team-waiting'}`}>
+                    <div className="sb-team-name">{inn2?.team || activeMatchMeta.matchName?.split(' vs ')[1]}</div>
+                    <div className="sb-team-score">
+                      {inn2 ? (
+                        <>{activeMatchMeta.score?.away?.score}<span className="sb-overs">({activeMatchMeta.score?.away?.info || '0.0'})</span></>
+                      ) : (
+                        <span className="sb-pending">YET TO BAT</span>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className="toss-strip">
-                  <div className="toss-kicker">TOSS</div>
-                  <div className="toss-line">{activeData.toss || 'Waiting for toss'}</div>
-                  <div className="toss-sub">{activeData.venue}</div>
+
+                {activeMatchMeta.chaseNote && (
+                  <div className="scoreboard-note">{activeMatchMeta.chaseNote}</div>
+                )}
+
+                <div className="scoreboard-toss">
+                  <span className="toss-kicker">TOSS</span>
+                  <span className="toss-line">{activeData.toss || 'Toss result unavailable'}</span>
                 </div>
               </div>
-            </div>
 
-            <div className="mp-content-panoramic">
-              {detailLoading ? (
-                <div className="loading-state font-mono">PULLING LIVE TELEMETRY...</div>
-              ) : (
-                <>
-                  {/* COLUMN 1: 1ST INNINGS (TARGET) */}
-                  <div className="innings-col">
-                    <div className="inn-heading highlight-inn1">
-                      {/* CRASH FIX: Optional chaining on innings1 object */}
-                      1ST INNINGS: {activeData.innings1?.team || 'TBD'} · {activeData.innings1?.score || '0/0'} ({activeData.innings1?.overs || '0.0'})
-                    </div>
-                    
-                    <div className="stat-kicker">BATTING</div>
-                    <table className="stat-table">
-                      <thead><tr><th>BATTER</th><th>R</th><th>B</th><th>SR</th></tr></thead>
-                      <tbody>
-                        {/* CRASH FIX: Optional chaining on batters array */}
-                        {activeData.innings1?.batters?.map((b, i) => (
-                          <tr key={i} className={b.dim ? 'dim' : ''}>
-                            <td>{b.name}</td><td>{b.r}</td><td>{b.b}</td><td>{b.sr}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    
-                    <div className="stat-kicker" style={{marginTop: '16px'}}>BOWLING</div>
-                    <table className="stat-table">
-                      <thead><tr><th>BOWLER</th><th>O</th><th>R</th><th>W</th><th>ECO</th></tr></thead>
-                      <tbody>
-                        {/* CRASH FIX: Optional chaining on bowlers array */}
-                        {activeData.innings1?.bowlers?.map((bw, i) => (
-                          <tr key={i}>
-                            <td>{bw.name}</td><td>{bw.o}</td><td>{bw.r}</td><td>{bw.w}</td><td>{bw.eco}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+              {/* INNINGS DETAIL + LIVE COMMENTARY — commentary rail is
+                  always present; when no commentary source has data yet,
+                  it shows a clear waiting state rather than being hidden,
+                  since ball-by-ball commentary is a required feature here,
+                  not an optional extra we quietly drop when a data source
+                  is thin. See CRICKETDATA free tier note below — this is
+                  a real gap to close with a commentary-capable source. */}
+              <div className={`mp-body ${!inn2 ? 'mp-body-single' : ''}`}>
+                {inn1 && <InningsPanel innings={inn1} accent="amber" label="1ST INNINGS" />}
+                {inn2 && <InningsPanel innings={inn2} accent="red" label="2ND INNINGS" />}
 
-                  {/* COLUMN 2: 2ND INNINGS (CHASE) */}
-                  <div className="innings-col border-left">
-                    <div className="inn-heading highlight-inn2">
-                      2ND INNINGS: {activeData.innings2?.team || 'TBD'} · {activeData.innings2?.score || '0/0'} ({activeData.innings2?.overs || '0.0'})
-                    </div>
-                    
-                    <div className="stat-kicker">BATTING</div>
-                    <table className="stat-table">
-                      <thead><tr><th>BATTER</th><th>R</th><th>B</th><th>SR</th></tr></thead>
-                      <tbody>
-                        {activeData.innings2?.batters?.map((b, i) => (
-                          <tr key={i} className={b.dim ? 'dim' : ''}>
-                            <td>{b.name}</td><td>{b.r}</td><td>{b.b}</td><td>{b.sr}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    
-                    <div className="stat-kicker" style={{marginTop: '16px'}}>BOWLING</div>
-                    <table className="stat-table">
-                      <thead><tr><th>BOWLER</th><th>O</th><th>R</th><th>W</th><th>ECO</th></tr></thead>
-                      <tbody>
-                        {activeData.innings2?.bowlers?.map((bw, i) => (
-                          <tr key={i}>
-                            <td>{bw.name}</td><td>{bw.o}</td><td>{bw.r}</td><td style={{color: 'var(--blood-red)', fontWeight: 'bold'}}>{bw.w}</td><td>{bw.eco}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* COLUMN 3: LIVE COMMENTARY */}
-                  <div className="mp-commentary-rail border-left">
-                    <div className="rail-label"><span className="live-dot"></span>LIVE COMMENTARY</div>
+                <div className="mp-commentary-rail">
+                  <div className="rail-label"><span className="live-dot"></span>LIVE COMMENTARY</div>
+                  {hasCommentary ? (
                     <div id="feed">
-                      {/* CRASH FIX: Optional chaining on commentary array */}
-                      {activeData.commentary?.map((c, i) => {
+                      {activeData.commentary.map((c, i) => {
                         const s = styleFor[c.type] || styleFor.dot;
                         return (
                           <div key={i} className="feed-row ball-new" style={{ background: s.bg, borderLeftColor: s.border }}>
-                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '5px', marginBottom: '2px' }}>
+                            <div className="feed-row-head">
                               <span className="feed-over-tag">{c.over}</span>
                               {s.labelText && <span className="feed-event-tag" style={{ color: s.label }}>{s.labelText}</span>}
                             </div>
@@ -302,61 +230,76 @@ export default function LiveCarousel() {
                         );
                       })}
                     </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
+                  ) : (
+                    <div className="commentary-waiting">
+                      <div className="commentary-waiting-text">Ball-by-ball commentary not available for this match yet.</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 
-      <style jsx>{`
+      <style>{`
         .live-engine-wrapper { width: 100%; max-width: 1050px; margin: 0 auto; }
-        
+
         @keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
         @keyframes ballIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
-        
+        @keyframes cardRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
         .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--blood-red); animation: livePulse 1.2s ease-in-out infinite; display: inline-block; }
         .ball-new { animation: ballIn 0.4s ease-out; }
 
         /* CAROUSEL STYLES */
         .section-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.4); letter-spacing: 0.05em; margin-bottom: 10px; padding: 0 24px; }
         .carousel-wrap { padding: 20px 0; }
-        
-        /* CAROUSEL TRACK */
-        .carousel-track { display: flex; gap: 12px; overflow-x: auto; padding: 0 24px 12px; min-height: 160px; }
-        
-        /* MATCH CARD */
-        .match-card { 
-          background: var(--outfield); 
-          border: 1px solid rgba(240,242,245,0.08); 
-          border-radius: 4px; 
-          width: 280px; 
-          min-height: 135px;
-          flex-shrink: 0; 
-          padding: 16px; 
-          position: relative; 
-          cursor: pointer; 
-          transition: border-color 0.15s ease, transform 0.2s ease; 
-          display: flex; 
-          flex-direction: column; 
+
+        .carousel-track { display: flex; gap: 12px; overflow-x: auto; padding: 0 24px 12px; min-height: 152px; }
+
+        /* MATCH CARD — tighter, more consistent height; live cards get a
+           slightly brighter border treatment to visually rank above
+           completed ones without needing a badge to do all the work. */
+        .match-card {
+          background: var(--outfield);
+          border: 1px solid rgba(240,242,245,0.08);
+          border-radius: 6px;
+          width: 272px;
+          min-height: 148px;
+          flex-shrink: 0;
+          padding: 16px 18px;
+          position: relative;
+          cursor: pointer;
+          transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+          display: flex;
+          flex-direction: column;
           justify-content: space-between;
+          animation: cardRise 0.35s ease-out;
         }
 
-        .match-card:hover { border-color: rgba(232,0,58,0.4); transform: translateY(-2px); }
-        .match-card::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--blood-red); }
-        .match-card-head { display: flex; justify-content: space-between; margin-bottom: 10px; }
-        .series-tag { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.5); }
-        .live-tag { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--blood-red); display: flex; align-items: center; gap: 5px; font-weight: bold; }
-        .team-line { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
-        .team-code { font-family: 'Bebas Neue', sans-serif; font-size: 19px; color: var(--crease-white); }
-        .team-score { font-family: 'JetBrains Mono', monospace; font-size: 17px; font-weight: 700; color: var(--crease-white); }
-        .overs-sub { font-size: 12px; color: rgba(240,242,245,0.4); font-family: 'Inter', sans-serif; font-weight: 400; }
-        .chase-line { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--bail-amber); margin-top: 8px; }
-        .tap-hint { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.35); margin-top: 10px; text-align: center; letter-spacing: 0.05em; transition: color 0.2s; }
+        .match-card:hover { border-color: rgba(232,0,58,0.5); transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.35); }
+        .match-card::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; border-radius: 6px 6px 0 0; background: rgba(240,242,245,0.12); }
+        .match-card.is-live::before { background: var(--blood-red); }
+
+        .match-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
+        .series-tag { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.5); line-height: 1.3; }
+
+        .status-tag { font-family: 'JetBrains Mono', monospace; font-size: 9px; display: flex; align-items: center; gap: 5px; font-weight: 700; letter-spacing: 0.04em; white-space: nowrap; flex-shrink: 0; }
+        .status-live { color: var(--blood-red); }
+        .status-done { color: rgba(240,242,245,0.35); }
+
+        .team-line { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 7px; }
+        .team-line-pending { opacity: 0.55; }
+        .team-code { font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 0.01em; color: var(--crease-white); }
+        .team-score { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 700; color: var(--crease-white); }
+        .pending-label { font-size: 11px; font-weight: 500; color: rgba(240,242,245,0.4); font-family: 'Inter', sans-serif; text-transform: uppercase; letter-spacing: 0.04em; }
+        .overs-sub { font-size: 11px; color: rgba(240,242,245,0.4); font-family: 'Inter', sans-serif; font-weight: 400; }
+        .chase-line { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--bail-amber); margin-top: 6px; min-height: 14px; }
+        .tap-hint { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.3); margin-top: 10px; text-align: center; letter-spacing: 0.05em; transition: color 0.2s; }
         .match-card:hover .tap-hint { color: var(--blood-red); }
 
-        .peek-card { background: var(--outfield); border: 1px solid rgba(240,242,245,0.08); border-radius: 4px; width: 140px; flex-shrink: 0; padding: 14px; opacity: 0.4; display: flex; flex-direction: column; justify-content: center; }
+        .peek-card { background: var(--outfield); border: 1px solid rgba(240,242,245,0.08); border-radius: 6px; width: 130px; flex-shrink: 0; padding: 14px; opacity: 0.4; display: flex; flex-direction: column; justify-content: center; }
         .peek-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.4); margin-bottom: 6px; }
         .peek-teams { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--crease-white); }
 
@@ -365,74 +308,154 @@ export default function LiveCarousel() {
         .back-btn { background: none; border: none; color: rgba(240,242,245,0.5); font-size: 11px; font-family: 'JetBrains Mono', monospace; margin-bottom: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 0; transition: color 0.2s; }
         .back-btn:hover { color: var(--crease-white); }
 
-        .mp-header { background: var(--outfield); border: 1px solid rgba(240,242,245,0.08); border-radius: 4px 4px 0 0; padding: 16px; position: relative; }
-        .mp-header::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--blood-red); }
-        .mp-team-line { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
-        .mp-team-code { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: var(--crease-white); letter-spacing: 0.02em; }
-        .mp-team-score { font-family: 'JetBrains Mono', monospace; font-size: 19px; font-weight: 700; color: var(--crease-white); }
-        .mp-chase { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--bail-amber); margin-top: 8px; font-weight: bold; }
+        /* GLANCE SCOREBOARD — signature element. Both innings' key numbers
+           readable in one look, stadium-board style, instead of a thin
+           header line. This replaces the old cramped mp-header. */
+        .scoreboard {
+          background: var(--outfield);
+          border: 1px solid rgba(240,242,245,0.08);
+          border-radius: 8px 8px 0 0;
+          padding: 20px 24px;
+          position: relative;
+        }
+        .scoreboard::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: 8px 8px 0 0; background: var(--blood-red); }
 
-        .mp-body { background: var(--pitch-black); border: 1px solid rgba(232,0,58,0.2); border-top: none; border-radius: 0 0 4px 4px; overflow: hidden; }
+        .scoreboard-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 
-        .over-block { padding: 12px 16px; border-bottom: 1px solid rgba(240,242,245,0.08); }
-        .over-toss-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
-        .over-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.4); margin-bottom: 6px; text-transform: uppercase; }
-        .over-dots { display: flex; gap: 5px; }
-        .over-dot { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: bold; background: #1c1c1f; color: var(--crease-white); }
-        .over-dot.wicket { background: var(--blood-red); color: #fff; box-shadow: 0 0 6px rgba(232,0,58,0.5); }
-        .over-dot.boundary { background: var(--bail-amber); color: #1a1206; }
-        .over-dot.latest { border: 1px solid rgba(232,0,58,0.6); }
+        .scoreboard-grid { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 20px; }
 
-        .toss-strip { flex-shrink: 0; text-align: right; max-width: 140px; }
-        .toss-kicker { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.35); letter-spacing: 0.05em; margin-bottom: 3px; }
-        .toss-line { font-size: 11px; color: var(--crease-white); font-weight: 500; line-height: 1.3; }
-        .toss-sub { font-size: 10px; color: rgba(240,242,245,0.4); margin-top: 2px; line-height: 1.3; }
+        .scoreboard-team { display: flex; flex-direction: column; gap: 4px; opacity: 0.5; transition: opacity 0.2s; }
+        .scoreboard-team-batting { opacity: 1; }
+        .scoreboard-team-right { text-align: right; align-items: flex-end; }
 
-        /* PANORAMIC GRID SYSTEM */
-        .mp-content-panoramic { display: grid; grid-template-columns: 1fr 1fr 1.2fr; align-items: stretch; min-height: 400px; }
-        .innings-col { padding: 16px; max-height: 440px; overflow-y: auto; }
-        .innings-col::-webkit-scrollbar { width: 4px; }
-        .innings-col::-webkit-scrollbar-thumb { background: rgba(240,242,245,0.1); border-radius: 4px; }
-        
-        .border-left { border-left: 1px solid rgba(240,242,245,0.08); }
+        .sb-team-name { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 0.02em; color: var(--crease-white); line-height: 1; }
+        .sb-team-score { font-family: 'JetBrains Mono', monospace; font-size: 30px; font-weight: 700; color: var(--crease-white); line-height: 1.15; letter-spacing: -0.01em; }
+        .sb-overs { font-size: 13px; font-weight: 400; color: rgba(240,242,245,0.4); margin-left: 6px; }
+        .sb-pending { font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600; color: rgba(240,242,245,0.35); letter-spacing: 0.04em; }
 
-        /* HIGHLIGHTED HEADERS */
-        .highlight-inn1 { background: rgba(245,166,35,0.1); color: var(--bail-amber); padding: 8px 12px; border-left: 3px solid var(--bail-amber); border-radius: 2px; }
-        .highlight-inn2 { background: rgba(232,0,58,0.1); color: var(--blood-red); padding: 8px 12px; border-left: 3px solid var(--blood-red); border-radius: 2px; }
-        
-        .inn-heading { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.05em; margin-bottom: 16px; font-weight: bold; }
-        .stat-kicker { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.35); margin-bottom: 4px; font-weight: bold; }
-        
-        .stat-table { width: 100%; font-size: 11px; border-collapse: collapse; margin-bottom: 12px; color: var(--crease-white); }
-        .stat-table th { font-family: 'JetBrains Mono', monospace; color: rgba(240,242,245,0.35); font-size: 9px; font-weight: 400; text-align: right; padding: 4px 0; border-bottom: 1px solid rgba(240,242,245,0.05); }
+        .scoreboard-divider { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: rgba(240,242,245,0.25); font-weight: 700; text-align: center; }
+
+        .scoreboard-note { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--bail-amber); margin-top: 14px; }
+
+        .scoreboard-toss { margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(240,242,245,0.06); display: flex; align-items: baseline; gap: 10px; }
+        .toss-kicker { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.35); letter-spacing: 0.06em; flex-shrink: 0; }
+        .toss-line { font-size: 12px; color: rgba(240,242,245,0.65); font-weight: 500; }
+
+        .mp-header-loading { padding: 60px 24px; text-align: center; border-radius: 8px; }
+
+        .mp-body { background: var(--pitch-black); border: 1px solid rgba(232,0,58,0.2); border-top: none; border-radius: 0 0 8px 8px; overflow: hidden; display: grid; grid-template-columns: 1fr 1fr 1.1fr; }
+        .mp-body-single { grid-template-columns: 1fr 1.2fr; }
+
+        /* No visible scrollbars — content is capped (see InningsPanel:
+           top 5 batters / top 4 bowlers shown, rest available via
+           expand) so panels size to their content instead of scrolling. */
+        .innings-col { padding: 18px 20px; }
+        .innings-col.border-left { border-left: 1px solid rgba(240,242,245,0.08); }
+
+        .inn-heading { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.06em; margin-bottom: 14px; font-weight: 700; padding-bottom: 8px; border-bottom: 2px solid; }
+        .inn-heading.accent-amber { color: var(--bail-amber); border-color: var(--bail-amber); }
+        .inn-heading.accent-red { color: var(--blood-red); border-color: var(--blood-red); }
+
+        .stat-kicker { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.35); margin-bottom: 6px; font-weight: 700; letter-spacing: 0.04em; }
+
+        .stat-table { width: 100%; font-size: 12px; border-collapse: collapse; margin-bottom: 14px; color: var(--crease-white); }
+        .stat-table th { font-family: 'JetBrains Mono', monospace; color: rgba(240,242,245,0.35); font-size: 9px; font-weight: 400; text-align: right; padding: 4px 0; border-bottom: 1px solid rgba(240,242,245,0.06); }
         .stat-table th:first-child { text-align: left; }
-        .stat-table td { padding: 6px 0; text-align: right; border-bottom: 1px solid rgba(240,242,245,0.03); }
+        .stat-table td { padding: 7px 0; text-align: right; border-bottom: 1px solid rgba(240,242,245,0.03); font-family: 'JetBrains Mono', monospace; }
         .stat-table td:first-child { text-align: left; font-weight: 500; font-family: 'Inter', sans-serif; }
-        .stat-table td { font-family: 'JetBrains Mono', monospace; }
         .stat-table .dim td { color: rgba(240,242,245,0.4); font-weight: 400; }
+        .stat-more { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.3); text-align: center; padding-top: 2px; }
 
-        .mp-commentary-rail { background: #0e1015; padding: 16px; display: flex; flex-direction: column; max-height: 440px; }
+        .mp-commentary-rail { background: #0e1015; padding: 18px 20px; border-left: 1px solid rgba(240,242,245,0.08); }
         .rail-label { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--blood-red); letter-spacing: 0.08em; font-weight: 700; }
-        
-        /* THE COMMENTARY SCROLLBAR FIX */
-        #feed { max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; padding-right: 4px; }
-        #feed::-webkit-scrollbar { width: 3px; }
-        #feed::-webkit-scrollbar-thumb { background: rgba(240,242,245,0.15); border-radius: 4px; }
-        
+
+        #feed { display: flex; flex-direction: column; }
+
+        .commentary-waiting { padding: 24px 0; }
+        .commentary-waiting-text { font-family: 'Inter', sans-serif; font-size: 12px; color: rgba(240,242,245,0.35); line-height: 1.5; }
+
         .feed-row { padding: 10px 12px; margin-bottom: 8px; border-left: 2px solid rgba(240,242,245,0.08); border-radius: 0 4px 4px 0; }
+        .feed-row-head { display: flex; align-items: baseline; gap: 5px; margin-bottom: 2px; }
         .feed-over-tag { font-family: 'JetBrains Mono', monospace; color: var(--bail-amber); font-size: 9px; font-weight: 700; }
-        .feed-event-tag { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 9px; letter-spacing: 0.04em; margin-right: 5px; }
+        .feed-event-tag { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 9px; letter-spacing: 0.04em; }
         .feed-text { font-size: 11px; color: var(--crease-white); line-height: 1.4; margin-top: 4px; }
-        .loading-state { color: rgba(240,242,245,0.4); font-size: 11px; padding: 40px 0; text-align: center; width: 100%; grid-column: span 3; }
+        .loading-state { color: rgba(240,242,245,0.4); font-size: 11px; padding: 40px 0; text-align: center; width: 100%; }
 
         @media (max-width: 768px) {
-          .mp-content-panoramic { grid-template-columns: 1fr; }
-          .innings-col { max-height: none; overflow-y: visible; }
-          .mp-commentary-rail { max-height: none; border-left: none; border-top: 1px solid rgba(240,242,245,0.08); }
-          .border-left { border-left: none; border-top: 1px solid rgba(240,242,245,0.08); }
-          #feed { max-height: 300px; }
+          .mp-body, .mp-body-no-rail:not(.mp-body-single) { grid-template-columns: 1fr; }
+          .innings-col.border-left, .mp-commentary-rail { border-left: none; border-top: 1px solid rgba(240,242,245,0.08); }
+          .scoreboard-grid { gap: 10px; }
+          .sb-team-score { font-size: 24px; }
         }
       `}</style>
+    </div>
+  );
+}
+
+// Dynamic Commentary Styling Engine
+const styleFor = {
+  wicket: { bg: 'rgba(232,0,58,0.12)',  border: '#E8003A', label: '#E8003A', labelText: 'WICKET', size: '11px', weight: '700' },
+  six:    { bg: 'rgba(245,166,35,0.12)', border: '#F5A623', label: '#F5A623', labelText: 'SIX',    size: '11px', weight: '700' },
+  four:   { bg: 'rgba(245,166,35,0.08)', border: '#F5A623', label: '#F5A623', labelText: 'FOUR',   size: '11px', weight: '500' },
+  run:    { bg: 'transparent', border: 'rgba(240,242,245,0.08)', label: 'rgba(240,242,245,0.4)', labelText: '', size: '11px', weight: '400' },
+  dot:    { bg: 'transparent', border: 'rgba(240,242,245,0.08)', label: 'rgba(240,242,245,0.3)', labelText: '', size: '11px', weight: '400' }
+};
+
+// Renders one innings' batting + bowling tables, capped to the top
+// performers so the panel sizes to its content instead of needing a
+// visible internal scrollbar. `accent` picks amber (1st innings, target)
+// or red (2nd innings, chase) to match the rest of the DeathOvers palette.
+function InningsPanel({ innings, accent, label }) {
+  const batters = innings.batters || [];
+  const bowlers = innings.bowlers || [];
+  const visibleBatters = batters.slice(0, 5);
+  const visibleBowlers = bowlers.slice(0, 4);
+
+  return (
+    <div className="innings-col border-left">
+      <div className={`inn-heading accent-${accent}`}>
+        {label}: {innings.team || 'TBD'} · {innings.score || '0/0'} ({innings.overs || '0.0'})
+      </div>
+
+      {visibleBatters.length > 0 && (
+        <>
+          <div className="stat-kicker">BATTING</div>
+          <table className="stat-table">
+            <thead><tr><th>BATTER</th><th>R</th><th>B</th><th>SR</th></tr></thead>
+            <tbody>
+              {visibleBatters.map((b, i) => (
+                <tr key={i} className={b.dim ? 'dim' : ''}>
+                  <td>{b.name}</td><td>{b.r}</td><td>{b.b}</td><td>{b.sr}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {batters.length > visibleBatters.length && (
+            <div className="stat-more">+{batters.length - visibleBatters.length} more</div>
+          )}
+        </>
+      )}
+
+      {visibleBowlers.length > 0 && (
+        <>
+          <div className="stat-kicker" style={{ marginTop: '16px' }}>BOWLING</div>
+          <table className="stat-table">
+            <thead><tr><th>BOWLER</th><th>O</th><th>R</th><th>W</th><th>ECO</th></tr></thead>
+            <tbody>
+              {visibleBowlers.map((bw, i) => (
+                <tr key={i}>
+                  <td>{bw.name}</td><td>{bw.o}</td><td>{bw.r}</td>
+                  <td style={bw.w && bw.w !== '0' ? { color: 'var(--blood-red)', fontWeight: 'bold' } : undefined}>{bw.w}</td>
+                  <td>{bw.eco}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {bowlers.length > visibleBowlers.length && (
+            <div className="stat-more">+{bowlers.length - visibleBowlers.length} more</div>
+          )}
+        </>
+      )}
     </div>
   );
 }
