@@ -54,7 +54,7 @@ export default function LiveCarousel() {
   }
 
   // --- SORTING AND FILTERING LOGIC ---
-  // LIVE matches always surface first (deterministic, not incidental —
+  // LIVE matches always surface first (deterministic, not incidental --
   // filtered explicitly by status rather than relying on API ordering),
   // then UPCOMING, then a capped tail of recently COMPLETED matches so the
   // rail doesn't get flooded with old results.
@@ -67,7 +67,7 @@ export default function LiveCarousel() {
     displayMatches = [...live, ...upcoming, ...completed];
   } else {
     displayMatches = [{
-      id: "mock-channel", venue: "IPL 2026 · Q2", status: "LIVE", matchName: "GT vs KKR",
+      id: "mock-channel", venue: "IPL 2026 . Q2", status: "LIVE", matchName: "GT vs KKR",
       score: { home: { score: "181/5", info: "20.0" }, away: { score: "156/6", info: "17.2" } },
       chaseNote: "need 26 off 16"
     }];
@@ -77,13 +77,35 @@ export default function LiveCarousel() {
   const activeMatchMeta = displayMatches.find(m => m.id === activeMatchId);
 
   // An innings that has not started yet comes back as `null` from the
-  // backend (see app.py) rather than an empty object — that's the signal
+  // backend (see app.py) rather than an empty object -- that's the signal
   // to hide the column/card entirely instead of rendering a fake
-  // "TBD · 0/0" placeholder, which is what made the detail view look
-  // broken whenever a match was still in its first innings.
+  // "TBD . 0/0" placeholder.
   const inn1 = activeData?.innings1 || null;
   const inn2 = activeData?.innings2 || null;
   const hasCommentary = (activeData?.commentary?.length || 0) > 0;
+  const ballTracker = activeData?.ballTracker || [];
+
+  // liveScore (NEW, backend v3) comes from Cricbuzz's miniscore -- the
+  // SAME fetch as the commentary feed, so it is guaranteed to be the same
+  // snapshot. This is what fixed the score/commentary mismatch bug
+  // (scoreboard showing an older over than the commentary feed). Falls
+  // back to the carousel's own score (from CricketData) only if Cricbuzz
+  // resolution hasn't completed yet for this match.
+  const liveScore = activeData?.liveScore || null;
+  const displayHomeScore = liveScore?.home || activeMatchMeta?.score?.home;
+  const displayAwayScore = liveScore?.away || activeMatchMeta?.score?.away;
+
+  // Team names: always pulled directly from matchName.split, but guarded
+  // against the "series description leaked into team slot" bug seen
+  // earlier (e.g. "BANGLADESH, 2ND ODI, BANGLADESH TOUR OF ZIMBABWE, 2026"
+  // showing where a team name should be). A real team name is short and
+  // doesn't contain commas; if the split result looks like a description
+  // instead, fall back to a safe placeholder rather than displaying it.
+  const safeTeamName = (raw, fallback) => {
+    if (!raw) return fallback;
+    if (raw.includes(',') || raw.length > 24) return fallback;
+    return raw;
+  };
 
   return (
     <div className="live-engine-wrapper">
@@ -97,6 +119,8 @@ export default function LiveCarousel() {
             {displayMatches.map((match) => {
               const isLive = match.status === 'LIVE';
               const awayIsPending = !match.score?.away || match.score.away.score === 'yet to bat';
+              const homeTeam = safeTeamName(match.matchName?.split(' vs ')[0], "HOME");
+              const awayTeam = safeTeamName(match.matchName?.split(' vs ')[1], "AWAY");
               return (
                 <div
                   key={match.id}
@@ -112,14 +136,14 @@ export default function LiveCarousel() {
                   </div>
 
                   <div className="team-line">
-                    <span className="team-code">{match.matchName?.split(' vs ')[0] || "HOME"}</span>
+                    <span className="team-code">{homeTeam}</span>
                     <span className="team-score">
                       {match.score?.home?.score || '-'}
                       <span className="overs-sub"> ({match.score?.home?.info || ''})</span>
                     </span>
                   </div>
                   <div className={`team-line ${awayIsPending ? 'team-line-pending' : ''}`}>
-                    <span className="team-code">{match.matchName?.split(' vs ')[1] || "AWAY"}</span>
+                    <span className="team-code">{awayTeam}</span>
                     <span className="team-score">
                       {awayIsPending ? (
                         <span className="pending-label">yet to bat</span>
@@ -130,13 +154,13 @@ export default function LiveCarousel() {
                   </div>
 
                   <div className="chase-line">{match.chaseNote || "IN PROGRESS"}</div>
-                  <div className="tap-hint">TAP FOR FULL SCORECARD ▾</div>
+                  <div className="tap-hint">TAP FOR FULL SCORECARD &#9662;</div>
                 </div>
               );
             })}
 
             <div className="peek-card">
-              <div className="peek-label">NEXT ▸</div>
+              <div className="peek-label">NEXT &#9656;</div>
               <div className="peek-teams">ESSEX W v SOM W</div>
             </div>
 
@@ -147,7 +171,7 @@ export default function LiveCarousel() {
       {/* ================= VIEW 2: FULL WIDTH MATCH PAGE ================= */}
       {activeMatchId && activeMatchMeta && (
         <div className="matchpage">
-          <button className="back-btn" onClick={closeMatch}>← BACK TO LIVE MATCHES</button>
+          <button className="back-btn" onClick={closeMatch}>&larr; BACK TO LIVE MATCHES</button>
 
           {detailLoading || !activeData ? (
             <div className="mp-header mp-header-loading">
@@ -155,7 +179,7 @@ export default function LiveCarousel() {
             </div>
           ) : (
             <>
-              {/* GLANCE SCOREBOARD — the whole match state in one look */}
+              {/* GLANCE SCOREBOARD -- the whole match state in one look */}
               <div className="scoreboard">
                 <div className="scoreboard-top">
                   <span className="series-tag">{activeMatchMeta.venue}</span>
@@ -167,10 +191,12 @@ export default function LiveCarousel() {
 
                 <div className="scoreboard-grid">
                   <div className={`scoreboard-team ${!inn2 ? 'scoreboard-team-batting' : ''}`}>
-                    <div className="sb-team-name">{inn1?.team || activeMatchMeta.matchName?.split(' vs ')[0]}</div>
+                    <div className="sb-team-name">
+                      {inn1?.team || safeTeamName(activeMatchMeta.matchName?.split(' vs ')[0], "TEAM 1")}
+                    </div>
                     <div className="sb-team-score">
-                      {activeMatchMeta.score?.home?.score || '0/0'}
-                      <span className="sb-overs">({activeMatchMeta.score?.home?.info || '0.0'})</span>
+                      {displayHomeScore?.score || '0/0'}
+                      <span className="sb-overs">({displayHomeScore?.info || '0.0'})</span>
                     </div>
                   </div>
 
@@ -179,10 +205,12 @@ export default function LiveCarousel() {
                   </div>
 
                   <div className={`scoreboard-team scoreboard-team-right ${inn2 ? 'scoreboard-team-batting' : 'scoreboard-team-waiting'}`}>
-                    <div className="sb-team-name">{inn2?.team || activeMatchMeta.matchName?.split(' vs ')[1]}</div>
+                    <div className="sb-team-name">
+                      {inn2?.team || safeTeamName(activeMatchMeta.matchName?.split(' vs ')[1], "TEAM 2")}
+                    </div>
                     <div className="sb-team-score">
                       {inn2 ? (
-                        <>{activeMatchMeta.score?.away?.score}<span className="sb-overs">({activeMatchMeta.score?.away?.info || '0.0'})</span></>
+                        <>{displayAwayScore?.score}<span className="sb-overs">({displayAwayScore?.info || '0.0'})</span></>
                       ) : (
                         <span className="sb-pending">YET TO BAT</span>
                       )}
@@ -190,24 +218,55 @@ export default function LiveCarousel() {
                   </div>
                 </div>
 
+                {/* BALL TRACKER -- current-over strip, resets each over.
+                    Derived from the same commentary fetch as everything
+                    else here, so it can never drift out of sync either. */}
+                {ballTracker.length > 0 && (
+                  <div className="ball-tracker">
+                    <span className="ball-tracker-label">THIS OVER</span>
+                    <div className="ball-tracker-dots">
+                      {ballTracker.map((b, i) => (
+                        <span key={i} className={`ball-pill ball-pill-${b.type}`}>{b.label}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {activeMatchMeta.chaseNote && (
                   <div className="scoreboard-note">{activeMatchMeta.chaseNote}</div>
                 )}
 
-                <div className="scoreboard-toss">
-                  <span className="toss-kicker">TOSS</span>
-                  <span className="toss-line">{activeData.toss || 'Toss result unavailable'}</span>
-                </div>
+                {liveScore?.lastWicket && (
+                  <div className="scoreboard-lastwkt">
+                    <span className="toss-kicker">LAST WKT</span>
+                    <span className="toss-line">{liveScore.lastWicket}</span>
+                  </div>
+                )}
+
+                {activeData.toss && (
+                  <div className="scoreboard-toss">
+                    <span className="toss-kicker">TOSS</span>
+                    <span className="toss-line">{activeData.toss}</span>
+                  </div>
+                )}
               </div>
 
-              {/* INNINGS DETAIL + LIVE COMMENTARY — commentary rail is
-                  always present; when no commentary source has data yet,
-                  it shows a clear waiting state rather than being hidden,
-                  since ball-by-ball commentary is a required feature here,
-                  not an optional extra we quietly drop when a data source
-                  is thin. See CRICKETDATA free tier note below — this is
-                  a real gap to close with a commentary-capable source. */}
-              <div className={`mp-body ${!inn2 ? 'mp-body-single' : ''}`}>
+              {/* INNINGS DETAIL + LIVE COMMENTARY.
+                  mp-body now computes how many "content" panels are
+                  actually rendering (0, 1, or 2 innings panels) and sizes
+                  the grid so the commentary rail always fills whatever
+                  space the innings panels don't use -- fixes the "wasted
+                  gray space" bug where mp-body-single wasn't applying
+                  correctly and a dead column showed up next to commentary. */}
+              <div
+                className="mp-body"
+                style={{
+                  gridTemplateColumns:
+                    inn1 && inn2 ? '1fr 1fr 1.1fr' :
+                    (inn1 || inn2) ? '1fr 1.4fr' :
+                    '1fr'
+                }}
+              >
                 {inn1 && <InningsPanel innings={inn1} accent="amber" label="1ST INNINGS" />}
                 {inn2 && <InningsPanel innings={inn2} accent="red" label="2ND INNINGS" />}
 
@@ -220,7 +279,7 @@ export default function LiveCarousel() {
                         return (
                           <div key={i} className="feed-row ball-new" style={{ background: s.bg, borderLeftColor: s.border }}>
                             <div className="feed-row-head">
-                              <span className="feed-over-tag">{c.over}</span>
+                              {c.over && <span className="feed-over-tag">{c.over}</span>}
                               {s.labelText && <span className="feed-event-tag" style={{ color: s.label }}>{s.labelText}</span>}
                             </div>
                             <div className="feed-text" style={{ fontSize: s.size, fontWeight: s.weight }}>
@@ -247,7 +306,7 @@ export default function LiveCarousel() {
 
         @keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
         @keyframes ballIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes cardRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes cardRise { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
         .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--blood-red); animation: livePulse 1.2s ease-in-out infinite; display: inline-block; }
         .ball-new { animation: ballIn 0.4s ease-out; }
@@ -256,11 +315,16 @@ export default function LiveCarousel() {
         .section-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.4); letter-spacing: 0.05em; margin-bottom: 10px; padding: 0 24px; }
         .carousel-wrap { padding: 20px 0; }
 
-        .carousel-track { display: flex; gap: 12px; overflow-x: auto; padding: 0 24px 12px; min-height: 152px; }
+        /* No visible scrollbar -- overflow-x still scrolls via touch/
+           trackpad/arrow keys, but the bar itself is hidden across
+           browsers so the rail reads as a clean edge-to-edge strip
+           instead of a classic OS scroll widget. */
+        .carousel-track {
+          display: flex; gap: 12px; overflow-x: auto; padding: 0 24px 12px; min-height: 152px;
+          scrollbar-width: none; -ms-overflow-style: none;
+        }
+        .carousel-track::-webkit-scrollbar { display: none; }
 
-        /* MATCH CARD — tighter, more consistent height; live cards get a
-           slightly brighter border treatment to visually rank above
-           completed ones without needing a badge to do all the work. */
         .match-card {
           background: var(--outfield);
           border: 1px solid rgba(240,242,245,0.08);
@@ -271,14 +335,18 @@ export default function LiveCarousel() {
           padding: 16px 18px;
           position: relative;
           cursor: pointer;
-          transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+          transition: border-color 0.22s ease, transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease;
           display: flex;
           flex-direction: column;
           justify-content: space-between;
-          animation: cardRise 0.35s ease-out;
+          animation: cardRise 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards;
         }
+        .match-card:nth-child(1) { animation-delay: 0.02s; }
+        .match-card:nth-child(2) { animation-delay: 0.06s; }
+        .match-card:nth-child(3) { animation-delay: 0.1s; }
+        .match-card:nth-child(4) { animation-delay: 0.14s; }
 
-        .match-card:hover { border-color: rgba(232,0,58,0.5); transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.35); }
+        .match-card:hover { border-color: rgba(232,0,58,0.5); transform: translateY(-4px) scale(1.015); box-shadow: 0 10px 24px rgba(0,0,0,0.4); }
         .match-card::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; border-radius: 6px 6px 0 0; background: rgba(240,242,245,0.12); }
         .match-card.is-live::before { background: var(--blood-red); }
 
@@ -308,9 +376,6 @@ export default function LiveCarousel() {
         .back-btn { background: none; border: none; color: rgba(240,242,245,0.5); font-size: 11px; font-family: 'JetBrains Mono', monospace; margin-bottom: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 0; transition: color 0.2s; }
         .back-btn:hover { color: var(--crease-white); }
 
-        /* GLANCE SCOREBOARD — signature element. Both innings' key numbers
-           readable in one look, stadium-board style, instead of a thin
-           header line. This replaces the old cramped mp-header. */
         .scoreboard {
           background: var(--outfield);
           border: 1px solid rgba(240,242,245,0.08);
@@ -335,20 +400,32 @@ export default function LiveCarousel() {
 
         .scoreboard-divider { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: rgba(240,242,245,0.25); font-weight: 700; text-align: center; }
 
+        /* BALL TRACKER -- current-over strip */
+        .ball-tracker { display: flex; align-items: center; gap: 10px; margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(240,242,245,0.06); }
+        .ball-tracker-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.35); letter-spacing: 0.06em; flex-shrink: 0; }
+        .ball-tracker-dots { display: flex; gap: 6px; flex-wrap: wrap; }
+        .ball-pill {
+          display: inline-flex; align-items: center; justify-content: center;
+          min-width: 22px; height: 22px; padding: 0 5px; border-radius: 5px;
+          font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700;
+          background: rgba(240,242,245,0.06); color: rgba(240,242,245,0.55);
+          animation: ballIn 0.3s ease-out backwards;
+        }
+        .ball-pill-wicket { background: var(--blood-red); color: #fff; }
+        .ball-pill-six { background: var(--bail-amber); color: #1a1200; }
+        .ball-pill-four { background: rgba(245,166,35,0.25); color: var(--bail-amber); }
+        .ball-pill-dot { background: rgba(240,242,245,0.04); color: rgba(240,242,245,0.3); }
+
         .scoreboard-note { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--bail-amber); margin-top: 14px; }
 
-        .scoreboard-toss { margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(240,242,245,0.06); display: flex; align-items: baseline; gap: 10px; }
+        .scoreboard-lastwkt, .scoreboard-toss { margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(240,242,245,0.06); display: flex; align-items: baseline; gap: 10px; }
         .toss-kicker { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.35); letter-spacing: 0.06em; flex-shrink: 0; }
         .toss-line { font-size: 12px; color: rgba(240,242,245,0.65); font-weight: 500; }
 
         .mp-header-loading { padding: 60px 24px; text-align: center; border-radius: 8px; }
 
-        .mp-body { background: var(--pitch-black); border: 1px solid rgba(232,0,58,0.2); border-top: none; border-radius: 0 0 8px 8px; overflow: hidden; display: grid; grid-template-columns: 1fr 1fr 1.1fr; }
-        .mp-body-single { grid-template-columns: 1fr 1.2fr; }
+        .mp-body { background: var(--pitch-black); border: 1px solid rgba(232,0,58,0.2); border-top: none; border-radius: 0 0 8px 8px; overflow: hidden; display: grid; }
 
-        /* No visible scrollbars — content is capped (see InningsPanel:
-           top 5 batters / top 4 bowlers shown, rest available via
-           expand) so panels size to their content instead of scrolling. */
         .innings-col { padding: 18px 20px; }
         .innings-col.border-left { border-left: 1px solid rgba(240,242,245,0.08); }
 
@@ -382,7 +459,7 @@ export default function LiveCarousel() {
         .loading-state { color: rgba(240,242,245,0.4); font-size: 11px; padding: 40px 0; text-align: center; width: 100%; }
 
         @media (max-width: 768px) {
-          .mp-body, .mp-body-no-rail:not(.mp-body-single) { grid-template-columns: 1fr; }
+          .mp-body { grid-template-columns: 1fr !important; }
           .innings-col.border-left, .mp-commentary-rail { border-left: none; border-top: 1px solid rgba(240,242,245,0.08); }
           .scoreboard-grid { gap: 10px; }
           .sb-team-score { font-size: 24px; }
@@ -401,10 +478,6 @@ const styleFor = {
   dot:    { bg: 'transparent', border: 'rgba(240,242,245,0.08)', label: 'rgba(240,242,245,0.3)', labelText: '', size: '11px', weight: '400' }
 };
 
-// Renders one innings' batting + bowling tables, capped to the top
-// performers so the panel sizes to its content instead of needing a
-// visible internal scrollbar. `accent` picks amber (1st innings, target)
-// or red (2nd innings, chase) to match the rest of the DeathOvers palette.
 function InningsPanel({ innings, accent, label }) {
   const batters = innings.batters || [];
   const bowlers = innings.bowlers || [];
@@ -414,7 +487,7 @@ function InningsPanel({ innings, accent, label }) {
   return (
     <div className="innings-col border-left">
       <div className={`inn-heading accent-${accent}`}>
-        {label}: {innings.team || 'TBD'} · {innings.score || '0/0'} ({innings.overs || '0.0'})
+        {label}: {innings.team || 'TBD'} . {innings.score || '0/0'} ({innings.overs || '0.0'})
       </div>
 
       {visibleBatters.length > 0 && (
