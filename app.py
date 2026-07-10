@@ -76,6 +76,8 @@ import requests
 from flask import Flask, jsonify
 from flask_cors import CORS
 
+from team_crests import crest_image_id
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("deathovers-backend")
 
@@ -110,10 +112,16 @@ REFRESH_INTERVAL_SECONDS = int(os.environ.get("REFRESH_INTERVAL_SECONDS", 900)) 
 DETAIL_REFRESH_INTERVAL_SECONDS = int(os.environ.get("DETAIL_REFRESH_INTERVAL_SECONDS", 1800))  # 30 min
 REQUEST_TIMEOUT_SECONDS = 10
 
+# CRICKETDATA_API_KEY / CRICKETDATA_BASE / _cricketdata_get are used ONLY
+# to fill upcoming/completed carousel slots when nothing is live -- see
+# _refresh_live_matches. Cricbuzz (RAPIDAPI_KEY) is the ONLY source for
+# anything live or for any score display, which is what keeps the
+# carousel and match-detail page from ever disagreeing on a live score.
 if not CRICKETDATA_API_KEY:
     log.warning(
-        "CRICKETDATA_API_KEY is not set. The carousel list will stay "
-        "empty. Set this env var on Render."
+        "CRICKETDATA_API_KEY is not set. Upcoming/completed carousel "
+        "slots will stay empty when nothing is live; live matches are "
+        "unaffected (Cricbuzz-only)."
     )
 
 if not RAPIDAPI_KEY:
@@ -477,62 +485,189 @@ def _extract_ball_tracker(commentary: list[dict]) -> list[dict]:
 
 def _shape_match_for_carousel(m: dict) -> dict:
     """
-    Map a single entry from GET /currentMatches (CricketData.org) into the
-    shape LiveCarousel.jsx expects for its `matches` array. UNCHANGED from
-    v2 and still uses CricketData -- only the match-DETAIL view has moved
-    to Cricbuzz exclusively.
+    Map ONE Cricbuzz match object (real confirmed shape, 2026-07-10 sample
+    -- matchid/matchformat/team1/team2/venueinfo/state/status) into the
+    shape LiveCarousel.jsx expects. This is now the ONLY shaper used for
+    the carousel -- CricketData.org is fully retired from the score path
+    as of this change, closing the two-provider mismatch risk for good
+    (carousel and match-detail now always agree because they're the same
+    provider, and for an open match, the same single-snapshot miniscore
+    fetch backs both).
+
+    `m` may come from three different Cricbuzz list endpoints (live,
+    upcoming/schedule, recent/archive) which don't all carry a `score`
+    block -- upcoming matches simply won't have one, which _fmt already
+    handles by returning None.
     """
-    score_list = m.get("score") or []
-    teams = m.get("teams") or []
-    home_name = teams[0] if len(teams) > 0 else "TBD"
-    away_name = teams[1] if len(teams) > 1 else "TBD"
+    info = m  # matchInfo dict, already unwrapped by the caller
+    team1 = info.get("team1", {}) or {}
+    team2 = info.get("team2", {}) or {}
+    home_name = team1.get("teamname", "TBD")
+    away_name = team2.get("teamname", "TBD")
 
-    first_innings_score = score_list[0] if len(score_list) > 0 else None
-    second_innings_score = score_list[1] if len(score_list) > 1 else None
+    state = (info.get("state") or "").lower()
+    if state in ("in progress", "innings break", "toss", "stumps"):
+        status = "LIVE"
+    elif state in ("complete", "abandoned", "no result"):
+        status = "COMPLETED"
+    else:
+        status = "UPCOMING"
 
-    def _fmt(score: dict | None) -> dict:
+    def _fmt(score: dict | None) -> "dict | None":
+        # Returns None (not a "yet to bat" placeholder string) when a
+        # team hasn't batted/isn't available yet -- the frontend renders
+        # an absent score line instead of a text tag for this signal.
         if not score:
-            return {"score": "yet to bat", "info": ""}
-        r = score.get("r", 0)
-        w = score.get("w", 0)
-        o = score.get("o", 0)
+            return None
+        r = score.get("runs", score.get("r", 0))
+        w = score.get("wickets", score.get("w", 0))
+        o = score.get("overs", score.get("o", 0))
         return {"score": f"{r}/{w}", "info": f"{o}"}
 
-    home_score = first_innings_score
-    away_score = second_innings_score
+    # matchScore, when present on live-list entries, nests per-innings
+    # score blocks keyed by team -- shape confirmed against the live
+    # endpoint separately from the sample match-facts payload above
+    # (which is a completed match and has no live score block at all).
+    match_score = info.get("matchScore") or {}
+    home_score = (match_score.get("team1Score") or {}).get("inngs1")
+    away_score = (match_score.get("team2Score") or {}).get("inngs1")
+
+    raw_format = (info.get("matchformat") or "").strip()
+    match_format = raw_format.upper() if raw_format else "UNKNOWN"
+
+    venue = info.get("venueinfo", {}) or {}
+    venue_label = venue.get("ground", "") or info.get("seriesname", "")
 
     return {
-        "id": m.get("id"),
-        "venue": m.get("venue", ""),
-        "status": "LIVE" if m.get("matchStarted") and not m.get("matchEnded") else
-                   ("COMPLETED" if m.get("matchEnded") else "UPCOMING"),
-        "matchName": m.get("name", f"{home_name} vs {away_name}"),
+        "id": info.get("matchid"),
+        "venue": venue_label,
+        "status": status,
+        "matchName": f"{home_name} vs {away_name}",
+        "matchFormat": match_format,
         "score": {
             "home": _fmt(home_score),
             "away": _fmt(away_score),
         },
-        "chaseNote": m.get("status", ""),
+        "chaseNote": info.get("status", ""),
         "teams": [home_name, away_name],
+        # imageid on team1/team2 was 0 in the confirmed sample, so this
+        # still leans on the name-based crest lookup rather than trusting
+        # a field that may not be populated for every match.
+        "homeImageId": team1.get("imageid") or crest_image_id(home_name),
+        "awayImageId": team2.get("imageid") or crest_image_id(away_name),
     }
 
 
+def _iter_cricbuzz_matches(list_payload: dict | None):
+    """
+    Shared walker for Cricbuzz's typeMatches/seriesMatches/matches nesting
+    -- the same structure used by /matches/v1/live, and (per Cricbuzz's
+    Schedule/Archive endpoint family) also the upcoming and recent list
+    responses. Yields each match's `matchInfo` dict.
+    """
+    if not list_payload:
+        return
+    for type_block in list_payload.get("typeMatches", []):
+        for series in type_block.get("seriesMatches", []):
+            wrapper = series.get("seriesAdWrapper", {})
+            for match in wrapper.get("matches", []):
+                info = match.get("matchInfo", {})
+                # matchScore lives as a sibling of matchInfo on the live
+                # endpoint's match objects, not nested inside it -- fold
+                # it in here so _shape_match_for_carousel can read it off
+                # one dict.
+                if "matchScore" in match:
+                    info = {**info, "matchScore": match["matchScore"]}
+                if info:
+                    yield info
+
+
 def _refresh_live_matches() -> None:
-    data = _cricketdata_get("currentMatches", {"offset": 0})
-    if data is None:
+    """
+    HYBRID sourcing, deliberately: Cricbuzz is the ONLY source for LIVE
+    matches (and therefore the only source ANY score ever comes from --
+    this is what keeps the carousel and match-detail page from ever
+    disagreeing, since a live match's score is always Cricbuzz's). Once a
+    match isn't live, score display isn't a concern anymore, so
+    CricketData.org is used ONLY to fill in upcoming/completed slots so
+    the carousel doesn't go empty between live windows -- CricketData
+    never supplies a score for anything Cricbuzz also has live data for.
+
+    (An earlier version of this function tried to also pull
+    upcoming/recent from two more Cricbuzz endpoints -- reverted because
+    those paths were never confirmed against a real payload, unlike
+    /matches/v1/live which was already fixed from a real 404 in this
+    repo's history. Guessing paths here again risked repeating that
+    exact mistake.)
+    """
+    live_data = _cricbuzz_get("/matches/v1/live")
+    live_shaped = [_shape_match_for_carousel(info) for info in _iter_cricbuzz_matches(live_data)]
+    live_ids_by_teams = {tuple(sorted(m["teams"])) for m in live_shaped}
+
+    cricketdata_data = _cricketdata_get("currentMatches", {"offset": 0})
+    fill_shaped = []
+    if cricketdata_data is not None:
+        for m in cricketdata_data.get("data", []):
+            teams = m.get("teams") or []
+            if len(teams) < 2:
+                continue
+            # Skip anything CricketData thinks is live/in-progress -- that
+            # case is Cricbuzz's job. This also naturally de-dupes a match
+            # that both providers see as live, by team-name pair (best
+            # available cross-provider key; see the historical note on
+            # _resolve_cricbuzz_match_id about there being no shared id).
+            if m.get("matchStarted") and not m.get("matchEnded"):
+                continue
+            if tuple(sorted(teams[:2])) in live_ids_by_teams:
+                continue
+            fill_shaped.append(_shape_fill_match_from_cricketdata(m))
+
+    shaped = live_shaped + fill_shaped
+
+    if live_data is None and cricketdata_data is None:
         with _cache_lock:
             _cache["last_error"] = f"refresh failed at {datetime.now(timezone.utc).isoformat()}"
-        log.warning("Live match refresh failed; serving stale cache (if any).")
+        log.warning("Live match refresh failed on both providers; serving stale cache (if any).")
         return
-
-    raw_matches = data.get("data", [])
-    shaped = [_shape_match_for_carousel(m) for m in raw_matches]
 
     with _cache_lock:
         _cache["live_and_recent"] = shaped
         _cache["last_refreshed"] = datetime.now(timezone.utc).isoformat()
         _cache["last_error"] = None
 
-    log.info("Refreshed live matches: %d matches cached.", len(shaped))
+    log.info("Refreshed carousel: %d live (Cricbuzz) + %d upcoming/completed (CricketData) cached.",
+              len(live_shaped), len(fill_shaped))
+
+
+def _shape_fill_match_from_cricketdata(m: dict) -> dict:
+    """
+    Shape a CricketData.org match for the upcoming/completed "fill"
+    slots ONLY -- never called for anything live. Deliberately does NOT
+    populate a `score` block even if CricketData has one (e.g. for a
+    just-finished match), since that number could disagree with what
+    Cricbuzz would show if/when this same match becomes available on
+    Cricbuzz's side too. Upcoming/completed cards read fine with no
+    score line; a possibly-wrong score is worse than none.
+    """
+    teams = m.get("teams") or []
+    home_name = teams[0] if len(teams) > 0 else "TBD"
+    away_name = teams[1] if len(teams) > 1 else "TBD"
+
+    raw_format = (m.get("matchType") or "").strip()
+    match_format = raw_format.upper() if raw_format else "UNKNOWN"
+
+    return {
+        "id": m.get("id"),
+        "venue": m.get("venue", ""),
+        "status": "COMPLETED" if m.get("matchEnded") else "UPCOMING",
+        "matchName": m.get("name", f"{home_name} vs {away_name}"),
+        "matchFormat": match_format,
+        "score": {"home": None, "away": None},
+        "chaseNote": m.get("status", ""),
+        "teams": [home_name, away_name],
+        "homeImageId": crest_image_id(home_name),
+        "awayImageId": crest_image_id(away_name),
+    }
 
 
 def _shape_match_details_from_cricbuzz(scorecard_data: dict | None, commentary: list[dict],
@@ -575,6 +710,23 @@ def _shape_match_details_from_cricbuzz(scorecard_data: dict | None, commentary: 
         s1 = _find_score(1)
         s2 = _find_score(2)
 
+        # OVERWRITE the score/overs on innings1/innings2 with the
+        # miniscore snapshot (same fetch as commentary/CRR/RRR), instead
+        # of leaving the /scard-derived values in place. /scard is a
+        # separate network call from /comm and can be a ball or two
+        # behind by the time both responses land -- previously this
+        # showed up as the InningsPanel heading (e.g. "132/3 (11.4)")
+        # disagreeing with the scoreboard above it (e.g. "135/3 (11.5)")
+        # and with the commentary feed. Batter/bowler rows still come
+        # from /scard since miniscore has no per-player breakdown.
+        def _overwrite_score(innings: dict | None, s: dict | None) -> None:
+            if innings is not None and s is not None:
+                innings["score"] = f"{s.get('runs', 0)}/{s.get('wickets', 0)}"
+                innings["overs"] = str(s.get("overs", ""))
+
+        _overwrite_score(innings1, s1)
+        _overwrite_score(innings2, s2)
+
         def _fmt_live(s: dict | None) -> dict:
             if not s:
                 return {"score": "yet to bat", "info": ""}
@@ -610,33 +762,33 @@ def _shape_match_details_from_cricbuzz(scorecard_data: dict | None, commentary: 
 
 def _refresh_match_detail(match_id: str) -> None:
     """
-    Refresh one match's detail entry. `match_id` is the CricketData id the
-    frontend already knows (from the carousel).
+    Refresh one match's detail entry. `match_id` IS the Cricbuzz numeric
+    matchid directly now -- as of the single-provider consolidation, the
+    carousel is built entirely from Cricbuzz (_refresh_live_matches), so
+    there is no second ID system to bridge anymore. The old team-name
+    resolution step (_resolve_cricbuzz_match_id) is no longer needed on
+    this path and is kept only as a fallback for any stale cached detail
+    entry from before the migration.
     """
-    with _detail_cache_lock:
-        existing_entry = _detail_cache.get(match_id)
-        cached_cricbuzz_id = existing_entry.get("cricbuzz_match_id") if existing_entry else None
-
-    with _cache_lock:
-        carousel_entry = next((m for m in _cache["live_and_recent"] if str(m.get("id")) == str(match_id)), None)
-
-    cricbuzz_match_id = cached_cricbuzz_id
-    if cricbuzz_match_id is None and RAPIDAPI_KEY and carousel_entry:
-        teams = carousel_entry.get("teams", [])
-        if len(teams) >= 2 and teams[0] != "TBD" and teams[1] != "TBD":
-            cricbuzz_match_id = _resolve_cricbuzz_match_id(teams[0], teams[1])
-            if cricbuzz_match_id:
-                log.info("Resolved Cricbuzz match id %s for %s vs %s", cricbuzz_match_id, teams[0], teams[1])
-            else:
-                log.info("Could not resolve a Cricbuzz match id for %s vs %s (detail view will stay empty)", teams[0], teams[1])
+    cricbuzz_match_id = str(match_id)
 
     if not cricbuzz_match_id:
-        log.warning("No Cricbuzz match id available for %s; cannot refresh detail.", match_id)
+        log.warning("No match id available; cannot refresh detail.")
         return
 
     comm_result = _fetch_cricbuzz_commentary_and_miniscore(cricbuzz_match_id, innings_id=1)
     commentary = comm_result["commentary"]
     miniscore = comm_result["miniscore"]
+
+    # scard is fetched immediately here, back-to-back with the comm call
+    # above, to keep the drift window between the two Cricbuzz requests
+    # as small as possible. It is STILL a second network round-trip, so a
+    # ball can in principle land in between -- that's why the score/CRR
+    # shown to the user always comes from `miniscore` (see
+    # _shape_match_details_from_cricbuzz), never from this scorecard
+    # fetch. scard is used ONLY for the batter/bowler stat tables, which
+    # have no equivalent in miniscore.
+    scorecard_data = _fetch_cricbuzz_scorecard(cricbuzz_match_id)
 
     if miniscore:
         innings_scores = (miniscore.get("inningsscores") or {}).get("inningsscore", [])
@@ -646,8 +798,6 @@ def _refresh_match_detail(match_id: str) -> None:
             if comm_result_2["commentary"]:
                 commentary = comm_result_2["commentary"]
                 miniscore = comm_result_2["miniscore"] or miniscore
-
-    scorecard_data = _fetch_cricbuzz_scorecard(cricbuzz_match_id)
 
     shaped = _shape_match_details_from_cricbuzz(scorecard_data, commentary, miniscore)
     with _detail_cache_lock:
@@ -659,6 +809,98 @@ def _refresh_match_detail(match_id: str) -> None:
     log.info("Refreshed match detail for %s via Cricbuzz (commentary rows: %d)", match_id, len(commentary))
 
 
+# Smart per-match refresh interval. A flat 30min interval wastes budget
+# on quiet middle-overs stretches AND is far too slow for the moments
+# that actually matter for a "death overs" product -- the last 5 overs,
+# or right after a wicket when the picture changes fast. Instead of one
+# constant, each match gets classified into a tier every time we check
+# whether it's due, using ONLY data already sitting in the cache (no
+# extra API call needed to decide the interval).
+#
+# Tiers (fastest first):
+#   HOT   -- death overs (16-20 in a 20-over innings, last 5 overs of a
+#            50-over innings) OR a wicket fell in the last 2 refreshes.
+#   WARM  -- match is LIVE but outside the above (normal middle overs).
+#   COLD  -- UPCOMING or COMPLETED; no need to hammer this at all.
+#
+# BUDGET GUARDRAIL: RapidAPI free tier is 100 calls/day total, shared
+# across every match. HOT tier is only affordable if just 1-2 matches
+# are hot at once, which matches reality (death overs are the shortest
+# phase of a match, and true overlaps across matches are rare on a
+# single free-tier key). If FREE_TIER_MODE is on, HOT tier is capped so
+# a single match can't alone consume the whole daily budget in a short
+# session -- it degrades to WARM_INTERVAL once a match has used more
+# than HOT_TIER_DAILY_CALL_CAP calls today.
+FREE_TIER_MODE = os.environ.get("FREE_TIER_MODE", "true").lower() == "true"
+
+HOT_INTERVAL_SECONDS = int(os.environ.get("HOT_INTERVAL_SECONDS", 45))         # death overs / post-wicket
+WARM_INTERVAL_SECONDS = int(os.environ.get("WARM_INTERVAL_SECONDS", 300))      # normal live overs, 5 min
+COLD_INTERVAL_SECONDS = int(os.environ.get("COLD_INTERVAL_SECONDS", 1800))     # upcoming/completed, 30 min
+HOT_TIER_DAILY_CALL_CAP = int(os.environ.get("HOT_TIER_DAILY_CALL_CAP", 40))   # per match, per day
+
+# Total overs an innings is expected to run -- used only to detect "death
+# overs" (last 5). Comes from the match format if the carousel entry has
+# it; falls back to 20 (T20) since that's the large majority of matches
+# this product covers day-to-day.
+def _innings_total_overs(carousel_entry: dict | None) -> "int | None":
+    # Returns None for Test matches -- there is no fixed over cap, so
+    # "death overs" (a limited-overs concept) doesn't apply. Callers
+    # must treat None as "never hot on this basis" rather than crashing
+    # on a bogus comparison.
+    fmt = (carousel_entry or {}).get("matchFormat", "").upper()
+    if "TEST" in fmt:
+        return None
+    if "ODI" in fmt or "50" in fmt or "LIST A" in fmt:
+        return 50
+    return 20
+
+
+def _is_death_overs(current_over_str: str, total_overs: "int | None") -> bool:
+    if total_overs is None:
+        return False
+    try:
+        current_over = float(current_over_str)
+    except (TypeError, ValueError):
+        return False
+    return current_over >= (total_overs - 5)
+
+
+def _wicket_in_recent_ball_tracker(shaped_detail: dict | None) -> bool:
+    tracker = (shaped_detail or {}).get("ballTracker", [])
+    return any(b.get("type") == "wicket" for b in tracker)
+
+
+def _refresh_interval_for_match(match_id: str, carousel_entry: dict | None,
+                                  detail_entry: dict | None) -> int:
+    status = (carousel_entry or {}).get("status")
+    if status != "LIVE":
+        return COLD_INTERVAL_SECONDS
+
+    shaped = (detail_entry or {}).get("data")
+    live_score = (shaped or {}).get("liveScore") or {}
+    # crr/rrr live under liveScore; overs info lives on whichever side is
+    # currently batting -- home if innings2 hasn't started, else away.
+    current_overs = None
+    if shaped and not shaped.get("innings2"):
+        current_overs = (live_score.get("home") or {}).get("info")
+    else:
+        current_overs = (live_score.get("away") or {}).get("info")
+
+    total_overs = _innings_total_overs(carousel_entry)
+    hot = _is_death_overs(current_overs, total_overs) or _wicket_in_recent_ball_tracker(shaped)
+
+    if hot:
+        if FREE_TIER_MODE:
+            calls_today = (detail_entry or {}).get("calls_today", 0)
+            if calls_today >= HOT_TIER_DAILY_CALL_CAP:
+                log.info("Match %s hit HOT tier daily call cap (%d) -- degrading to WARM interval.",
+                         match_id, HOT_TIER_DAILY_CALL_CAP)
+                return WARM_INTERVAL_SECONDS
+        return HOT_INTERVAL_SECONDS
+
+    return WARM_INTERVAL_SECONDS
+
+
 # ---------------------------------------------------------------------------
 # Background refresh loop
 # ---------------------------------------------------------------------------
@@ -667,6 +909,7 @@ def _background_loop() -> None:
     _refresh_live_matches()
 
     last_live_refresh = time.time()
+    last_call_count_reset = time.time()
     while True:
         time.sleep(5)
         now = time.time()
@@ -675,13 +918,32 @@ def _background_loop() -> None:
             _refresh_live_matches()
             last_live_refresh = now
 
+        # Reset each match's daily HOT-tier call counter once every 24h,
+        # so the cap in _refresh_interval_for_match tracks a rolling day
+        # rather than accumulating forever.
+        if now - last_call_count_reset >= 86400:
+            with _detail_cache_lock:
+                for entry in _detail_cache.values():
+                    entry["calls_today"] = 0
+            last_call_count_reset = now
+
+        with _cache_lock:
+            carousel_by_id = {str(m.get("id")): m for m in _cache["live_and_recent"]}
+
         with _detail_cache_lock:
-            due_for_refresh = [
-                mid for mid, entry in _detail_cache.items()
-                if now - _parse_iso(entry["last_refreshed"]) >= DETAIL_REFRESH_INTERVAL_SECONDS
-            ]
+            snapshot = dict(_detail_cache)
+
+        due_for_refresh = []
+        for mid, entry in snapshot.items():
+            interval = _refresh_interval_for_match(mid, carousel_by_id.get(mid), entry)
+            if now - _parse_iso(entry["last_refreshed"]) >= interval:
+                due_for_refresh.append(mid)
+
         for mid in due_for_refresh:
             _refresh_match_detail(mid)
+            with _detail_cache_lock:
+                if mid in _detail_cache:
+                    _detail_cache[mid]["calls_today"] = _detail_cache[mid].get("calls_today", 0) + 1
 
 
 def _parse_iso(ts: str) -> float:
@@ -724,8 +986,8 @@ def health():
         cache_snapshot = dict(_cache)
     return jsonify({
         "status": "ok",
-        "hasCricketDataKey": bool(CRICKETDATA_API_KEY),
-        "hasRapidApiKey": bool(RAPIDAPI_KEY),
+        "hasCricketDataKey": bool(CRICKETDATA_API_KEY),  # fills upcoming/completed slots only
+        "hasRapidApiKey": bool(RAPIDAPI_KEY),  # required for any live match / score
         "refreshIntervalSeconds": REFRESH_INTERVAL_SECONDS,
         "detailRefreshIntervalSeconds": DETAIL_REFRESH_INTERVAL_SECONDS,
         "cache": cache_snapshot,
