@@ -49,6 +49,31 @@ export default function LiveCarousel() {
     setActiveMatchId(null);
   };
 
+  // AUTO-ADVANCING TICKER -- drives carousel-track.scrollLeft on a rAF
+  // loop instead of relying on manual swipe/drag. Pauses on hover/touch
+  // so the user can still read a card, and loops back to 0 once it hits
+  // the end (using scrollWidth, so it self-adjusts to however many
+  // cards are actually rendered).
+  const trackRef = React.useRef(null);
+  const pausedRef = React.useRef(false);
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    let raf;
+    const PX_PER_FRAME = 0.5;
+    const step = () => {
+      if (!pausedRef.current && track) {
+        track.scrollLeft += PX_PER_FRAME;
+        if (track.scrollLeft + track.clientWidth >= track.scrollWidth - 1) {
+          track.scrollLeft = 0;
+        }
+      }
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [displayMatches?.length]);
+
   if (loading) {
     return <div className="loading-state font-mono">ESTABLISHING SECURE UPLINK TO DATA CLUSTER...</div>;
   }
@@ -107,6 +132,31 @@ export default function LiveCarousel() {
     return raw;
   };
 
+  // Team crest lookup -- built off Cricbuzz's public team-list imageId
+  // (no extra RapidAPI call/quota needed). teamId/imageId should come
+  // from the backend match payload when available; falls back to a
+  // 2-letter placeholder badge if unmapped so a bad/missing id never
+  // breaks the card layout.
+  const crestUrl = (imageId) =>
+    imageId ? `https://static.cricbuzz.com/a/img/v1/50x50/i1/c${imageId}/x.jpg` : null;
+
+  const TeamCrest = ({ imageId, code }) => {
+    const [failed, setFailed] = useState(false);
+    const src = crestUrl(imageId);
+    if (!src || failed) {
+      return <span className="team-crest team-crest-fallback">{(code || '?').slice(0, 2)}</span>;
+    }
+    return (
+      <img
+        className="team-crest"
+        src={src}
+        alt={code || ''}
+        loading="lazy"
+        onError={() => setFailed(true)}
+      />
+    );
+  };
+
   return (
     <div className="live-engine-wrapper">
 
@@ -114,10 +164,22 @@ export default function LiveCarousel() {
       {!activeMatchId && (
         <div className="carousel-wrap">
           <div className="section-label">LIVE NOW</div>
-          <div className="carousel-track">
+          <div
+            className="carousel-track"
+            ref={trackRef}
+            onMouseEnter={() => { pausedRef.current = true; }}
+            onMouseLeave={() => { pausedRef.current = false; }}
+            onTouchStart={() => { pausedRef.current = true; }}
+            onTouchEnd={() => { pausedRef.current = false; }}
+          >
 
             {displayMatches.map((match) => {
               const isLive = match.status === 'LIVE';
+              // Backend now sends score.away as null (not a "yet to bat"
+              // string) when that innings hasn't started -- see app.py
+              // _shape_match_for_carousel. Checking for the old string
+              // too, defensively, in case a stale cache/response slips
+              // through during deploy.
               const awayIsPending = !match.score?.away || match.score.away.score === 'yet to bat';
               const homeTeam = safeTeamName(match.matchName?.split(' vs ')[0], "HOME");
               const awayTeam = safeTeamName(match.matchName?.split(' vs ')[1], "AWAY");
@@ -129,29 +191,43 @@ export default function LiveCarousel() {
                 >
                   <div className="match-card-head">
                     <span className="series-tag">{match.venue || "INTERNATIONAL"}</span>
-                    <span className={`status-tag ${isLive ? 'status-live' : 'status-done'}`}>
-                      {isLive && <span className="live-dot"></span>}
-                      {match.status}
-                    </span>
+                    <div className="tag-cluster">
+                      {match.matchFormat && match.matchFormat !== 'UNKNOWN' && (
+                        <span className={`format-badge format-${match.matchFormat.toLowerCase()}`}>
+                          {match.matchFormat}
+                        </span>
+                      )}
+                      <span className={`status-tag ${isLive ? 'status-live' : 'status-done'}`}>
+                        {isLive && <span className="live-dot"></span>}
+                        {match.status}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="team-line">
-                    <span className="team-code">{homeTeam}</span>
+                    <span className="team-code">
+                      <TeamCrest imageId={match.homeImageId} code={homeTeam} />
+                      {homeTeam}
+                    </span>
                     <span className="team-score">
                       {match.score?.home?.score || '-'}
                       <span className="overs-sub"> ({match.score?.home?.info || ''})</span>
                     </span>
                   </div>
-                  <div className={`team-line ${awayIsPending ? 'team-line-pending' : ''}`}>
-                    <span className="team-code">{awayTeam}</span>
-                    <span className="team-score">
-                      {awayIsPending ? (
-                        <span className="pending-label">yet to bat</span>
-                      ) : (
-                        <>{match.score.away.score}<span className="overs-sub"> ({match.score.away.info || ''})</span></>
-                      )}
-                    </span>
-                  </div>
+                  {/* "yet to bat" label removed per design review -- an
+                      unplayed team simply shows no score line rather than
+                      a status tag, keeping the card visually quieter. */}
+                  {!awayIsPending && (
+                    <div className="team-line">
+                      <span className="team-code">
+                        <TeamCrest imageId={match.awayImageId} code={awayTeam} />
+                        {awayTeam}
+                      </span>
+                      <span className="team-score">
+                        {match.score.away.score}<span className="overs-sub"> ({match.score.away.info || ''})</span>
+                      </span>
+                    </div>
+                  )}
 
                   <div className="chase-line">{match.chaseNote || "IN PROGRESS"}</div>
                   <div className="tap-hint">TAP FOR FULL SCORECARD &#9662;</div>
@@ -183,10 +259,17 @@ export default function LiveCarousel() {
               <div className="scoreboard">
                 <div className="scoreboard-top">
                   <span className="series-tag">{activeMatchMeta.venue}</span>
-                  <span className={`status-tag ${activeMatchMeta.status === 'LIVE' ? 'status-live' : 'status-done'}`}>
-                    {activeMatchMeta.status === 'LIVE' && <span className="live-dot"></span>}
-                    {activeMatchMeta.status}
-                  </span>
+                  <div className="tag-cluster">
+                    {activeMatchMeta.matchFormat && activeMatchMeta.matchFormat !== 'UNKNOWN' && (
+                      <span className={`format-badge format-${activeMatchMeta.matchFormat.toLowerCase()}`}>
+                        {activeMatchMeta.matchFormat}
+                      </span>
+                    )}
+                    <span className={`status-tag ${activeMatchMeta.status === 'LIVE' ? 'status-live' : 'status-done'}`}>
+                      {activeMatchMeta.status === 'LIVE' && <span className="live-dot"></span>}
+                      {activeMatchMeta.status}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="scoreboard-grid">
@@ -325,6 +408,19 @@ export default function LiveCarousel() {
         }
         .carousel-track::-webkit-scrollbar { display: none; }
 
+        .team-crest {
+          width: 18px; height: 18px; border-radius: 3px; object-fit: cover;
+          margin-right: 7px; vertical-align: -4px; flex-shrink: 0;
+          background: rgba(240,242,245,0.06);
+        }
+        .team-crest-fallback {
+          display: inline-flex; align-items: center; justify-content: center;
+          width: 18px; height: 18px; border-radius: 3px; margin-right: 7px;
+          vertical-align: -4px; background: rgba(240,242,245,0.08);
+          font-family: 'JetBrains Mono', monospace; font-size: 8px; font-weight: 700;
+          color: rgba(240,242,245,0.5); flex-shrink: 0;
+        }
+
         .match-card {
           background: var(--outfield);
           border: 1px solid rgba(240,242,245,0.08);
@@ -351,6 +447,21 @@ export default function LiveCarousel() {
         .match-card.is-live::before { background: var(--blood-red); }
 
         .match-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
+        .tag-cluster { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+        .format-badge {
+          font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
+          letter-spacing: 0.05em; padding: 2px 6px; border-radius: 3px;
+          border: 1px solid rgba(240,242,245,0.15); color: rgba(240,242,245,0.55);
+          background: rgba(240,242,245,0.04); line-height: 1.4;
+        }
+        /* Format badges stay neutral/mono per brand system -- Bail Amber
+           is reserved for boundaries/turning-point moments only, not
+           static metadata chips, so format doesn't compete for that
+           accent's meaning. */
+        .format-test { border-color: rgba(240,242,245,0.25); color: rgba(240,242,245,0.75); }
+        .format-odi  { border-color: rgba(74,222,128,0.3); color: #4ADE80; }
+        .format-t20  { border-color: rgba(232,0,58,0.3); color: var(--blood-red); }
+        .format-t10  { border-color: rgba(232,0,58,0.3); color: var(--blood-red); }
         .series-tag { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.5); line-height: 1.3; }
 
         .status-tag { font-family: 'JetBrains Mono', monospace; font-size: 9px; display: flex; align-items: center; gap: 5px; font-weight: 700; letter-spacing: 0.04em; white-space: nowrap; flex-shrink: 0; }
@@ -442,6 +553,11 @@ export default function LiveCarousel() {
         .stat-table td:first-child { text-align: left; font-weight: 500; font-family: 'Inter', sans-serif; }
         .stat-table .dim td { color: rgba(240,242,245,0.4); font-weight: 400; }
         .stat-more { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.3); text-align: center; padding-top: 2px; }
+        .stat-more-btn {
+          display: block; width: 100%; background: none; border: none; cursor: pointer;
+          color: var(--bail-amber); opacity: 0.7; transition: opacity 0.15s;
+        }
+        .stat-more-btn:hover { opacity: 1; }
 
         .mp-commentary-rail { background: #0e1015; padding: 18px 20px; border-left: 1px solid rgba(240,242,245,0.08); }
         .rail-label { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--blood-red); letter-spacing: 0.08em; font-weight: 700; }
@@ -481,8 +597,10 @@ const styleFor = {
 function InningsPanel({ innings, accent, label }) {
   const batters = innings.batters || [];
   const bowlers = innings.bowlers || [];
-  const visibleBatters = batters.slice(0, 5);
-  const visibleBowlers = bowlers.slice(0, 4);
+  const [battersExpanded, setBattersExpanded] = useState(false);
+  const [bowlersExpanded, setBowlersExpanded] = useState(false);
+  const visibleBatters = battersExpanded ? batters : batters.slice(0, 5);
+  const visibleBowlers = bowlersExpanded ? bowlers : bowlers.slice(0, 4);
 
   return (
     <div className="innings-col border-left">
@@ -503,8 +621,14 @@ function InningsPanel({ innings, accent, label }) {
               ))}
             </tbody>
           </table>
-          {batters.length > visibleBatters.length && (
-            <div className="stat-more">+{batters.length - visibleBatters.length} more</div>
+          {batters.length > 5 && (
+            <button
+              type="button"
+              className="stat-more stat-more-btn"
+              onClick={() => setBattersExpanded(v => !v)}
+            >
+              {battersExpanded ? 'show less' : `+${batters.length - 5} more`}
+            </button>
           )}
         </>
       )}
@@ -524,8 +648,14 @@ function InningsPanel({ innings, accent, label }) {
               ))}
             </tbody>
           </table>
-          {bowlers.length > visibleBowlers.length && (
-            <div className="stat-more">+{bowlers.length - visibleBowlers.length} more</div>
+          {bowlers.length > 4 && (
+            <button
+              type="button"
+              className="stat-more stat-more-btn"
+              onClick={() => setBowlersExpanded(v => !v)}
+            >
+              {bowlersExpanded ? 'show less' : `+${bowlers.length - 4} more`}
+            </button>
           )}
         </>
       )}
