@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 export default function LiveCarousel() {
   const [matches, setMatches] = useState([]);
@@ -8,6 +8,9 @@ export default function LiveCarousel() {
   const [activeMatchId, setActiveMatchId] = useState(null);
   const [matchDetails, setMatchDetails] = useState({});
   const [detailLoading, setDetailLoading] = useState(false);
+
+  // Reference for manual scrolling
+  const scrollRef = useRef(null);
 
   useEffect(() => {
     const fetchLiveCluster = async () => {
@@ -49,21 +52,12 @@ export default function LiveCarousel() {
     setActiveMatchId(null);
   };
 
-  // --- SORTING AND FILTERING LOGIC ---
-  // MOVED UP (fix for "Cannot access 'displayMatches' before
-  // initialization" under Astro's strict top-to-bottom SSR execution):
-  // this used to live after the `if (loading) return` early-return and
-  // after the auto-scroll useEffect below, but that effect's dependency
-  // array reads `displayMatches?.length`, so displayMatches has to exist
-  // before that hook runs. It also has to be computed before ANY early
-  // return, since hooks can't follow a conditional return (Rules of
-  // Hooks) -- so this whole block now sits above both the auto-scroll
-  // effect and the loading check.
-  //
-  // LIVE matches always surface first (deterministic, not incidental --
-  // filtered explicitly by status rather than relying on API ordering),
-  // then UPCOMING, then a capped tail of recently COMPLETED matches so the
-  // rail doesn't get flooded with old results.
+  const scrollByCard = (direction) => {
+    if (!scrollRef.current) return;
+    const cardWidth = 288; // 272px card + 16px gap
+    scrollRef.current.scrollBy({ left: direction * cardWidth, behavior: 'smooth' });
+  };
+
   let displayMatches = [];
   if (matches.length > 0) {
     const live = matches.filter(m => m.status === 'LIVE');
@@ -79,31 +73,6 @@ export default function LiveCarousel() {
     }];
   }
 
-  // AUTO-ADVANCING TICKER -- drives carousel-track.scrollLeft on a rAF
-  // loop instead of relying on manual swipe/drag. Pauses on hover/touch
-  // so the user can still read a card, and loops back to 0 once it hits
-  // the end (using scrollWidth, so it self-adjusts to however many
-  // cards are actually rendered).
-  const trackRef = React.useRef(null);
-  const pausedRef = React.useRef(false);
-  useEffect(() => {
-    const track = trackRef.current;
-    if (!track) return;
-    let raf;
-    const PX_PER_FRAME = 0.5;
-    const step = () => {
-      if (!pausedRef.current && track) {
-        track.scrollLeft += PX_PER_FRAME;
-        if (track.scrollLeft + track.clientWidth >= track.scrollWidth - 1) {
-          track.scrollLeft = 0;
-        }
-      }
-      raf = requestAnimationFrame(step);
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [displayMatches?.length]);
-
   if (loading) {
     return <div className="loading-state font-mono">ESTABLISHING SECURE UPLINK TO DATA CLUSTER...</div>;
   }
@@ -111,42 +80,21 @@ export default function LiveCarousel() {
   const activeData = activeMatchId ? (matchDetails[activeMatchId] || null) : null;
   const activeMatchMeta = displayMatches.find(m => m.id === activeMatchId);
 
-  // An innings that has not started yet comes back as `null` from the
-  // backend (see app.py) rather than an empty object -- that's the signal
-  // to hide the column/card entirely instead of rendering a fake
-  // "TBD . 0/0" placeholder.
   const inn1 = activeData?.innings1 || null;
   const inn2 = activeData?.innings2 || null;
   const hasCommentary = (activeData?.commentary?.length || 0) > 0;
   const ballTracker = activeData?.ballTracker || [];
 
-  // liveScore (NEW, backend v3) comes from Cricbuzz's miniscore -- the
-  // SAME fetch as the commentary feed, so it is guaranteed to be the same
-  // snapshot. This is what fixed the score/commentary mismatch bug
-  // (scoreboard showing an older over than the commentary feed). Falls
-  // back to the carousel's own score (from CricketData) only if Cricbuzz
-  // resolution hasn't completed yet for this match.
   const liveScore = activeData?.liveScore || null;
   const displayHomeScore = liveScore?.home || activeMatchMeta?.score?.home;
   const displayAwayScore = liveScore?.away || activeMatchMeta?.score?.away;
 
-  // Team names: always pulled directly from matchName.split, but guarded
-  // against the "series description leaked into team slot" bug seen
-  // earlier (e.g. "BANGLADESH, 2ND ODI, BANGLADESH TOUR OF ZIMBABWE, 2026"
-  // showing where a team name should be). A real team name is short and
-  // doesn't contain commas; if the split result looks like a description
-  // instead, fall back to a safe placeholder rather than displaying it.
   const safeTeamName = (raw, fallback) => {
     if (!raw) return fallback;
     if (raw.includes(',') || raw.length > 24) return fallback;
     return raw;
   };
 
-  // Team crest lookup -- built off Cricbuzz's public team-list imageId
-  // (no extra RapidAPI call/quota needed). teamId/imageId should come
-  // from the backend match payload when available; falls back to a
-  // 2-letter placeholder badge if unmapped so a bad/missing id never
-  // breaks the card layout.
   const crestUrl = (imageId) =>
     imageId ? `https://static.cricbuzz.com/a/img/v1/50x50/i1/c${imageId}/x.jpg` : null;
 
@@ -173,23 +121,21 @@ export default function LiveCarousel() {
       {/* ================= VIEW 1: CAROUSEL ================= */}
       {!activeMatchId && (
         <div className="carousel-wrap">
-          <div className="section-label">LIVE NOW</div>
+          <div className="carousel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 24px', marginBottom: '10px' }}>
+            <div className="section-label" style={{ margin: 0, padding: 0 }}>LIVE NOW</div>
+            <div className="carousel-controls" style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={() => scrollByCard(-1)} className="carousel-btn">‹</button>
+              <button onClick={() => scrollByCard(1)} className="carousel-btn">›</button>
+            </div>
+          </div>
+          
           <div
             className="carousel-track"
-            ref={trackRef}
-            onMouseEnter={() => { pausedRef.current = true; }}
-            onMouseLeave={() => { pausedRef.current = false; }}
-            onTouchStart={() => { pausedRef.current = true; }}
-            onTouchEnd={() => { pausedRef.current = false; }}
+            ref={scrollRef}
+            style={{ scrollSnapType: 'x mandatory', scrollBehavior: 'smooth' }}
           >
-
             {displayMatches.map((match) => {
               const isLive = match.status === 'LIVE';
-              // Backend now sends score.away as null (not a "yet to bat"
-              // string) when that innings hasn't started -- see app.py
-              // _shape_match_for_carousel. Checking for the old string
-              // too, defensively, in case a stale cache/response slips
-              // through during deploy.
               const awayIsPending = !match.score?.away || match.score.away.score === 'yet to bat';
               const homeTeam = safeTeamName(match.matchName?.split(' vs ')[0], "HOME");
               const awayTeam = safeTeamName(match.matchName?.split(' vs ')[1], "AWAY");
@@ -198,6 +144,7 @@ export default function LiveCarousel() {
                   key={match.id}
                   className={`match-card ${isLive ? 'is-live' : ''}`}
                   onClick={() => openMatch(match.id)}
+                  style={{ scrollSnapAlign: 'start' }}
                 >
                   <div className="match-card-head">
                     <span className="series-tag">{match.venue || "INTERNATIONAL"}</span>
@@ -224,9 +171,7 @@ export default function LiveCarousel() {
                       <span className="overs-sub"> ({match.score?.home?.info || ''})</span>
                     </span>
                   </div>
-                  {/* "yet to bat" label removed per design review -- an
-                      unplayed team simply shows no score line rather than
-                      a status tag, keeping the card visually quieter. */}
+                  
                   {!awayIsPending && (
                     <div className="team-line">
                       <span className="team-code">
@@ -245,7 +190,7 @@ export default function LiveCarousel() {
               );
             })}
 
-            <div className="peek-card">
+            <div className="peek-card" style={{ scrollSnapAlign: 'start' }}>
               <div className="peek-label">NEXT &#9656;</div>
               <div className="peek-teams">ESSEX W v SOM W</div>
             </div>
@@ -265,7 +210,7 @@ export default function LiveCarousel() {
             </div>
           ) : (
             <>
-              {/* GLANCE SCOREBOARD -- the whole match state in one look */}
+              {/* GLANCE SCOREBOARD */}
               <div className="scoreboard">
                 <div className="scoreboard-top">
                   <span className="series-tag">{activeMatchMeta.venue}</span>
@@ -311,9 +256,7 @@ export default function LiveCarousel() {
                   </div>
                 </div>
 
-                {/* BALL TRACKER -- current-over strip, resets each over.
-                    Derived from the same commentary fetch as everything
-                    else here, so it can never drift out of sync either. */}
+                {/* BALL TRACKER -- current-over strip, resets each over. */}
                 {ballTracker.length > 0 && (
                   <div className="ball-tracker">
                     <span className="ball-tracker-label">THIS OVER</span>
@@ -344,13 +287,7 @@ export default function LiveCarousel() {
                 )}
               </div>
 
-              {/* INNINGS DETAIL + LIVE COMMENTARY.
-                  mp-body now computes how many "content" panels are
-                  actually rendering (0, 1, or 2 innings panels) and sizes
-                  the grid so the commentary rail always fills whatever
-                  space the innings panels don't use -- fixes the "wasted
-                  gray space" bug where mp-body-single wasn't applying
-                  correctly and a dead column showed up next to commentary. */}
+              {/* INNINGS DETAIL + LIVE COMMENTARY */}
               <div
                 className="mp-body"
                 style={{
@@ -404,14 +341,31 @@ export default function LiveCarousel() {
         .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--blood-red); animation: livePulse 1.2s ease-in-out infinite; display: inline-block; }
         .ball-new { animation: ballIn 0.4s ease-out; }
 
+        /* CAROUSEL CONTROLS */
+        .carousel-btn {
+            background: rgba(240,242,245,0.08);
+            border: 1px solid rgba(240,242,245,0.15);
+            color: rgba(240,242,245,0.7);
+            border-radius: 4px;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.2s ease;
+        }
+        .carousel-btn:hover {
+            background: rgba(232,0,58,0.2);
+            border-color: var(--blood-red);
+            color: var(--crease-white);
+        }
+
         /* CAROUSEL STYLES */
-        .section-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.4); letter-spacing: 0.05em; margin-bottom: 10px; padding: 0 24px; }
+        .section-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.4); letter-spacing: 0.05em; }
         .carousel-wrap { padding: 20px 0; }
 
-        /* No visible scrollbar -- overflow-x still scrolls via touch/
-           trackpad/arrow keys, but the bar itself is hidden across
-           browsers so the rail reads as a clean edge-to-edge strip
-           instead of a classic OS scroll widget. */
         .carousel-track {
           display: flex; gap: 12px; overflow-x: auto; padding: 0 24px 12px; min-height: 152px;
           scrollbar-width: none; -ms-overflow-style: none;
@@ -464,10 +418,7 @@ export default function LiveCarousel() {
           border: 1px solid rgba(240,242,245,0.15); color: rgba(240,242,245,0.55);
           background: rgba(240,242,245,0.04); line-height: 1.4;
         }
-        /* Format badges stay neutral/mono per brand system -- Bail Amber
-           is reserved for boundaries/turning-point moments only, not
-           static metadata chips, so format doesn't compete for that
-           accent's meaning. */
+        
         .format-test { border-color: rgba(240,242,245,0.25); color: rgba(240,242,245,0.75); }
         .format-odi  { border-color: rgba(74,222,128,0.3); color: #4ADE80; }
         .format-t20  { border-color: rgba(232,0,58,0.3); color: var(--blood-red); }
