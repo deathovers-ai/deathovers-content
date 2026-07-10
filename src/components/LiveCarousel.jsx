@@ -49,6 +49,36 @@ export default function LiveCarousel() {
     setActiveMatchId(null);
   };
 
+  // --- SORTING AND FILTERING LOGIC ---
+  // MOVED UP (fix for "Cannot access 'displayMatches' before
+  // initialization" under Astro's strict top-to-bottom SSR execution):
+  // this used to live after the `if (loading) return` early-return and
+  // after the auto-scroll useEffect below, but that effect's dependency
+  // array reads `displayMatches?.length`, so displayMatches has to exist
+  // before that hook runs. It also has to be computed before ANY early
+  // return, since hooks can't follow a conditional return (Rules of
+  // Hooks) -- so this whole block now sits above both the auto-scroll
+  // effect and the loading check.
+  //
+  // LIVE matches always surface first (deterministic, not incidental --
+  // filtered explicitly by status rather than relying on API ordering),
+  // then UPCOMING, then a capped tail of recently COMPLETED matches so the
+  // rail doesn't get flooded with old results.
+  let displayMatches = [];
+  if (matches.length > 0) {
+    const live = matches.filter(m => m.status === 'LIVE');
+    const upcoming = matches.filter(m => m.status === 'UPCOMING');
+    const completed = matches.filter(m => m.status === 'COMPLETED').slice(0, 3);
+
+    displayMatches = [...live, ...upcoming, ...completed];
+  } else {
+    displayMatches = [{
+      id: "mock-channel", venue: "IPL 2026 . Q2", status: "LIVE", matchName: "GT vs KKR",
+      score: { home: { score: "181/5", info: "20.0" }, away: { score: "156/6", info: "17.2" } },
+      chaseNote: "need 26 off 16"
+    }];
+  }
+
   // AUTO-ADVANCING TICKER -- drives carousel-track.scrollLeft on a rAF
   // loop instead of relying on manual swipe/drag. Pauses on hover/touch
   // so the user can still read a card, and loops back to 0 once it hits
@@ -76,26 +106,6 @@ export default function LiveCarousel() {
 
   if (loading) {
     return <div className="loading-state font-mono">ESTABLISHING SECURE UPLINK TO DATA CLUSTER...</div>;
-  }
-
-  // --- SORTING AND FILTERING LOGIC ---
-  // LIVE matches always surface first (deterministic, not incidental --
-  // filtered explicitly by status rather than relying on API ordering),
-  // then UPCOMING, then a capped tail of recently COMPLETED matches so the
-  // rail doesn't get flooded with old results.
-  let displayMatches = [];
-  if (matches.length > 0) {
-    const live = matches.filter(m => m.status === 'LIVE');
-    const upcoming = matches.filter(m => m.status === 'UPCOMING');
-    const completed = matches.filter(m => m.status === 'COMPLETED').slice(0, 3);
-
-    displayMatches = [...live, ...upcoming, ...completed];
-  } else {
-    displayMatches = [{
-      id: "mock-channel", venue: "IPL 2026 . Q2", status: "LIVE", matchName: "GT vs KKR",
-      score: { home: { score: "181/5", info: "20.0" }, away: { score: "156/6", info: "17.2" } },
-      chaseNote: "need 26 off 16"
-    }];
   }
 
   const activeData = activeMatchId ? (matchDetails[activeMatchId] || null) : null;
