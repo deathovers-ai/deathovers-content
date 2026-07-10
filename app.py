@@ -1,8 +1,5 @@
 """
 app.py — DeathOvers live-data backend (v3)
-
-CricketData.org (api.cricapi.com) is used ONLY for the live-matches CAROUSEL list.
-Cricbuzz Cricket2 (RapidAPI) is now the SINGLE SOURCE OF TRUTH for match details.
 """
 
 from __future__ import annotations
@@ -43,7 +40,7 @@ app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # ---------------------------------------------------------------------------
-# In-memory cache
+# Cache
 # ---------------------------------------------------------------------------
 
 _cache_lock = threading.Lock()
@@ -55,7 +52,6 @@ _cache = {
 
 _detail_cache_lock = threading.Lock()
 _detail_cache: dict[str, dict] = {}
-
 
 # ---------------------------------------------------------------------------
 # Fetch Helpers
@@ -201,7 +197,6 @@ def _extract_ball_tracker(miniscore: dict | None) -> list[dict]:
     return balls
 
 def _shape_match_for_carousel(m: dict) -> dict:
-    """Fixed camelCase parsing for Cricbuzz live endpoint to resolve 'TBD' team names."""
     info = m.get("matchInfo", m)
     team1 = info.get("team1", {}) or {}
     team2 = info.get("team2", {}) or {}
@@ -276,6 +271,7 @@ def _shape_match_details_from_cricbuzz(scorecard_data: dict | None, commentary: 
             if not s: return {"score": "yet to bat", "info": ""}
             return {"score": f"{s.get('runs', 0)}/{s.get('wickets', 0)}", "info": str(s.get("overs", ""))}
 
+        # Added target, crr, rrr, and customStatus mappings here
         live_score = {
             "home": _fmt_live(s1),
             "away": _fmt_live(s2),
@@ -283,6 +279,7 @@ def _shape_match_details_from_cricbuzz(scorecard_data: dict | None, commentary: 
             "crr": miniscore.get("crr", 0),
             "rrr": miniscore.get("rrr", 0),
             "lastWicket": miniscore.get("lastwkt", ""),
+            "customStatus": miniscore.get("custstatus", "")
         }
         toss_line = miniscore.get("lastwkt", "")
 
@@ -441,7 +438,6 @@ def _background_loop() -> None:
             with _detail_cache_lock:
                 if mid in _detail_cache:
                     _detail_cache[mid]["calls_today"] = _detail_cache[mid].get("calls_today", 0) + 1
-
 
 # ---------------------------------------------------------------------------
 # Routes
