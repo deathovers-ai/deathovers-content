@@ -60,11 +60,16 @@ export default function LiveCarousel() {
 
   let displayMatches = [];
   if (matches.length > 0) {
-    const live = matches.filter(m => m.status === 'LIVE');
+    // 1. Matches that are LIVE and have an active score block (In-Play)
+    const liveInPlay = matches.filter(m => m.status === 'LIVE' && (m.score?.home || m.score?.away));
+    // 2. Matches that are LIVE but haven't started playing yet (Toss done, no score)
+    const liveNotInPlay = matches.filter(m => m.status === 'LIVE' && !m.score?.home && !m.score?.away);
+    // 3. Upcoming matches
     const upcoming = matches.filter(m => m.status === 'UPCOMING');
+    // 4. Completed matches
     const completed = matches.filter(m => m.status === 'COMPLETED').slice(0, 3);
 
-    displayMatches = [...live, ...upcoming, ...completed];
+    displayMatches = [...liveInPlay, ...liveNotInPlay, ...upcoming, ...completed];
   } else {
     displayMatches = [{
       id: "mock-channel", venue: "IPL 2026 . Q2", status: "LIVE", matchName: "GT vs KKR",
@@ -256,7 +261,39 @@ export default function LiveCarousel() {
                   </div>
                 </div>
 
-                {/* BALL TRACKER -- current-over strip, resets each over. */}
+                {/* ENDPOINTS: TARGET, CRR, RRR */}
+                {liveScore && (
+                  <div className="scoreboard-stats" style={{
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    gap: '20px', 
+                    marginTop: '16px', 
+                    paddingTop: '12px',
+                    borderTop: '1px solid rgba(240,242,245,0.06)',
+                    fontFamily: 'JetBrains Mono, monospace', 
+                    fontSize: '11px', 
+                    color: 'rgba(240,242,245,0.6)'
+                  }}>
+                    {liveScore.target > 0 && (
+                      <span>TARGET: <strong style={{color: 'var(--crease-white)'}}>{liveScore.target}</strong></span>
+                    )}
+                    {liveScore.crr > 0 && (
+                      <span>CRR: <strong style={{color: 'var(--crease-white)'}}>{liveScore.crr}</strong></span>
+                    )}
+                    {liveScore.rrr > 0 && (
+                      <span>RRR: <strong style={{color: 'var(--crease-white)'}}>{liveScore.rrr}</strong></span>
+                    )}
+                  </div>
+                )}
+
+                {/* MATCH STATUS / RESULT OVERRIDE */}
+                {(liveScore?.customStatus || activeMatchMeta.chaseNote) && (
+                  <div className="scoreboard-note" style={{ textAlign: 'center', fontSize: '13px' }}>
+                    {liveScore?.customStatus || activeMatchMeta.chaseNote}
+                  </div>
+                )}
+
+                {/* BALL TRACKER -- current-over strip */}
                 {ballTracker.length > 0 && (
                   <div className="ball-tracker">
                     <span className="ball-tracker-label">THIS OVER</span>
@@ -266,10 +303,6 @@ export default function LiveCarousel() {
                       ))}
                     </div>
                   </div>
-                )}
-
-                {activeMatchMeta.chaseNote && (
-                  <div className="scoreboard-note">{activeMatchMeta.chaseNote}</div>
                 )}
 
                 {liveScore?.lastWicket && (
@@ -300,6 +333,7 @@ export default function LiveCarousel() {
                 {inn1 && <InningsPanel innings={inn1} accent="amber" label="1ST INNINGS" />}
                 {inn2 && <InningsPanel innings={inn2} accent="red" label="2ND INNINGS" />}
 
+                {/* COMMENTARY PANE (Now vertically scrollable) */}
                 <div className="mp-commentary-rail">
                   <div className="rail-label"><span className="live-dot"></span>LIVE COMMENTARY</div>
                   {hasCommentary ? (
@@ -496,7 +530,15 @@ export default function LiveCarousel() {
 
         .mp-header-loading { padding: 60px 24px; text-align: center; border-radius: 8px; }
 
-        .mp-body { background: var(--pitch-black); border: 1px solid rgba(232,0,58,0.2); border-top: none; border-radius: 0 0 8px 8px; overflow: hidden; display: grid; }
+        .mp-body { 
+          background: var(--pitch-black); 
+          border: 1px solid rgba(232,0,58,0.2); 
+          border-top: none; 
+          border-radius: 0 0 8px 8px; 
+          overflow: hidden; 
+          display: grid;
+          align-items: start; /* PREVENTS COMM. PANE FROM STRETCHING TO MATCH SCORECARD HEIGHT */
+        }
 
         .innings-col { padding: 18px 20px; }
         .innings-col.border-left { border-left: 1px solid rgba(240,242,245,0.08); }
@@ -520,7 +562,19 @@ export default function LiveCarousel() {
         }
         .stat-more-btn:hover { opacity: 1; }
 
-        .mp-commentary-rail { background: #0e1015; padding: 18px 20px; border-left: 1px solid rgba(240,242,245,0.08); }
+        /* SCROLLABLE COMMENTARY RAIL CSS */
+        .mp-commentary-rail { 
+          background: #0e1015; 
+          padding: 18px 20px; 
+          border-left: 1px solid rgba(240,242,245,0.08); 
+          max-height: 650px; 
+          overflow-y: auto; 
+        }
+        /* NATIVE CUSTOM SCROLLBAR FOR WEB-KIT */
+        .mp-commentary-rail::-webkit-scrollbar { width: 4px; }
+        .mp-commentary-rail::-webkit-scrollbar-track { background: transparent; }
+        .mp-commentary-rail::-webkit-scrollbar-thumb { background: rgba(240,242,245,0.15); border-radius: 4px; }
+        
         .rail-label { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--blood-red); letter-spacing: 0.08em; font-weight: 700; }
 
         #feed { display: flex; flex-direction: column; }
