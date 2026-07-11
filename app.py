@@ -1,5 +1,14 @@
 """
-app.py — DeathOvers live-data backend (v3)
+app.py — DeathOvers live-data backend (v4)
+
+Changes from v3:
+  - Global RapidAPI call budget (shared across all Cricbuzz calls, not per-match)
+  - Batter dismissal text + bowler name now mapped through to the frontend
+  - CricketData fallback now actually parses completed-match scores instead of
+    hard-coding them to null
+  - Live-matches polling backs off automatically when there are zero live matches
+  - /api/quota-status debug route
+  - On-demand detail fetch on first view is now budget-gated instead of unlimited
 """
 
 from __future__ import annotations
@@ -31,10 +40,13 @@ RAPIDAPI_KEY = os.environ.get("RAPIDAPI_KEY", "")
 CRICBUZZ_HOST = "cricbuzz-cricket2.p.rapidapi.com"
 CRICBUZZ_BASE = f"https://{CRICBUZZ_HOST}"
 
-CRICBUZZ_DETAIL_REFRESH_SECONDS = int(os.environ.get("CRICBUZZ_DETAIL_REFRESH_SECONDS", 1800))
 REFRESH_INTERVAL_SECONDS = int(os.environ.get("REFRESH_INTERVAL_SECONDS", 900))
-DETAIL_REFRESH_INTERVAL_SECONDS = int(os.environ.get("DETAIL_REFRESH_INTERVAL_SECONDS", 1800))
+NO_LIVE_BACKOFF_SECONDS = int(os.environ.get("NO_LIVE_BACKOFF_SECONDS", 1800))  # when nothing is live
 REQUEST_TIMEOUT_SECONDS = 10
+
+# RapidAPI free-tier daily cap for cricbuzz-cricket2. Set a few calls below your
+# actual plan limit as a safety margin. Override via env var if your plan differs.
+RAPIDAPI_DAILY_CALL_CAP = int(os.environ.get("RAPIDAPI_DAILY_CALL_CAP", 450))
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -54,11 +66,64 @@ _detail_cache_lock = threading.Lock()
 _detail_cache: dict[str, dict] = {}
 
 # ---------------------------------------------------------------------------
+# Global RapidAPI quota tracker
+# ---------------------------------------------------------------------------
+# Every single call to _cricbuzz_get is counted here, regardless of caller.
+# This is the one source of truth for "how many RapidAPI calls have we made today".
+
+_quota_lock = threading.Lock()
+_quota = {
+    "calls_today": 0,
+    "day_started": datetime.now(timezone.utc).date().isoformat(),
+    "blocked_calls": 0,
+}
+
+
+def _quota_reset_if_new_day() -> None:
+    today = datetime.now(timezone.utc).date().isoformat()
+    if _quota["day_started"] != today:
+        _quota["day_started"] = today
+        _quota["calls_today"] = 0
+        _quota["blocked_calls"] = 0
+
+
+def _quota_has_budget() -> bool:
+    with _quota_lock:
+        _quota_reset_if_new_day()
+        return _quota["calls_today"] < RAPIDAPI_DAILY_CALL_CAP
+
+
+def _quota_consume() -> None:
+    with _quota_lock:
+        _quota_reset_if_new_day()
+        _quota["calls_today"] += 1
+
+
+def _quota_note_blocked() -> None:
+    with _quota_lock:
+        _quota_reset_if_new_day()
+        _quota["blocked_calls"] += 1
+
+
+def _quota_snapshot() -> dict:
+    with _quota_lock:
+        _quota_reset_if_new_day()
+        return {
+            "callsToday": _quota["calls_today"],
+            "dailyCap": RAPIDAPI_DAILY_CALL_CAP,
+            "remaining": max(0, RAPIDAPI_DAILY_CALL_CAP - _quota["calls_today"]),
+            "blockedCalls": _quota["blocked_calls"],
+            "dayStarted": _quota["day_started"],
+        }
+
+
+# ---------------------------------------------------------------------------
 # Fetch Helpers
 # ---------------------------------------------------------------------------
 
 def _cricketdata_get(path: str, params: dict) -> dict | None:
-    if not CRICKETDATA_API_KEY: return None
+    if not CRICKETDATA_API_KEY:
+        return None
     params = {**params, "apikey": CRICKETDATA_API_KEY}
     url = f"{CRICKETDATA_BASE}/{path}"
     try:
@@ -70,24 +135,36 @@ def _cricketdata_get(path: str, params: dict) -> dict | None:
         log.error("CricketData request failed: %s", e)
         return None
 
+
 def _cricbuzz_get(path: str, params: dict | None = None) -> dict | None:
-    if not RAPIDAPI_KEY: return None
+    """All Cricbuzz/RapidAPI calls funnel through here. This is the single
+    choke point for the global daily quota — nothing bypasses it."""
+    if not RAPIDAPI_KEY:
+        return None
+    if not _quota_has_budget():
+        _quota_note_blocked()
+        log.warning("RapidAPI daily quota exhausted (%s calls) — blocking call to %s", RAPIDAPI_DAILY_CALL_CAP, path)
+        return None
+
     url = f"{CRICBUZZ_BASE}{path}"
     headers = {"x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": CRICBUZZ_HOST}
     try:
         resp = requests.get(url, headers=headers, params=params or {}, timeout=REQUEST_TIMEOUT_SECONDS)
+        _quota_consume()  # count the call whether it succeeds or fails — it still hit RapidAPI
         resp.raise_for_status()
         return resp.json()
     except Exception as e:
         log.error("Cricbuzz request failed (%s): %s", path, e)
         return None
 
+
 # ---------------------------------------------------------------------------
 # Shapers & Parsers
 # ---------------------------------------------------------------------------
 
 def _resolve_commentary_placeholders(text: str, commentary_formats: list) -> str:
-    if "$" not in text: return text
+    if "$" not in text:
+        return text
     replacements = {}
     for fmt in commentary_formats or []:
         for item in fmt.get("value", []) or []:
@@ -107,6 +184,7 @@ def _resolve_commentary_placeholders(text: str, commentary_formats: list) -> str
         result = re.sub(r"^(.*?),\s*out\s+", r"\1, ", result, count=1, flags=re.IGNORECASE)
     return result
 
+
 def _is_system_announcement(text: str) -> bool:
     t = text.strip().lower()
     if any(phrase in t for phrase in ("thats out!!", "caught!!", "bowled!!", "run out!!", "stumped!!")) and len(t) < 60:
@@ -115,33 +193,44 @@ def _is_system_announcement(text: str) -> bool:
         return True
     return False
 
+
 def _fetch_cricbuzz_commentary_and_miniscore(cricbuzz_match_id: str, innings_id: int = 1) -> dict:
     data = _cricbuzz_get(f"/mcenter/v1/{cricbuzz_match_id}/comm", params={"iid": innings_id})
-    if data is None: return {"commentary": [], "miniscore": None}
-    
+    if data is None:
+        return {"commentary": [], "miniscore": None}
+
     entries = data.get("comwrapper", [])
     miniscore = data.get("miniscore")
     shaped = []
-    
+
     for entry in entries:
         c = entry.get("commentary", {})
         raw_text = (c.get("commtxt") or "").strip()
-        if not raw_text: continue
+        if not raw_text:
+            continue
         text = _resolve_commentary_placeholders(raw_text, c.get("commentaryformats", []))
-        if _is_system_announcement(text): continue
+        if _is_system_announcement(text):
+            continue
 
         event = (c.get("eventtype") or "NONE").upper()
-        if "WICKET" in event: ctype = "wicket"
-        elif "SIX" in event: ctype = "six"
-        elif "FOUR" in event: ctype = "four"
-        elif text.lower().startswith("no run"): ctype = "dot"
-        else: ctype = "run"
+        if "WICKET" in event:
+            ctype = "wicket"
+        elif "SIX" in event:
+            ctype = "six"
+        elif "FOUR" in event:
+            ctype = "four"
+        elif text.lower().startswith("no run"):
+            ctype = "dot"
+        else:
+            ctype = "run"
 
         over_label = ""
         ballnbr = c.get("ballnbr", 0)
         overnum = c.get("overnum", 0)
-        if isinstance(overnum, (int, float)) and overnum: over_label = f"{overnum:.1f}"
-        elif isinstance(ballnbr, (int, float)) and ballnbr: over_label = f"{(ballnbr - 1) // 6}.{(ballnbr - 1) % 6 + 1}"
+        if isinstance(overnum, (int, float)) and overnum:
+            over_label = f"{overnum:.1f}"
+        elif isinstance(ballnbr, (int, float)) and ballnbr:
+            over_label = f"{(ballnbr - 1) // 6}.{(ballnbr - 1) % 6 + 1}"
 
         shaped.append({
             "over": over_label,
@@ -152,8 +241,19 @@ def _fetch_cricbuzz_commentary_and_miniscore(cricbuzz_match_id: str, innings_id:
         })
     return {"commentary": shaped[:30], "miniscore": miniscore}
 
+
 def _fetch_cricbuzz_scorecard(cricbuzz_match_id: str) -> dict | None:
     return _cricbuzz_get(f"/mcenter/v1/{cricbuzz_match_id}/scard")
+
+
+def _format_dismissal(batter: dict) -> str:
+    """Builds a human-readable dismissal line, e.g. 'c Kohli b Bumrah', 'b Starc',
+    'run out (Warner/Smith)', 'lbw b Cummins', or 'not out'."""
+    outdec = (batter.get("outdec") or "").strip()
+    if not outdec or outdec.lower() == "not out":
+        return "not out"
+    return outdec
+
 
 def _shape_innings_from_cricbuzz(inn: dict) -> dict:
     batting = inn.get("batsman", [])
@@ -162,17 +262,40 @@ def _shape_innings_from_cricbuzz(inn: dict) -> dict:
         "team": inn.get("batteamname", ""),
         "score": f"{inn.get('score', '')}/{inn.get('wickets', '')}" if inn.get("score") is not None else "",
         "overs": str(inn.get("overs", "")),
-        "batters": [{"name": b.get("name", "Unknown"), "r": b.get("runs", 0), "b": b.get("balls", 0), "sr": str(b.get("strkrate", "")), "dim": b.get("outdec", "").lower() == "not out"} for b in batting],
-        "bowlers": [{"name": bo.get("name", "Unknown"), "o": str(bo.get("overs", "")), "r": str(bo.get("runs", "")), "w": str(bo.get("wickets", "")), "eco": str(bo.get("economy", ""))} for bo in bowling],
+        "batters": [
+            {
+                "name": b.get("name", "Unknown"),
+                "r": b.get("runs", 0),
+                "b": b.get("balls", 0),
+                "sr": str(b.get("strkrate", "")),
+                "dim": (b.get("outdec", "").lower() == "not out"),
+                "dismissal": _format_dismissal(b),
+            }
+            for b in batting
+        ],
+        "bowlers": [
+            {
+                "name": bo.get("name", "Unknown"),
+                "o": str(bo.get("overs", "")),
+                "r": str(bo.get("runs", "")),
+                "w": str(bo.get("wickets", "")),
+                "eco": str(bo.get("economy", "")),
+            }
+            for bo in bowling
+        ],
     }
+
 
 def _extract_ball_tracker(miniscore: dict | None) -> list[dict]:
     """Parses the current over directly from Cricbuzz's overseplist.oversummary"""
-    if not miniscore: return []
+    if not miniscore:
+        return []
     oversep_list = miniscore.get("overseplist", {}).get("oversep", [])
-    if not oversep_list: return []
+    if not oversep_list:
+        return []
     latest_over = oversep_list[0].get("oversummary", "").strip()
-    if not latest_over: return []
+    if not latest_over:
+        return []
 
     balls = []
     events = latest_over.split()
@@ -196,22 +319,30 @@ def _extract_ball_tracker(miniscore: dict | None) -> list[dict]:
         balls.append({"label": label, "type": ctype})
     return balls
 
+
 def _shape_match_for_carousel(m: dict) -> dict:
     info = m.get("matchInfo", m)
     team1 = info.get("team1", {}) or {}
     team2 = info.get("team2", {}) or {}
-    
+
     home_name = team1.get("teamName", team1.get("teamname", "TBD"))
     away_name = team2.get("teamName", team2.get("teamname", "TBD"))
 
     state = (info.get("state") or "").lower()
-    if state in ("in progress", "innings break", "toss", "stumps"): status = "LIVE"
-    elif state in ("complete", "abandoned", "no result"): status = "COMPLETED"
-    else: status = "UPCOMING"
+    if state in ("in progress", "innings break", "toss", "stumps"):
+        status = "LIVE"
+    elif state in ("complete", "abandoned", "no result"):
+        status = "COMPLETED"
+    else:
+        status = "UPCOMING"
 
     def _fmt(score: dict | None) -> "dict | None":
-        if not score: return None
-        return {"score": f"{score.get('runs', score.get('r', 0))}/{score.get('wickets', score.get('w', 0))}", "info": f"{score.get('overs', score.get('o', 0))}"}
+        if not score:
+            return None
+        return {
+            "score": f"{score.get('runs', score.get('r', 0))}/{score.get('wickets', score.get('w', 0))}",
+            "info": f"{score.get('overs', score.get('o', 0))}",
+        }
 
     match_score = info.get("matchScore") or {}
     home_score = (match_score.get("team1Score") or {}).get("inngs1")
@@ -235,11 +366,14 @@ def _shape_match_for_carousel(m: dict) -> dict:
         "awayImageId": team2.get("imageId", team2.get("imageid")) or crest_image_id(away_name),
     }
 
+
 def _shape_match_details_from_cricbuzz(scorecard_data: dict | None, commentary: list[dict], miniscore: dict | None) -> dict:
     scorecard_list = (scorecard_data or {}).get("scorecard", [])
+
     def _find_innings(innings_id: int) -> dict | None:
         for inn in scorecard_list:
-            if inn.get("inningsid") == innings_id: return inn
+            if inn.get("inningsid") == innings_id:
+                return inn
         return None
 
     inn1_raw = _find_innings(1)
@@ -251,9 +385,11 @@ def _shape_match_details_from_cricbuzz(scorecard_data: dict | None, commentary: 
     live_score = None
     if miniscore:
         innings_scores = (miniscore.get("inningsscores") or {}).get("inningsscore", [])
+
         def _find_score(innings_id: int) -> dict | None:
             for s in innings_scores:
-                if s.get("inningsid") == innings_id: return s
+                if s.get("inningsid") == innings_id:
+                    return s
             return None
 
         s1 = _find_score(1)
@@ -268,10 +404,10 @@ def _shape_match_details_from_cricbuzz(scorecard_data: dict | None, commentary: 
         _overwrite_score(innings2, s2)
 
         def _fmt_live(s: dict | None) -> dict:
-            if not s: return {"score": "yet to bat", "info": ""}
+            if not s:
+                return {"score": "yet to bat", "info": ""}
             return {"score": f"{s.get('runs', 0)}/{s.get('wickets', 0)}", "info": str(s.get("overs", ""))}
 
-        # Added target, crr, rrr, and customStatus mappings here
         live_score = {
             "home": _fmt_live(s1),
             "away": _fmt_live(s2),
@@ -279,7 +415,7 @@ def _shape_match_details_from_cricbuzz(scorecard_data: dict | None, commentary: 
             "crr": miniscore.get("crr", 0),
             "rrr": miniscore.get("rrr", 0),
             "lastWicket": miniscore.get("lastwkt", ""),
-            "customStatus": miniscore.get("custstatus", "")
+            "customStatus": miniscore.get("custstatus", ""),
         }
         toss_line = miniscore.get("lastwkt", "")
 
@@ -297,33 +433,68 @@ def _shape_match_details_from_cricbuzz(scorecard_data: dict | None, commentary: 
         "ballTracker": ball_tracker,
     }
 
+
+def _parse_cricketdata_innings_score(m: dict, team_index: int) -> "dict | None":
+    """CricketData's currentMatches payload includes a top-level 'score' array,
+    one entry per innings, each with an 'inning' label like 'India Inning 1' and
+    r/w/o fields. We match by team name substring since there's no clean team id
+    linkage in the free tier response."""
+    teams = m.get("teams") or []
+    if team_index >= len(teams):
+        return None
+    team_name = teams[team_index]
+    score_entries = m.get("score") or []
+    if not score_entries or not team_name:
+        return None
+
+    # Prefer the last innings for this team (handles Test matches with 2 innings each;
+    # for limited-overs there's only one entry per team anyway).
+    matches_for_team = [s for s in score_entries if team_name.split()[0].lower() in (s.get("inning", "") or "").lower()]
+    if not matches_for_team:
+        return None
+    chosen = matches_for_team[-1]
+    r = chosen.get("r", 0)
+    w = chosen.get("w", 0)
+    o = chosen.get("o", 0)
+    return {"score": f"{r}/{w}", "info": str(o)}
+
+
 def _shape_fill_match_from_cricketdata(m: dict) -> dict:
     teams = m.get("teams") or []
     home_name = teams[0] if len(teams) > 0 else "TBD"
     away_name = teams[1] if len(teams) > 1 else "TBD"
     raw_format = (m.get("matchType") or "").strip()
+
+    home_score = _parse_cricketdata_innings_score(m, 0)
+    away_score = _parse_cricketdata_innings_score(m, 1)
+
     return {
         "id": m.get("id"),
         "venue": m.get("venue", ""),
         "status": "COMPLETED" if m.get("matchEnded") else "UPCOMING",
         "matchName": m.get("name", f"{home_name} vs {away_name}"),
         "matchFormat": raw_format.upper() if raw_format else "UNKNOWN",
-        "score": {"home": None, "away": None},
+        "score": {"home": home_score, "away": away_score},
         "chaseNote": m.get("status", ""),
         "teams": [home_name, away_name],
         "homeImageId": crest_image_id(home_name),
         "awayImageId": crest_image_id(away_name),
     }
 
+
 def _iter_cricbuzz_matches(list_payload: dict | None):
-    if not list_payload: return
+    if not list_payload:
+        return
     for type_block in list_payload.get("typeMatches", []):
         for series in type_block.get("seriesMatches", []):
             wrapper = series.get("seriesAdWrapper", {})
             for match in wrapper.get("matches", []):
                 info = match.get("matchInfo", {})
-                if "matchScore" in match: info = {**info, "matchScore": match["matchScore"]}
-                if info: yield info
+                if "matchScore" in match:
+                    info = {**info, "matchScore": match["matchScore"]}
+                if info:
+                    yield info
+
 
 def _refresh_live_matches() -> None:
     live_data = _cricbuzz_get("/matches/v1/live")
@@ -335,15 +506,19 @@ def _refresh_live_matches() -> None:
     if cricketdata_data is not None:
         for m in cricketdata_data.get("data", []):
             teams = m.get("teams") or []
-            if len(teams) < 2: continue
-            if m.get("matchStarted") and not m.get("matchEnded"): continue
-            if tuple(sorted(teams[:2])) in live_ids_by_teams: continue
+            if len(teams) < 2:
+                continue
+            if m.get("matchStarted") and not m.get("matchEnded"):
+                continue
+            if tuple(sorted(teams[:2])) in live_ids_by_teams:
+                continue
             fill_shaped.append(_shape_fill_match_from_cricketdata(m))
 
     shaped = live_shaped + fill_shaped
 
     if live_data is None and cricketdata_data is None:
-        with _cache_lock: _cache["last_error"] = f"refresh failed at {datetime.now(timezone.utc).isoformat()}"
+        with _cache_lock:
+            _cache["last_error"] = f"refresh failed at {datetime.now(timezone.utc).isoformat()}"
         return
 
     with _cache_lock:
@@ -351,9 +526,11 @@ def _refresh_live_matches() -> None:
         _cache["last_refreshed"] = datetime.now(timezone.utc).isoformat()
         _cache["last_error"] = None
 
+
 def _refresh_match_detail(match_id: str) -> None:
     cricbuzz_match_id = str(match_id)
-    if not cricbuzz_match_id: return
+    if not cricbuzz_match_id:
+        return
     comm_result = _fetch_cricbuzz_commentary_and_miniscore(cricbuzz_match_id, innings_id=1)
     commentary = comm_result["commentary"]
     miniscore = comm_result["miniscore"]
@@ -375,69 +552,88 @@ def _refresh_match_detail(match_id: str) -> None:
             "cricbuzz_match_id": cricbuzz_match_id,
         }
 
+
 def _innings_total_overs(carousel_entry: dict | None) -> "int | None":
     fmt = (carousel_entry or {}).get("matchFormat", "").upper()
-    if "TEST" in fmt: return None
-    if "ODI" in fmt or "50" in fmt or "LIST A" in fmt: return 50
+    if "TEST" in fmt:
+        return None
+    if "ODI" in fmt or "50" in fmt or "LIST A" in fmt:
+        return 50
     return 20
 
+
 def _is_death_overs(current_over_str: str, total_overs: "int | None") -> bool:
-    if total_overs is None: return False
-    try: current_over = float(current_over_str)
-    except: return False
+    if total_overs is None:
+        return False
+    try:
+        current_over = float(current_over_str)
+    except Exception:
+        return False
     return current_over >= (total_overs - 5)
+
 
 def _wicket_in_recent_ball_tracker(shaped_detail: dict | None) -> bool:
     tracker = (shaped_detail or {}).get("ballTracker", [])
     return any(b.get("type") == "wicket" for b in tracker)
 
-FREE_TIER_MODE = os.environ.get("FREE_TIER_MODE", "true").lower() == "true"
-HOT_INTERVAL_SECONDS = 45
+
+HOT_INTERVAL_SECONDS = 60
 WARM_INTERVAL_SECONDS = 300
 COLD_INTERVAL_SECONDS = 1800
-HOT_TIER_DAILY_CALL_CAP = 40
 
-def _refresh_interval_for_match(match_id: str, carousel_entry: dict | None, detail_entry: dict | None) -> int:
+
+def _refresh_interval_for_match(carousel_entry: dict | None, detail_entry: dict | None) -> int:
     status = (carousel_entry or {}).get("status")
-    if status != "LIVE": return COLD_INTERVAL_SECONDS
+    if status != "LIVE":
+        return COLD_INTERVAL_SECONDS
     shaped = (detail_entry or {}).get("data")
     live_score = (shaped or {}).get("liveScore") or {}
-    current_overs = (live_score.get("home") or {}).get("info") if shaped and not shaped.get("innings2") else (live_score.get("away") or {}).get("info")
+    current_overs = (
+        (live_score.get("home") or {}).get("info")
+        if shaped and not shaped.get("innings2")
+        else (live_score.get("away") or {}).get("info")
+    )
     hot = _is_death_overs(current_overs, _innings_total_overs(carousel_entry)) or _wicket_in_recent_ball_tracker(shaped)
-    if hot:
-        if FREE_TIER_MODE and (detail_entry or {}).get("calls_today", 0) >= HOT_TIER_DAILY_CALL_CAP: return WARM_INTERVAL_SECONDS
+    # Budget-aware: if we're already close to the daily cap, never use the hot tier —
+    # fall back to warm so we don't burn through the remaining calls on one match.
+    snap = _quota_snapshot()
+    if hot and snap["remaining"] > 20:
         return HOT_INTERVAL_SECONDS
     return WARM_INTERVAL_SECONDS
+
 
 def _background_loop() -> None:
     _refresh_live_matches()
     last_live_refresh = time.time()
-    last_call_count_reset = time.time()
     while True:
         time.sleep(5)
         now = time.time()
-        if now - last_live_refresh >= REFRESH_INTERVAL_SECONDS:
+
+        with _cache_lock:
+            has_live = any(m.get("status") == "LIVE" for m in _cache["live_and_recent"])
+        live_list_interval = REFRESH_INTERVAL_SECONDS if has_live else NO_LIVE_BACKOFF_SECONDS
+
+        if now - last_live_refresh >= live_list_interval:
             _refresh_live_matches()
             last_live_refresh = now
-        if now - last_call_count_reset >= 86400:
-            with _detail_cache_lock:
-                for entry in _detail_cache.values(): entry["calls_today"] = 0
-            last_call_count_reset = now
 
-        with _cache_lock: carousel_by_id = {str(m.get("id")): m for m in _cache["live_and_recent"]}
-        with _detail_cache_lock: snapshot = dict(_detail_cache)
+        with _cache_lock:
+            carousel_by_id = {str(m.get("id")): m for m in _cache["live_and_recent"]}
+        with _detail_cache_lock:
+            snapshot = dict(_detail_cache)
 
         due_for_refresh = []
         for mid, entry in snapshot.items():
-            interval = _refresh_interval_for_match(mid, carousel_by_id.get(mid), entry)
+            interval = _refresh_interval_for_match(carousel_by_id.get(mid), entry)
             if now - datetime.fromisoformat(entry["last_refreshed"]).timestamp() >= interval:
                 due_for_refresh.append(mid)
 
         for mid in due_for_refresh:
+            if not _quota_has_budget():
+                log.warning("Skipping scheduled refresh for match %s — quota exhausted", mid)
+                continue
             _refresh_match_detail(mid)
-            with _detail_cache_lock:
-                if mid in _detail_cache:
-                    _detail_cache[mid]["calls_today"] = _detail_cache[mid].get("calls_today", 0) + 1
+
 
 # ---------------------------------------------------------------------------
 # Routes
@@ -446,37 +642,71 @@ def _background_loop() -> None:
 @app.route("/api/live-scores", methods=["GET"])
 def get_live_scores():
     with _cache_lock:
-        return jsonify({"liveAndRecent": _cache["live_and_recent"], "lastRefreshed": _cache["last_refreshed"], "lastError": _cache["last_error"]})
+        return jsonify({
+            "liveAndRecent": _cache["live_and_recent"],
+            "lastRefreshed": _cache["last_refreshed"],
+            "lastError": _cache["last_error"],
+        })
+
 
 @app.route("/api/match-details/<match_id>", methods=["GET"])
 def get_match_details(match_id: str):
-    with _detail_cache_lock: entry = _detail_cache.get(match_id)
+    with _detail_cache_lock:
+        entry = _detail_cache.get(match_id)
+
     if entry is None:
+        if not _quota_has_budget():
+            # No cached detail and no budget left — tell the frontend honestly
+            # instead of silently failing or burning the last calls on a cold view.
+            return jsonify({"error": "Daily API quota exhausted. Try again after reset.", "quotaExhausted": True}), 503
         _refresh_match_detail(match_id)
-        with _detail_cache_lock: entry = _detail_cache.get(match_id)
-    if entry is None: return jsonify({"error": "Could not fetch match details"}), 502
+        with _detail_cache_lock:
+            entry = _detail_cache.get(match_id)
+
+    if entry is None:
+        return jsonify({"error": "Could not fetch match details"}), 502
     return jsonify(entry["data"])
+
+
+@app.route("/api/quota-status", methods=["GET"])
+def quota_status():
+    return jsonify(_quota_snapshot())
+
 
 @app.route("/api/health", methods=["GET"])
 def health():
-    with _cache_lock: cache_snapshot = dict(_cache)
-    return jsonify({"status": "ok", "hasCricketDataKey": bool(CRICKETDATA_API_KEY), "hasRapidApiKey": bool(RAPIDAPI_KEY), "refreshIntervalSeconds": REFRESH_INTERVAL_SECONDS, "detailRefreshIntervalSeconds": DETAIL_REFRESH_INTERVAL_SECONDS, "cache": cache_snapshot})
+    with _cache_lock:
+        cache_snapshot = dict(_cache)
+    return jsonify({
+        "status": "ok",
+        "hasCricketDataKey": bool(CRICKETDATA_API_KEY),
+        "hasRapidApiKey": bool(RAPIDAPI_KEY),
+        "refreshIntervalSeconds": REFRESH_INTERVAL_SECONDS,
+        "quota": _quota_snapshot(),
+        "cache": cache_snapshot,
+    })
+
 
 _bg_thread_lock = threading.Lock()
 _bg_thread_started = False
 
+
 def _ensure_background_thread_started() -> None:
     global _bg_thread_started
-    if _bg_thread_started: return
+    if _bg_thread_started:
+        return
     with _bg_thread_lock:
-        if _bg_thread_started: return
+        if _bg_thread_started:
+            return
         t = threading.Thread(target=_background_loop, daemon=True)
         t.start()
         _bg_thread_started = True
 
+
 @app.before_request
 def _start_background_on_first_request():
     _ensure_background_thread_started()
+
 
 if __name__ == "__main__":
     _ensure_background_thread_started()
