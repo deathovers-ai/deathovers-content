@@ -132,6 +132,15 @@ export default function LiveCarousel() {
   const activeData = activeMatchId ? (matchDetails[activeMatchId] || null) : null;
   const activeMatchMeta = displayMatches.find(m => m.id === activeMatchId);
 
+  // NEW: flags if the scorecard hasn't updated in a while for a match that's
+  // supposed to be live — surfaces the staleness instead of silently showing
+  // an old over count with no indication anything's wrong.
+  const isDataStale = (() => {
+    if (!activeData?.lastRefreshed || activeMatchMeta?.status !== 'LIVE') return false;
+    const ageMs = Date.now() - new Date(activeData.lastRefreshed).getTime();
+    return ageMs > 5 * 60 * 1000; // older than 5 minutes while match is live
+  })();
+
   const inn1 = activeData?.innings1 || null;
   const inn2 = activeData?.innings2 || null;
   const hasCommentary = (activeData?.commentary?.length || 0) > 0;
@@ -288,6 +297,12 @@ export default function LiveCarousel() {
                     </span>
                   </div>
                 </div>
+
+                {isDataStale && (
+                  <div className="stale-banner">
+                    Scorecard may be a few minutes behind — refreshing shortly.
+                  </div>
+                )}
 
                 <div className="scoreboard-grid">
                   <div className={`scoreboard-team ${!inn2 ? 'scoreboard-team-batting' : ''}`}>
@@ -549,6 +564,12 @@ export default function LiveCarousel() {
         .scoreboard::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: 8px 8px 0 0; background: var(--blood-red); }
 
         .scoreboard-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+
+        .stale-banner {
+          font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--bail-amber);
+          background: rgba(245,166,35,0.08); border: 1px solid rgba(245,166,35,0.25);
+          border-radius: 4px; padding: 6px 12px; margin-bottom: 14px;
+        }
 
         .scoreboard-grid { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 20px; }
 
