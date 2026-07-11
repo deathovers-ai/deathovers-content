@@ -8,6 +8,7 @@ export default function LiveCarousel() {
   const [activeMatchId, setActiveMatchId] = useState(null);
   const [matchDetails, setMatchDetails] = useState({});
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState(null); // NEW: surfaces quota-exhausted / fetch errors
 
   // Reference for manual scrolling
   const scrollRef = useRef(null);
@@ -33,15 +34,21 @@ export default function LiveCarousel() {
   const openMatch = async (matchId) => {
     setActiveMatchId(matchId);
     setDetailLoading(true);
+    setDetailError(null);
 
     try {
       const res = await fetch(`https://deathovers-ai-engine.onrender.com/api/match-details/${matchId}`);
-      if (res.ok) {
-        const data = await res.json();
+      const data = await res.json();
+      if (!res.ok) {
+        // NEW: backend now returns a structured error (e.g. quotaExhausted) instead
+        // of just failing silently — surface it instead of showing a blank page.
+        setDetailError(data.error || "Could not load match details.");
+      } else {
         setMatchDetails(prev => ({ ...prev, [matchId]: data }));
       }
     } catch (err) {
       console.error("Failed to load match drilldown data:", err);
+      setDetailError("Could not reach the live-data server. Please try again shortly.");
     } finally {
       setDetailLoading(false);
     }
@@ -50,6 +57,7 @@ export default function LiveCarousel() {
 
   const closeMatch = () => {
     setActiveMatchId(null);
+    setDetailError(null);
   };
 
   const scrollByCard = (direction) => {
@@ -133,7 +141,7 @@ export default function LiveCarousel() {
               <button onClick={() => scrollByCard(1)} className="carousel-btn">›</button>
             </div>
           </div>
-          
+
           <div
             className="carousel-track"
             ref={scrollRef}
@@ -176,7 +184,7 @@ export default function LiveCarousel() {
                       <span className="overs-sub"> ({match.score?.home?.info || ''})</span>
                     </span>
                   </div>
-                  
+
                   {!awayIsPending && (
                     <div className="team-line">
                       <span className="team-code">
@@ -209,7 +217,13 @@ export default function LiveCarousel() {
         <div className="matchpage">
           <button className="back-btn" onClick={closeMatch}>&larr; BACK TO LIVE MATCHES</button>
 
-          {detailLoading || !activeData ? (
+          {detailError ? (
+            <div className="mp-header mp-header-loading">
+              <div className="loading-state font-mono error-state">
+                {detailError}
+              </div>
+            </div>
+          ) : detailLoading || !activeData ? (
             <div className="mp-header mp-header-loading">
               <div className="loading-state font-mono">PULLING LIVE TELEMETRY...</div>
             </div>
@@ -264,24 +278,24 @@ export default function LiveCarousel() {
                 {/* ENDPOINTS: TARGET, CRR, RRR */}
                 {liveScore && (
                   <div className="scoreboard-stats" style={{
-                    display: 'flex', 
-                    justifyContent: 'center', 
-                    gap: '20px', 
-                    marginTop: '16px', 
+                    display: 'flex',
+                    justifyContent: 'center',
+                    gap: '20px',
+                    marginTop: '16px',
                     paddingTop: '12px',
                     borderTop: '1px solid rgba(240,242,245,0.06)',
-                    fontFamily: 'JetBrains Mono, monospace', 
-                    fontSize: '11px', 
+                    fontFamily: 'JetBrains Mono, monospace',
+                    fontSize: '11px',
                     color: 'rgba(240,242,245,0.6)'
                   }}>
                     {liveScore.target > 0 && (
-                      <span>TARGET: <strong style={{color: 'var(--crease-white)'}}>{liveScore.target}</strong></span>
+                      <span>TARGET: <strong style={{ color: 'var(--crease-white)' }}>{liveScore.target}</strong></span>
                     )}
                     {liveScore.crr > 0 && (
-                      <span>CRR: <strong style={{color: 'var(--crease-white)'}}>{liveScore.crr}</strong></span>
+                      <span>CRR: <strong style={{ color: 'var(--crease-white)' }}>{liveScore.crr}</strong></span>
                     )}
                     {liveScore.rrr > 0 && (
-                      <span>RRR: <strong style={{color: 'var(--crease-white)'}}>{liveScore.rrr}</strong></span>
+                      <span>RRR: <strong style={{ color: 'var(--crease-white)' }}>{liveScore.rrr}</strong></span>
                     )}
                   </div>
                 )}
@@ -326,8 +340,8 @@ export default function LiveCarousel() {
                 style={{
                   gridTemplateColumns:
                     inn1 && inn2 ? '1fr 1fr 1.1fr' :
-                    (inn1 || inn2) ? '1fr 1.4fr' :
-                    '1fr'
+                      (inn1 || inn2) ? '1fr 1.4fr' :
+                        '1fr'
                 }}
               >
                 {inn1 && <InningsPanel innings={inn1} accent="amber" label="1ST INNINGS" />}
@@ -452,7 +466,7 @@ export default function LiveCarousel() {
           border: 1px solid rgba(240,242,245,0.15); color: rgba(240,242,245,0.55);
           background: rgba(240,242,245,0.04); line-height: 1.4;
         }
-        
+
         .format-test { border-color: rgba(240,242,245,0.25); color: rgba(240,242,245,0.75); }
         .format-odi  { border-color: rgba(74,222,128,0.3); color: #4ADE80; }
         .format-t20  { border-color: rgba(232,0,58,0.3); color: var(--blood-red); }
@@ -529,6 +543,7 @@ export default function LiveCarousel() {
         .toss-line { font-size: 12px; color: rgba(240,242,245,0.65); font-weight: 500; }
 
         .mp-header-loading { padding: 60px 24px; text-align: center; border-radius: 8px; }
+        .error-state { color: var(--blood-red); }
 
         .mp-body { 
           background: var(--pitch-black); 
@@ -562,6 +577,10 @@ export default function LiveCarousel() {
         }
         .stat-more-btn:hover { opacity: 1; }
 
+        /* Dismissal line under batter name */
+        .batter-name-cell { display: flex; flex-direction: column; gap: 1px; }
+        .batter-dismissal { font-family: 'Inter', sans-serif; font-size: 9px; font-weight: 400; color: rgba(240,242,245,0.35); line-height: 1.3; }
+
         /* SCROLLABLE COMMENTARY RAIL CSS */
         .mp-commentary-rail { 
           background: #0e1015; 
@@ -574,7 +593,7 @@ export default function LiveCarousel() {
         .mp-commentary-rail::-webkit-scrollbar { width: 4px; }
         .mp-commentary-rail::-webkit-scrollbar-track { background: transparent; }
         .mp-commentary-rail::-webkit-scrollbar-thumb { background: rgba(240,242,245,0.15); border-radius: 4px; }
-        
+
         .rail-label { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--blood-red); letter-spacing: 0.08em; font-weight: 700; }
 
         #feed { display: flex; flex-direction: column; }
@@ -602,11 +621,11 @@ export default function LiveCarousel() {
 
 // Dynamic Commentary Styling Engine
 const styleFor = {
-  wicket: { bg: 'rgba(232,0,58,0.12)',  border: '#E8003A', label: '#E8003A', labelText: 'WICKET', size: '11px', weight: '700' },
-  six:    { bg: 'rgba(245,166,35,0.12)', border: '#F5A623', label: '#F5A623', labelText: 'SIX',    size: '11px', weight: '700' },
-  four:   { bg: 'rgba(245,166,35,0.08)', border: '#F5A623', label: '#F5A623', labelText: 'FOUR',   size: '11px', weight: '500' },
-  run:    { bg: 'transparent', border: 'rgba(240,242,245,0.08)', label: 'rgba(240,242,245,0.4)', labelText: '', size: '11px', weight: '400' },
-  dot:    { bg: 'transparent', border: 'rgba(240,242,245,0.08)', label: 'rgba(240,242,245,0.3)', labelText: '', size: '11px', weight: '400' }
+  wicket: { bg: 'rgba(232,0,58,0.12)', border: '#E8003A', label: '#E8003A', labelText: 'WICKET', size: '11px', weight: '700' },
+  six: { bg: 'rgba(245,166,35,0.12)', border: '#F5A623', label: '#F5A623', labelText: 'SIX', size: '11px', weight: '700' },
+  four: { bg: 'rgba(245,166,35,0.08)', border: '#F5A623', label: '#F5A623', labelText: 'FOUR', size: '11px', weight: '500' },
+  run: { bg: 'transparent', border: 'rgba(240,242,245,0.08)', label: 'rgba(240,242,245,0.4)', labelText: '', size: '11px', weight: '400' },
+  dot: { bg: 'transparent', border: 'rgba(240,242,245,0.08)', label: 'rgba(240,242,245,0.3)', labelText: '', size: '11px', weight: '400' }
 };
 
 function InningsPanel({ innings, accent, label }) {
@@ -631,7 +650,14 @@ function InningsPanel({ innings, accent, label }) {
             <tbody>
               {visibleBatters.map((b, i) => (
                 <tr key={i} className={b.dim ? 'dim' : ''}>
-                  <td>{b.name}</td><td>{b.r}</td><td>{b.b}</td><td>{b.sr}</td>
+                  <td>
+                    <div className="batter-name-cell">
+                      <span>{b.name}</span>
+                      {/* NEW: shows how the batter got out (e.g. "c Kohli b Bumrah"), or "not out" */}
+                      {b.dismissal && <span className="batter-dismissal">{b.dismissal}</span>}
+                    </div>
+                  </td>
+                  <td>{b.r}</td><td>{b.b}</td><td>{b.sr}</td>
                 </tr>
               ))}
             </tbody>
