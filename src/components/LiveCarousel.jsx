@@ -386,13 +386,30 @@ export default function LiveCarousel() {
                   </div>
                 )}
 
-                {/* BALL TRACKER -- current-over strip */}
+                {/* BALL TRACKER -- current-over strip, redesigned for visual prominence */}
                 {ballTracker.length > 0 && (
                   <div className="ball-tracker">
-                    <span className="ball-tracker-label">THIS OVER</span>
+                    <div className="ball-tracker-head">
+                      <span className="ball-tracker-label">
+                        <span className="live-dot"></span>THIS OVER
+                      </span>
+                      <span className="ball-tracker-count">{ballTracker.length}/6 balls</span>
+                    </div>
                     <div className="ball-tracker-dots">
                       {ballTracker.map((b, i) => (
-                        <span key={i} className={`ball-pill ball-pill-${b.type}`}>{b.label}</span>
+                        <span
+                          key={i}
+                          className={`ball-pill ball-pill-${b.type}`}
+                          style={{ animationDelay: `${i * 0.05}s` }}
+                        >
+                          {b.label}
+                        </span>
+                      ))}
+                      {/* Empty upcoming-ball slots fill out the over to 6, so the strip
+                          always reads as "position within the over" rather than just
+                          a growing list */}
+                      {Array.from({ length: Math.max(0, 6 - ballTracker.length) }).map((_, i) => (
+                        <span key={`empty-${i}`} className="ball-pill ball-pill-empty">·</span>
                       ))}
                     </div>
                   </div>
@@ -605,21 +622,32 @@ export default function LiveCarousel() {
 
         .scoreboard-divider { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: rgba(240,242,245,0.25); font-weight: 700; text-align: center; }
 
-        /* BALL TRACKER -- current-over strip */
-        .ball-tracker { display: flex; align-items: center; gap: 10px; margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(240,242,245,0.06); }
-        .ball-tracker-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.35); letter-spacing: 0.06em; flex-shrink: 0; }
-        .ball-tracker-dots { display: flex; gap: 6px; flex-wrap: wrap; }
+        /* BALL TRACKER -- redesigned as a standalone card, not a thin inline strip */
+        .ball-tracker {
+          margin-top: 16px; padding: 14px 16px; border-radius: 6px;
+          background: rgba(240,242,245,0.03); border: 1px solid rgba(240,242,245,0.08);
+        }
+        .ball-tracker-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .ball-tracker-label {
+          font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--blood-red);
+          letter-spacing: 0.08em; font-weight: 700; display: flex; align-items: center; gap: 6px;
+        }
+        .ball-tracker-count { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.35); }
+        .ball-tracker-dots { display: flex; gap: 8px; flex-wrap: wrap; }
         .ball-pill {
           display: inline-flex; align-items: center; justify-content: center;
-          min-width: 22px; height: 22px; padding: 0 5px; border-radius: 5px;
-          font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700;
-          background: rgba(240,242,245,0.06); color: rgba(240,242,245,0.55);
-          animation: ballIn 0.3s ease-out backwards;
+          min-width: 32px; height: 32px; padding: 0 8px; border-radius: 7px;
+          font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700;
+          background: rgba(240,242,245,0.06); color: rgba(240,242,245,0.6);
+          animation: ballPillIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+          box-shadow: 0 1px 0 rgba(0,0,0,0.2);
         }
-        .ball-pill-wicket { background: var(--blood-red); color: #fff; }
-        .ball-pill-six { background: var(--bail-amber); color: #1a1200; }
-        .ball-pill-four { background: rgba(245,166,35,0.25); color: var(--bail-amber); }
+        .ball-pill-wicket { background: var(--blood-red); color: #fff; box-shadow: 0 0 0 1px rgba(232,0,58,0.4), 0 2px 8px rgba(232,0,58,0.35); }
+        .ball-pill-six { background: var(--bail-amber); color: #1a1200; box-shadow: 0 0 0 1px rgba(245,166,35,0.5), 0 2px 8px rgba(245,166,35,0.35); }
+        .ball-pill-four { background: rgba(245,166,35,0.22); color: var(--bail-amber); box-shadow: 0 0 0 1px rgba(245,166,35,0.25); }
         .ball-pill-dot { background: rgba(240,242,245,0.04); color: rgba(240,242,245,0.3); }
+        .ball-pill-empty { background: transparent; color: rgba(240,242,245,0.15); border: 1px dashed rgba(240,242,245,0.1); animation: none; }
+        @keyframes ballPillIn { from { opacity: 0; transform: scale(0.7) translateY(4px); } to { opacity: 1; transform: scale(1) translateY(0); } }
 
         .scoreboard-note { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--bail-amber); margin-top: 14px; }
 
