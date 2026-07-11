@@ -607,8 +607,8 @@ export default function LiveCarousel() {
 
         .stat-kicker { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.35); margin-bottom: 6px; font-weight: 700; letter-spacing: 0.04em; }
 
-        .stat-table { width: 100%; font-size: 12px; border-collapse: collapse; margin-bottom: 14px; color: var(--crease-white); }
-        .stat-table th { font-family: 'JetBrains Mono', monospace; color: rgba(240,242,245,0.35); font-size: 9px; font-weight: 400; text-align: right; padding: 4px 0; border-bottom: 1px solid rgba(240,242,245,0.06); }
+        .stat-table { width: 100%; font-size: 13.5px; border-collapse: collapse; margin-bottom: 14px; color: var(--crease-white); }
+        .stat-table th { font-family: 'JetBrains Mono', monospace; color: rgba(240,242,245,0.4); font-size: 11px; font-weight: 500; text-align: right; padding: 4px 0; border-bottom: 1px solid rgba(240,242,245,0.06); }
         .stat-table th:first-child { text-align: left; }
         .stat-table td { padding: 7px 0; text-align: right; border-bottom: 1px solid rgba(240,242,245,0.03); font-family: 'JetBrains Mono', monospace; }
         .stat-table td:first-child { text-align: left; font-weight: 500; font-family: 'Inter', sans-serif; }
@@ -646,9 +646,9 @@ export default function LiveCarousel() {
 
         .feed-row { padding: 10px 12px; margin-bottom: 8px; border-left: 2px solid rgba(240,242,245,0.08); border-radius: 0 4px 4px 0; }
         .feed-row-head { display: flex; align-items: baseline; gap: 5px; margin-bottom: 2px; }
-        .feed-over-tag { font-family: 'JetBrains Mono', monospace; color: var(--bail-amber); font-size: 9px; font-weight: 700; }
-        .feed-event-tag { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 9px; letter-spacing: 0.04em; }
-        .feed-text { font-size: 11px; color: var(--crease-white); line-height: 1.4; margin-top: 4px; }
+        .feed-over-tag { font-family: 'JetBrains Mono', monospace; color: var(--bail-amber); font-size: 11px; font-weight: 700; }
+        .feed-event-tag { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 11px; letter-spacing: 0.04em; }
+        .feed-text { font-size: 13px; color: var(--crease-white); line-height: 1.5; margin-top: 4px; }
         .loading-state { color: rgba(240,242,245,0.4); font-size: 11px; padding: 40px 0; text-align: center; width: 100%; }
 
         /* NEW: carousel-level error/retry state (distinct from initial loading) */
@@ -680,11 +680,11 @@ export default function LiveCarousel() {
 
 // Dynamic Commentary Styling Engine
 const styleFor = {
-  wicket: { bg: 'rgba(232,0,58,0.12)', border: '#E8003A', label: '#E8003A', labelText: 'WICKET', size: '11px', weight: '700' },
-  six: { bg: 'rgba(245,166,35,0.12)', border: '#F5A623', label: '#F5A623', labelText: 'SIX', size: '11px', weight: '700' },
-  four: { bg: 'rgba(245,166,35,0.08)', border: '#F5A623', label: '#F5A623', labelText: 'FOUR', size: '11px', weight: '500' },
-  run: { bg: 'transparent', border: 'rgba(240,242,245,0.08)', label: 'rgba(240,242,245,0.4)', labelText: '', size: '11px', weight: '400' },
-  dot: { bg: 'transparent', border: 'rgba(240,242,245,0.08)', label: 'rgba(240,242,245,0.3)', labelText: '', size: '11px', weight: '400' }
+  wicket: { bg: 'rgba(232,0,58,0.12)', border: '#E8003A', label: '#E8003A', labelText: 'WICKET', size: '13px', weight: '700' },
+  six: { bg: 'rgba(245,166,35,0.12)', border: '#F5A623', label: '#F5A623', labelText: 'SIX', size: '13px', weight: '700' },
+  four: { bg: 'rgba(245,166,35,0.08)', border: '#F5A623', label: '#F5A623', labelText: 'FOUR', size: '13px', weight: '500' },
+  run: { bg: 'transparent', border: 'rgba(240,242,245,0.08)', label: 'rgba(240,242,245,0.4)', labelText: '', size: '13px', weight: '400' },
+  dot: { bg: 'transparent', border: 'rgba(240,242,245,0.08)', label: 'rgba(240,242,245,0.3)', labelText: '', size: '13px', weight: '400' }
 };
 
 function InningsPanel({ innings, accent, label }) {
