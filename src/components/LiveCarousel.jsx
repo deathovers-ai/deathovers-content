@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 export default function LiveCarousel() {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [carouselError, setCarouselError] = useState(null); // NEW: surfaces a retry state instead of hanging forever
 
   // State for Full-Page Takeover
   const [activeMatchId, setActiveMatchId] = useState(null);
@@ -13,23 +14,52 @@ export default function LiveCarousel() {
   // Reference for manual scrolling
   const scrollRef = useRef(null);
 
+  const fetchLiveCluster = async () => {
+    // NEW: abort the request after 12s instead of letting it hang indefinitely —
+    // this is what lets us show a retry state rather than an infinite spinner.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+    try {
+      const res = await fetch('https://deathovers-ai-engine.onrender.com/api/live-scores', {
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error("HTTP Error");
+      const data = await res.json();
+      setMatches(data.liveAndRecent || []);
+      setCarouselError(null);
+    } catch (err) {
+      console.error("Telemetry failed:", err);
+      // Only show the error state if we have no data at all yet — if we're on a
+      // background 30s refresh and already have matches showing, fail quietly
+      // and just try again next cycle rather than yanking the UI out from under someone.
+      setMatches(prev => {
+        if (prev.length === 0) {
+          setCarouselError(
+            err.name === 'AbortError'
+              ? "Connection to the live-data server timed out."
+              : "Could not reach the live-data server."
+          );
+        }
+        return prev;
+      });
+    } finally {
+      clearTimeout(timeoutId);
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchLiveCluster = async () => {
-      try {
-        const res = await fetch('https://deathovers-ai-engine.onrender.com/api/live-scores');
-        if (!res.ok) throw new Error("HTTP Error");
-        const data = await res.json();
-        setMatches(data.liveAndRecent || []);
-      } catch (err) {
-        console.error("Telemetry failed:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchLiveCluster();
     const updater = setInterval(fetchLiveCluster, 30000);
     return () => clearInterval(updater);
   }, []);
+
+  const retryFetch = () => {
+    setLoading(true);
+    setCarouselError(null);
+    fetchLiveCluster();
+  };
 
   const openMatch = async (matchId) => {
     setActiveMatchId(matchId);
@@ -88,6 +118,15 @@ export default function LiveCarousel() {
 
   if (loading) {
     return <div className="loading-state font-mono">ESTABLISHING SECURE UPLINK TO DATA CLUSTER...</div>;
+  }
+
+  if (carouselError && matches.length === 0) {
+    return (
+      <div className="carousel-error-state">
+        <div className="carousel-error-text font-mono">{carouselError}</div>
+        <button className="carousel-retry-btn" onClick={retryFetch}>RETRY CONNECTION</button>
+      </div>
+    );
   }
 
   const activeData = activeMatchId ? (matchDetails[activeMatchId] || null) : null;
@@ -611,6 +650,22 @@ export default function LiveCarousel() {
         .feed-event-tag { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 9px; letter-spacing: 0.04em; }
         .feed-text { font-size: 11px; color: var(--crease-white); line-height: 1.4; margin-top: 4px; }
         .loading-state { color: rgba(240,242,245,0.4); font-size: 11px; padding: 40px 0; text-align: center; width: 100%; }
+
+        /* NEW: carousel-level error/retry state (distinct from initial loading) */
+        .carousel-error-state {
+          display: flex; flex-direction: column; align-items: center; gap: 14px;
+          padding: 50px 24px; text-align: center;
+        }
+        .carousel-error-text {
+          color: rgba(240,242,245,0.5); font-size: 12px; line-height: 1.5; max-width: 320px;
+        }
+        .carousel-retry-btn {
+          font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700;
+          letter-spacing: 0.05em; color: var(--blood-red); background: rgba(232,0,58,0.1);
+          border: 1px solid rgba(232,0,58,0.3); border-radius: 4px; padding: 8px 18px;
+          cursor: pointer; transition: all 0.2s ease;
+        }
+        .carousel-retry-btn:hover { background: rgba(232,0,58,0.2); border-color: var(--blood-red); }
 
         @media (max-width: 768px) {
           .mp-body { grid-template-columns: 1fr !important; }
