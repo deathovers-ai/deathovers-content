@@ -629,6 +629,19 @@ COLD_INTERVAL_SECONDS = 1800
 
 def _refresh_interval_for_match(carousel_entry: dict | None, detail_entry: dict | None) -> int:
     status = (carousel_entry or {}).get("status")
+    if status is None:
+        # NEW: carousel_entry missing doesn't necessarily mean the match ended — it
+        # can happen from a single transient miss on the /matches/v1/live poll, or a
+        # Cricbuzz match-state string we don't map cleanly. Previously this fell
+        # through to COLD_INTERVAL_SECONDS (30 min), which could silently freeze a
+        # genuinely live match's scorecard for half an hour on a single bad cycle —
+        # exactly the "stuck on an old over" symptom. If we have recent detail data
+        # showing the match was live, keep refreshing at WARM pace instead of
+        # dropping straight to COLD on missing/ambiguous carousel data.
+        shaped_prior = (detail_entry or {}).get("data")
+        if shaped_prior and shaped_prior.get("liveScore"):
+            return WARM_INTERVAL_SECONDS
+        return COLD_INTERVAL_SECONDS
     if status != "LIVE":
         return COLD_INTERVAL_SECONDS
     shaped = (detail_entry or {}).get("data")
@@ -710,7 +723,9 @@ def get_match_details(match_id: str):
 
     if entry is None:
         return jsonify({"error": "Could not fetch match details"}), 502
-    return jsonify(entry["data"])
+    # NEW: expose lastRefreshed so the frontend can detect/flag a stale scorecard
+    # instead of silently showing old data with no signal that it hasn't updated.
+    return jsonify({**entry["data"], "lastRefreshed": entry["last_refreshed"]})
 
 
 @app.route("/api/quota-status", methods=["GET"])
