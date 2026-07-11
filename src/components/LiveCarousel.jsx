@@ -150,8 +150,12 @@ export default function LiveCarousel() {
             {displayMatches.map((match) => {
               const isLive = match.status === 'LIVE';
               const awayIsPending = !match.score?.away || match.score.away.score === 'yet to bat';
-              const homeTeam = safeTeamName(match.matchName?.split(' vs ')[0], "HOME");
-              const awayTeam = safeTeamName(match.matchName?.split(' vs ')[1], "AWAY");
+              {/* FIX: use the clean teams[] array from the backend instead of splitting
+                  matchName on " vs " — matchName often has a trailing ", 3rd Match" etc.
+                  clause on the away side, which safeTeamName was rejecting (comma check)
+                  and silently falling back to the literal word "AWAY". */}
+              const homeTeam = safeTeamName(match.teams?.[0] || match.matchName?.split(' vs ')[0], "HOME");
+              const awayTeam = safeTeamName(match.teams?.[1] || match.matchName?.split(' vs ')[1], "AWAY");
               return (
                 <div
                   key={match.id}
@@ -249,7 +253,7 @@ export default function LiveCarousel() {
                 <div className="scoreboard-grid">
                   <div className={`scoreboard-team ${!inn2 ? 'scoreboard-team-batting' : ''}`}>
                     <div className="sb-team-name">
-                      {inn1?.team || safeTeamName(activeMatchMeta.matchName?.split(' vs ')[0], "TEAM 1")}
+                      {inn1?.team || safeTeamName(activeMatchMeta.teams?.[0] || activeMatchMeta.matchName?.split(' vs ')[0], "TEAM 1")}
                     </div>
                     <div className="sb-team-score">
                       {displayHomeScore?.score || '0/0'}
@@ -263,7 +267,7 @@ export default function LiveCarousel() {
 
                   <div className={`scoreboard-team scoreboard-team-right ${inn2 ? 'scoreboard-team-batting' : 'scoreboard-team-waiting'}`}>
                     <div className="sb-team-name">
-                      {inn2?.team || safeTeamName(activeMatchMeta.matchName?.split(' vs ')[1], "TEAM 2")}
+                      {inn2?.team || safeTeamName(activeMatchMeta.teams?.[1] || activeMatchMeta.matchName?.split(' vs ')[1], "TEAM 2")}
                     </div>
                     <div className="sb-team-score">
                       {inn2 ? (
