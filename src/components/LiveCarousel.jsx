@@ -61,29 +61,50 @@ export default function LiveCarousel() {
     fetchLiveCluster();
   };
 
-  const openMatch = async (matchId) => {
-    setActiveMatchId(matchId);
-    setDetailLoading(true);
-    setDetailError(null);
-
+  const fetchMatchDetails = async (matchId, { showLoading = false } = {}) => {
+    if (showLoading) {
+      setDetailLoading(true);
+      setDetailError(null);
+    }
     try {
       const res = await fetch(`https://deathovers-ai-engine.onrender.com/api/match-details/${matchId}`);
       const data = await res.json();
       if (!res.ok) {
         // NEW: backend now returns a structured error (e.g. quotaExhausted) instead
         // of just failing silently — surface it instead of showing a blank page.
-        setDetailError(data.error || "Could not load match details.");
+        // Only surface as a blocking error if this was the initial load — a failed
+        // background poll shouldn't wipe out a match page someone's already reading.
+        if (showLoading) setDetailError(data.error || "Could not load match details.");
       } else {
         setMatchDetails(prev => ({ ...prev, [matchId]: data }));
       }
     } catch (err) {
       console.error("Failed to load match drilldown data:", err);
-      setDetailError("Could not reach the live-data server. Please try again shortly.");
+      if (showLoading) setDetailError("Could not reach the live-data server. Please try again shortly.");
     } finally {
-      setDetailLoading(false);
+      if (showLoading) setDetailLoading(false);
     }
+  };
+
+  const openMatch = async (matchId) => {
+    setActiveMatchId(matchId);
+    await fetchMatchDetails(matchId, { showLoading: true });
     window.scrollTo(0, 0);
   };
+
+  // NEW: previously the match-detail view (scoreboard + commentary) was fetched
+  // exactly once on open and never again — so anyone sitting on a live match page
+  // was frozen on whatever snapshot loaded first, no matter how long they stayed.
+  // This polls the open match every 20s (faster than the 30s carousel poll, since
+  // someone actively watching a match cares more about freshness) so both the
+  // scoreboard and the accumulating commentary feed keep moving while the page is open.
+  useEffect(() => {
+    if (!activeMatchId) return;
+    const detailUpdater = setInterval(() => {
+      fetchMatchDetails(activeMatchId, { showLoading: false });
+    }, 20000);
+    return () => clearInterval(detailUpdater);
+  }, [activeMatchId]);
 
   const closeMatch = () => {
     setActiveMatchId(null);
