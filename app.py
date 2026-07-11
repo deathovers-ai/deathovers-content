@@ -238,8 +238,14 @@ def _fetch_cricbuzz_commentary_and_miniscore(cricbuzz_match_id: str, innings_id:
             "text": text,
             "ballnbr": ballnbr if isinstance(ballnbr, (int, float)) else 0,
             "timestamp": c.get("timestamp", 0),
+            "innings": innings_id,  # NEW: prevents ballnbr collisions between innings 1 and 2 during merge/dedup
         })
-    return {"commentary": shaped[:30], "miniscore": miniscore}
+    # NOTE: previously this hard-capped to the most recent 30 balls (shaped[:30]),
+    # which meant the frontend could never show commentary older than ~5 overs back —
+    # not a scroll bug, the data was simply discarded here. We now return everything
+    # Cricbuzz gives us in this call; accumulation across refreshes (in
+    # _refresh_match_detail) is what builds the full-innings history over time.
+    return {"commentary": shaped, "miniscore": miniscore}
 
 
 def _fetch_cricbuzz_scorecard(cricbuzz_match_id: str) -> dict | None:
@@ -527,6 +533,35 @@ def _refresh_live_matches() -> None:
         _cache["last_error"] = None
 
 
+# Max commentary entries retained per match, across both innings combined.
+# A T20 innings is ~120-150 legal-delivery events plus wides/no-balls/wickets;
+# 350 comfortably covers both innings of a full match with headroom.
+MAX_COMMENTARY_ENTRIES = 350
+
+
+def _merge_commentary(existing: list[dict], new: list[dict]) -> list[dict]:
+    """Merges freshly-fetched commentary into what we already had cached, instead
+    of overwriting it. Cricbuzz's /comm endpoint only returns a recent window each
+    call, so without this, older overs vanish from the feed every refresh even
+    though nothing is wrong with scrolling — the data was just gone. Dedupes by
+    ballnbr (falls back to the over+text pair if ballnbr is missing/zero), keeps
+    newest-first order, and caps total size so memory doesn't grow unbounded over
+    a long match."""
+    seen_keys = set()
+    merged = []
+    # New entries first so the freshest data wins if Cricbuzz ever revises a ball's text.
+    for entry in new + existing:
+        key = (entry.get("innings", 1), entry.get("ballnbr")) if entry.get("ballnbr") else (entry.get("innings", 1), entry.get("over"), entry.get("text"))
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        merged.append(entry)
+
+    # Sort by innings first (2nd innings entries on top when present), then by ball number within each.
+    merged.sort(key=lambda e: (e.get("innings", 1), e.get("ballnbr", 0)), reverse=True)
+    return merged[:MAX_COMMENTARY_ENTRIES]
+
+
 def _refresh_match_detail(match_id: str) -> None:
     cricbuzz_match_id = str(match_id)
     if not cricbuzz_match_id:
@@ -541,8 +576,18 @@ def _refresh_match_detail(match_id: str) -> None:
         if any(s.get("inningsid") == 2 for s in innings_scores):
             comm_result_2 = _fetch_cricbuzz_commentary_and_miniscore(cricbuzz_match_id, innings_id=2)
             if comm_result_2["commentary"]:
-                commentary = comm_result_2["commentary"]
+                # NEW: combine both innings' commentary instead of discarding innings 1 —
+                # previously this line replaced `commentary` outright, which meant the
+                # entire 1st-innings feed vanished the moment the 2nd innings started.
+                commentary = comm_result_2["commentary"] + commentary
                 miniscore = comm_result_2["miniscore"] or miniscore
+
+    # Merge with whatever commentary we already have cached for this match instead
+    # of replacing it outright, so scrolling back can reach the start of the innings.
+    with _detail_cache_lock:
+        prior_entry = _detail_cache.get(match_id)
+    prior_commentary = (prior_entry or {}).get("data", {}).get("commentary", []) if prior_entry else []
+    commentary = _merge_commentary(prior_commentary, commentary)
 
     shaped = _shape_match_details_from_cricbuzz(scorecard_data, commentary, miniscore)
     with _detail_cache_lock:
