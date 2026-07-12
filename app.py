@@ -351,8 +351,18 @@ def _shape_match_for_carousel(m: dict) -> dict:
         }
 
     match_score = info.get("matchScore") or {}
-    home_score = (match_score.get("team1Score") or {}).get("inngs1")
-    away_score = (match_score.get("team2Score") or {}).get("inngs1")
+    # NEW: for Test matches, each team can have both inngs1 and inngs2 (their 1st
+    # and 2nd innings — Cricbuzz's own inningsId numbering interleaves these across
+    # teams, e.g. team1's innings are inningsId 1 and 3, team2's are 2 and 4, but
+    # inngs1/inngs2 here just means "this team's first/second innings"). Previously
+    # this always read inngs1, so once a team moved on to their 2nd innings, the
+    # carousel card kept showing their old, final 1st-innings score — a real
+    # confirmed bug, not just a hypothetical: a Test match currently in a team's
+    # 2nd innings would show their completed 1st-innings total instead of the live one.
+    team1_score_block = match_score.get("team1Score") or {}
+    team2_score_block = match_score.get("team2Score") or {}
+    home_score = team1_score_block.get("inngs2") or team1_score_block.get("inngs1")
+    away_score = team2_score_block.get("inngs2") or team2_score_block.get("inngs1")
 
     raw_format = (info.get("matchFormat", info.get("matchformat", ""))).strip()
     match_format = raw_format.upper() if raw_format else "UNKNOWN"
@@ -382,10 +392,20 @@ def _shape_match_details_from_cricbuzz(scorecard_data: dict | None, commentary: 
                 return inn
         return None
 
-    inn1_raw = _find_innings(1)
-    inn2_raw = _find_innings(2)
-    innings1 = _shape_innings_from_cricbuzz(inn1_raw) if inn1_raw else None
-    innings2 = _shape_innings_from_cricbuzz(inn2_raw) if inn2_raw else None
+    # NEW: Test matches can have up to 4 innings (2 per side, in a follow-on or
+    # standard 2-innings-per-team format). The old code only ever looked for
+    # inningsid 1 and 2, so a Test match's 3rd/4th innings simply never appeared —
+    # not a bug in the UI, the data was never fetched into the shape at all.
+    # We build a generic `innings` list of however many innings actually exist in
+    # the scorecard (1 to 4), each tagged with its inningsid, so the frontend can
+    # render whatever count is real for this match's format.
+    all_innings = []
+    for innings_id in range(1, 5):
+        raw = _find_innings(innings_id)
+        if raw:
+            shaped_inn = _shape_innings_from_cricbuzz(raw)
+            shaped_inn["inningsId"] = innings_id
+            all_innings.append(shaped_inn)
 
     toss_line = ""
     live_score = None
@@ -398,25 +418,32 @@ def _shape_match_details_from_cricbuzz(scorecard_data: dict | None, commentary: 
                     return s
             return None
 
+        # NEW: overwrite live scores for every innings present, not just the first two —
+        # keeps a Test match's 3rd/4th innings score current during live play too.
+        for inn in all_innings:
+            s = _find_score(inn["inningsId"])
+            if s is not None:
+                inn["score"] = f"{s.get('runs', 0)}/{s.get('wickets', 0)}"
+                inn["overs"] = str(s.get("overs", ""))
+
         s1 = _find_score(1)
         s2 = _find_score(2)
-
-        def _overwrite_score(innings: dict | None, s: dict | None) -> None:
-            if innings is not None and s is not None:
-                innings["score"] = f"{s.get('runs', 0)}/{s.get('wickets', 0)}"
-                innings["overs"] = str(s.get("overs", ""))
-
-        _overwrite_score(innings1, s1)
-        _overwrite_score(innings2, s2)
 
         def _fmt_live(s: dict | None) -> dict:
             if not s:
                 return {"score": "yet to bat", "info": ""}
             return {"score": f"{s.get('runs', 0)}/{s.get('wickets', 0)}", "info": str(s.get("overs", ""))}
 
+        # liveScore.home/away stays as the most recent two innings for the compact
+        # scoreboard header (which shows "current state", not full match history) —
+        # full innings-by-innings detail lives in the `innings` array below instead.
+        latest_two = all_innings[-2:] if len(all_innings) >= 2 else all_innings
+        home_latest = latest_two[0] if len(latest_two) >= 1 else None
+        away_latest = latest_two[1] if len(latest_two) >= 2 else None
+
         live_score = {
-            "home": _fmt_live(s1),
-            "away": _fmt_live(s2),
+            "home": _fmt_live(_find_score(home_latest["inningsId"])) if home_latest else _fmt_live(s1),
+            "away": _fmt_live(_find_score(away_latest["inningsId"])) if away_latest else _fmt_live(s2),
             "target": miniscore.get("target", 0),
             "crr": miniscore.get("crr", 0),
             "rrr": miniscore.get("rrr", 0),
@@ -433,8 +460,15 @@ def _shape_match_details_from_cricbuzz(scorecard_data: dict | None, commentary: 
         "recentBalls": [],
         "commentary": commentary,
         "currentBowler": "",
-        "innings1": innings1,
-        "innings2": innings2,
+        # NEW: generic innings list, works for 2-innings limited-overs and up to
+        # 4-innings Test matches alike.
+        "innings": all_innings,
+        # Backward-compatible aliases — existing frontend code (and the death-overs
+        # detection below) reads innings1/innings2 directly, so we keep populating
+        # them from the first two entries. Safe for limited-overs (never more than
+        # 2 anyway); for Tests, the frontend should prefer the new `innings` array.
+        "innings1": all_innings[0] if len(all_innings) >= 1 else None,
+        "innings2": all_innings[1] if len(all_innings) >= 2 else None,
         "liveScore": live_score,
         "ballTracker": ball_tracker,
     }
@@ -571,16 +605,26 @@ def _refresh_match_detail(match_id: str) -> None:
     miniscore = comm_result["miniscore"]
     scorecard_data = _fetch_cricbuzz_scorecard(cricbuzz_match_id)
 
+    # NEW: previously this only ever checked "does innings 2 exist?" and fetched it
+    # if so — meaning a Test match's 3rd/4th innings commentary was never fetched at
+    # all, since the code never looked past inningsid 2. We now find whichever
+    # innings is actually the highest/most-recent one reported by Cricbuzz's
+    # miniscore (works for 2-innings limited-overs and up to 4-innings Tests alike)
+    # and fetch that one specifically, since that's where live commentary is
+    # actually happening right now.
     if miniscore:
         innings_scores = (miniscore.get("inningsscores") or {}).get("inningsscore", [])
-        if any(s.get("inningsid") == 2 for s in innings_scores):
-            comm_result_2 = _fetch_cricbuzz_commentary_and_miniscore(cricbuzz_match_id, innings_id=2)
-            if comm_result_2["commentary"]:
-                # NEW: combine both innings' commentary instead of discarding innings 1 —
-                # previously this line replaced `commentary` outright, which meant the
-                # entire 1st-innings feed vanished the moment the 2nd innings started.
-                commentary = comm_result_2["commentary"] + commentary
-                miniscore = comm_result_2["miniscore"] or miniscore
+        reported_innings_ids = [s.get("inningsid") for s in innings_scores if s.get("inningsid")]
+        current_innings_id = max(reported_innings_ids) if reported_innings_ids else 1
+
+        if current_innings_id > 1:
+            comm_result_current = _fetch_cricbuzz_commentary_and_miniscore(cricbuzz_match_id, innings_id=current_innings_id)
+            if comm_result_current["commentary"]:
+                # Combine with innings-1 commentary rather than discarding it — the
+                # merge step below dedupes/sorts by (innings, ballnbr) so entries
+                # from every innings coexist correctly instead of overwriting each other.
+                commentary = comm_result_current["commentary"] + commentary
+                miniscore = comm_result_current["miniscore"] or miniscore
 
     # Merge with whatever commentary we already have cached for this match instead
     # of replacing it outright, so scrolling back can reach the start of the innings.
@@ -689,7 +733,16 @@ def _background_loop() -> None:
         for mid in due_for_refresh:
             if not _quota_has_budget():
                 log.warning("Skipping scheduled refresh for match %s — quota exhausted", mid)
+                with _detail_cache_lock:
+                    if mid in _detail_cache:
+                        # NEW: record that this match's refresh was blocked, and when,
+                        # so /api/health and /api/match-details can surface it instead
+                        # of a scorecard silently going stale with no visible cause.
+                        _detail_cache[mid]["last_blocked_at"] = datetime.now(timezone.utc).isoformat()
                 continue
+            with _detail_cache_lock:
+                if mid in _detail_cache:
+                    _detail_cache[mid].pop("last_blocked_at", None)
             _refresh_match_detail(mid)
 
 
@@ -723,9 +776,15 @@ def get_match_details(match_id: str):
 
     if entry is None:
         return jsonify({"error": "Could not fetch match details"}), 502
-    # NEW: expose lastRefreshed so the frontend can detect/flag a stale scorecard
-    # instead of silently showing old data with no signal that it hasn't updated.
-    return jsonify({**entry["data"], "lastRefreshed": entry["last_refreshed"]})
+    # NEW: expose lastRefreshed and whether the most recent scheduled refresh was
+    # blocked by quota exhaustion, so staleness has a visible, diagnosable cause
+    # instead of silently serving old data with no signal.
+    return jsonify({
+        **entry["data"],
+        "lastRefreshed": entry["last_refreshed"],
+        "refreshBlocked": "last_blocked_at" in entry,
+        "lastBlockedAt": entry.get("last_blocked_at"),
+    })
 
 
 @app.route("/api/quota-status", methods=["GET"])
