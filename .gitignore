@@ -1,0 +1,6 @@
+intelligence/raw_data/
+intelligence/output/
+intelligence/parser/__pycache__/
+node_modules/
+__pycache__/
+.env
