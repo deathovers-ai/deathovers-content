@@ -201,6 +201,7 @@ def _fetch_cricbuzz_commentary_and_miniscore(cricbuzz_match_id: str, innings_id:
 
     entries = data.get("comwrapper", [])
     miniscore = data.get("miniscore")
+    log.info("DEBUG raw response top-level keys: %s | miniscore value: %s", list(data.keys()), miniscore)
     shaped = []
 
     for entry in entries:
