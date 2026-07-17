@@ -1,6 +1,16 @@
+# Replace your existing intelligence-related .gitignore lines with these:
+
 intelligence/raw_data/
-intelligence/output/
-intelligence/parser/__pycache__/
-node_modules/
-__pycache__/
-.env
+intelligence/output/events/
+intelligence/output/parse_failures.json
+intelligence/output/manifest.json
+
+# NOTE: intelligence/output/context/venue_stats.json,
+# intelligence/output/context/player_stats.json, and
+# intelligence/output/context/player_aliases.json are INTENTIONALLY
+# NOT ignored - these three small files (under 4MB total) are what
+# app.py loads at runtime via the Insight Engine, and Render only
+# deploys what's committed to git. Everything else in output/ (the
+# 22,000+ per-match event files, the full manifest, raw Cricsheet data)
+# stays local-only - regenerate locally when you want fresh data, then
+# re-commit just these three context files.
