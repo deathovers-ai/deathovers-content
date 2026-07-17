@@ -1,5 +1,17 @@
 """
-app.py — DeathOvers live-data backend (v4)
+app.py — DeathOvers live-data backend (v5)
+
+Changes from v4:
+  - Wired in the Intelligence Engine (Epic 6): /api/match-details/<id> now
+    includes an "intelligence" key with venue/player insights, built from
+    the Cricsheet-derived Context Repository + Insight Engine.
+  - Intelligence module import is defensive: if intelligence/output/context
+    JSON files are missing or the module fails to import, the app logs a
+    warning and keeps serving live scores normally (no crash, no regression
+    to existing functionality).
+  - _refresh_match_detail now looks up the carousel entry for a match to get
+    venue/format for the intelligence bridge (carousel data was already
+    being fetched separately; this just also uses it here).
 
 Changes from v3:
   - Global RapidAPI call budget (shared across all Cricbuzz calls, not per-match)
@@ -15,6 +27,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 import threading
 import time
 import logging
@@ -28,6 +41,27 @@ from team_crests import crest_image_id
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("deathovers-backend")
+
+# ---------------------------------------------------------------------------
+# Intelligence Engine (Epic 6) - defensive import
+# ---------------------------------------------------------------------------
+# If intelligence/output/context/*.json isn't present in this deploy (e.g.
+# not yet committed, or a fresh clone that hasn't run the parser locally),
+# this must NOT take down the whole app - live scores are the core product,
+# insights are additive. Any failure here just means the "intelligence" key
+# is omitted from match-details responses until it's fixed.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "intelligence", "parser"))
+try:
+    from app_integration import get_insights_for_match
+    _INTELLIGENCE_AVAILABLE = True
+    log.info("Intelligence Engine loaded successfully.")
+except Exception as _intel_import_err:
+    get_insights_for_match = None
+    _INTELLIGENCE_AVAILABLE = False
+    log.warning(
+        "Intelligence Engine unavailable at startup (%s) - /api/match-details will "
+        "omit the 'intelligence' key until this is resolved.", _intel_import_err
+    )
 
 # ---------------------------------------------------------------------------
 # Config
@@ -380,6 +414,10 @@ def _shape_match_for_carousel(m: dict) -> dict:
         "teams": [home_name, away_name],
         "homeImageId": team1.get("imageId", team1.get("imageid")) or crest_image_id(home_name),
         "awayImageId": team2.get("imageId", team2.get("imageid")) or crest_image_id(away_name),
+        # NEW: carry seriesName through so the intelligence bridge can detect IPL
+        # matches (Cricbuzz's matchFormat field alone doesn't distinguish IPL from
+        # a generic international T20).
+        "seriesName": info.get("seriesName", info.get("seriesname", "")),
     }
 
 
@@ -519,6 +557,7 @@ def _shape_fill_match_from_cricketdata(m: dict) -> dict:
         "teams": [home_name, away_name],
         "homeImageId": crest_image_id(home_name),
         "awayImageId": crest_image_id(away_name),
+        "seriesName": "",
     }
 
 
@@ -596,10 +635,47 @@ def _merge_commentary(existing: list[dict], new: list[dict]) -> list[dict]:
     return merged[:MAX_COMMENTARY_ENTRIES]
 
 
+def _attach_intelligence(shaped: dict, carousel_entry: dict | None, miniscore: dict | None) -> None:
+    """
+    Mutates `shaped` in place, adding an "intelligence" key with venue/player
+    insights - or a clean empty/error shape if unavailable, so the frontend
+    never has to special-case a missing key vs an empty insights list.
+    Never raises - any failure here should degrade to no insights, not break
+    the whole match-details response.
+    """
+    if not _INTELLIGENCE_AVAILABLE:
+        shaped["intelligence"] = {"insights": [], "meta": {"available": False}}
+        return
+    if not carousel_entry:
+        shaped["intelligence"] = {"insights": [], "meta": {"available": True, "warnings": ["no carousel entry for this match"]}}
+        return
+    try:
+        venue_name = carousel_entry.get("venue", "")
+        match_format = carousel_entry.get("matchFormat", "")
+        series_name = carousel_entry.get("seriesName", "")
+        is_ipl = "indian premier league" in (series_name + " " + venue_name).lower()
+        result = get_insights_for_match(venue_name, match_format, is_ipl, miniscore)
+        shaped["intelligence"] = result
+    except Exception as e:
+        log.error("Intelligence Engine failed for this match: %s", e)
+        shaped["intelligence"] = {"insights": [], "meta": {"available": True, "error": str(e)}}
+
+
 def _refresh_match_detail(match_id: str) -> None:
     cricbuzz_match_id = str(match_id)
     if not cricbuzz_match_id:
         return
+
+    # NEW: look up this match's carousel entry (already cached from
+    # _refresh_live_matches) to get venue/format/seriesName for the
+    # intelligence bridge. Carousel data doesn't require an extra API call -
+    # it's already sitting in _cache from the periodic live-matches refresh.
+    with _cache_lock:
+        carousel_entry = next(
+            (m for m in _cache["live_and_recent"] if str(m.get("id")) == str(match_id)),
+            None
+        )
+
     comm_result = _fetch_cricbuzz_commentary_and_miniscore(cricbuzz_match_id, innings_id=1)
     commentary = comm_result["commentary"]
     miniscore = comm_result["miniscore"]
@@ -634,6 +710,12 @@ def _refresh_match_detail(match_id: str) -> None:
     commentary = _merge_commentary(prior_commentary, commentary)
 
     shaped = _shape_match_details_from_cricbuzz(scorecard_data, commentary, miniscore)
+
+    # NEW: Epic 6 - attach venue/player insights alongside the existing
+    # scorecard/commentary data. Purely additive - nothing above this line
+    # changes behavior for existing frontend fields.
+    _attach_intelligence(shaped, carousel_entry, miniscore)
+
     with _detail_cache_lock:
         _detail_cache[match_id] = {
             "data": shaped,
@@ -800,6 +882,7 @@ def health():
         "status": "ok",
         "hasCricketDataKey": bool(CRICKETDATA_API_KEY),
         "hasRapidApiKey": bool(RAPIDAPI_KEY),
+        "intelligenceAvailable": _INTELLIGENCE_AVAILABLE,
         "refreshIntervalSeconds": REFRESH_INTERVAL_SECONDS,
         "quota": _quota_snapshot(),
         "cache": cache_snapshot,
