@@ -1,13 +1,14 @@
 """
-app.py — DeathOvers live-data backend (v5)
+app.py — DeathOvers live-data backend (v4)
 
-Changes from v4:
-  - _resolve_target(): miniscore['target'] was observed to be unreliable —
-    zeroed in some snapshots of a match and correctly populated (e.g. 128) in
-    other snapshots of the exact same completed match, moments apart.
-    inningsscores.inningsscore[].target is the more stable source (same field,
-    populated per-innings), so we now prefer that, falling back to
-    miniscore.target only if the innings-level value is also missing/zero.
+Changes from v3:
+  - Global RapidAPI call budget (shared across all Cricbuzz calls, not per-match)
+  - Batter dismissal text + bowler name now mapped through to the frontend
+  - CricketData fallback now actually parses completed-match scores instead of
+    hard-coding them to null
+  - Live-matches polling backs off automatically when there are zero live matches
+  - /api/quota-status debug route
+  - On-demand detail fetch on first view is now budget-gated instead of unlimited
 """
 
 from __future__ import annotations
@@ -200,9 +201,6 @@ def _fetch_cricbuzz_commentary_and_miniscore(cricbuzz_match_id: str, innings_id:
 
     entries = data.get("comwrapper", [])
     miniscore = data.get("miniscore")
-    log.info("DEBUG raw response top-level keys: %s | miniscore value: %s", list(data.keys()), miniscore)
-    oversep_entries = [e.get("commentary", {}).get("oversep") for e in entries if e.get("commentary", {}).get("oversep")]
-    log.info("DEBUG found %s oversep blocks in this response. First one: %s", len(oversep_entries), oversep_entries[0] if oversep_entries else None)
     shaped = []
 
     for entry in entries:
@@ -240,7 +238,7 @@ def _fetch_cricbuzz_commentary_and_miniscore(cricbuzz_match_id: str, innings_id:
             "text": text,
             "ballnbr": ballnbr if isinstance(ballnbr, (int, float)) else 0,
             "timestamp": c.get("timestamp", 0),
-            "innings": innings_id,  # prevents ballnbr collisions between innings 1 and 2 during merge/dedup
+            "innings": innings_id,  # NEW: prevents ballnbr collisions between innings 1 and 2 during merge/dedup
         })
     # NOTE: previously this hard-capped to the most recent 30 balls (shaped[:30]),
     # which meant the frontend could never show commentary older than ~5 overs back —
@@ -353,7 +351,7 @@ def _shape_match_for_carousel(m: dict) -> dict:
         }
 
     match_score = info.get("matchScore") or {}
-    # For Test matches, each team can have both inngs1 and inngs2 (their 1st
+    # NEW: for Test matches, each team can have both inngs1 and inngs2 (their 1st
     # and 2nd innings — Cricbuzz's own inningsId numbering interleaves these across
     # teams, e.g. team1's innings are inningsId 1 and 3, team2's are 2 and 4, but
     # inngs1/inngs2 here just means "this team's first/second innings"). Previously
@@ -385,45 +383,7 @@ def _shape_match_for_carousel(m: dict) -> dict:
     }
 
 
-def _resolve_target(miniscore: dict, current_innings_id: int) -> int:
-    """miniscore['target'] is unreliable — observed to be 0 in some snapshots of
-    a match and correctly populated (e.g. 128) in other snapshots of the exact
-    same completed match, moments apart. inningsscores.inningsscore[].target is
-    the more stable source (same field, populated per-innings), so we prefer
-    that, falling back to miniscore.target only if the innings-level value is
-    also missing/zero."""
-    innings_scores = (miniscore.get("inningsscores") or {}).get("inningsscore", [])
-    for s in innings_scores:
-        if s.get("inningsid") == current_innings_id and s.get("target"):
-            return s["target"]
-    return miniscore.get("target", 0) or 0
-
-
-def _resolve_custstatus(miniscore: dict, matchheaders: dict | None) -> str:
-    """custstatus was observed empty ("") in one snapshot and correctly populated
-    ("India won by 7 wkts") in another snapshot of the exact same completed
-    match. matchheaders.status carries the same information more reliably when
-    available, so prefer custstatus but fall back to matchheaders.status if
-    custstatus is blank."""
-    custstatus = (miniscore.get("custstatus") or "").strip()
-    if custstatus:
-        return custstatus
-    if matchheaders:
-        return (matchheaders.get("status") or "").strip()
-    return ""
-
-
-def _shape_innings_from_cricbuzz_wrapper(inn: dict) -> dict:
-    # kept for naming continuity — delegates to _shape_innings_from_cricbuzz
-    return _shape_innings_from_cricbuzz(inn)
-
-
-def _shape_match_details_from_cricbuzz(
-    scorecard_data: dict | None,
-    commentary: list[dict],
-    miniscore: dict | None,
-    matchheaders: dict | None = None,
-) -> dict:
+def _shape_match_details_from_cricbuzz(scorecard_data: dict | None, commentary: list[dict], miniscore: dict | None) -> dict:
     scorecard_list = (scorecard_data or {}).get("scorecard", [])
 
     def _find_innings(innings_id: int) -> dict | None:
@@ -432,7 +392,7 @@ def _shape_match_details_from_cricbuzz(
                 return inn
         return None
 
-    # Test matches can have up to 4 innings (2 per side, in a follow-on or
+    # NEW: Test matches can have up to 4 innings (2 per side, in a follow-on or
     # standard 2-innings-per-team format). The old code only ever looked for
     # inningsid 1 and 2, so a Test match's 3rd/4th innings simply never appeared —
     # not a bug in the UI, the data was never fetched into the shape at all.
@@ -458,7 +418,7 @@ def _shape_match_details_from_cricbuzz(
                     return s
             return None
 
-        # overwrite live scores for every innings present, not just the first two —
+        # NEW: overwrite live scores for every innings present, not just the first two —
         # keeps a Test match's 3rd/4th innings score current during live play too.
         for inn in all_innings:
             s = _find_score(inn["inningsId"])
@@ -481,25 +441,14 @@ def _shape_match_details_from_cricbuzz(
         home_latest = latest_two[0] if len(latest_two) >= 1 else None
         away_latest = latest_two[1] if len(latest_two) >= 2 else None
 
-        current_innings_id = miniscore.get("inningsid") or (home_latest["inningsId"] if home_latest else 2)
-
         live_score = {
             "home": _fmt_live(_find_score(home_latest["inningsId"])) if home_latest else _fmt_live(s1),
             "away": _fmt_live(_find_score(away_latest["inningsId"])) if away_latest else _fmt_live(s2),
-            # NEW: was miniscore.get("target", 0) — replaced with the resolver
-            # below since miniscore.target has been observed to be unreliable
-            # (zeroed in some snapshots of a match where the innings-level
-            # target was correctly populated in other snapshots of the same
-            # completed match).
-            "target": _resolve_target(miniscore, current_innings_id),
+            "target": miniscore.get("target", 0),
             "crr": miniscore.get("crr", 0),
             "rrr": miniscore.get("rrr", 0),
             "lastWicket": miniscore.get("lastwkt", ""),
-            # NEW: was miniscore.get("custstatus", "") — replaced with the
-            # resolver below since custstatus has also been observed blank in
-            # some snapshots where matchheaders.status carried the same
-            # information correctly.
-            "customStatus": _resolve_custstatus(miniscore, matchheaders),
+            "customStatus": miniscore.get("custstatus", ""),
         }
         toss_line = miniscore.get("lastwkt", "")
 
@@ -511,7 +460,7 @@ def _shape_match_details_from_cricbuzz(
         "recentBalls": [],
         "commentary": commentary,
         "currentBowler": "",
-        # generic innings list, works for 2-innings limited-overs and up to
+        # NEW: generic innings list, works for 2-innings limited-overs and up to
         # 4-innings Test matches alike.
         "innings": all_innings,
         # Backward-compatible aliases — existing frontend code (and the death-overs
@@ -656,7 +605,7 @@ def _refresh_match_detail(match_id: str) -> None:
     miniscore = comm_result["miniscore"]
     scorecard_data = _fetch_cricbuzz_scorecard(cricbuzz_match_id)
 
-    # previously this only ever checked "does innings 2 exist?" and fetched it
+    # NEW: previously this only ever checked "does innings 2 exist?" and fetched it
     # if so — meaning a Test match's 3rd/4th innings commentary was never fetched at
     # all, since the code never looked past inningsid 2. We now find whichever
     # innings is actually the highest/most-recent one reported by Cricbuzz's
@@ -684,11 +633,7 @@ def _refresh_match_detail(match_id: str) -> None:
     prior_commentary = (prior_entry or {}).get("data", {}).get("commentary", []) if prior_entry else []
     commentary = _merge_commentary(prior_commentary, commentary)
 
-    matchheaders = None
-    if scorecard_data and isinstance(scorecard_data, dict):
-        matchheaders = scorecard_data.get("matchheaders")
-
-    shaped = _shape_match_details_from_cricbuzz(scorecard_data, commentary, miniscore, matchheaders)
+    shaped = _shape_match_details_from_cricbuzz(scorecard_data, commentary, miniscore)
     with _detail_cache_lock:
         _detail_cache[match_id] = {
             "data": shaped,
@@ -729,7 +674,7 @@ COLD_INTERVAL_SECONDS = 1800
 def _refresh_interval_for_match(carousel_entry: dict | None, detail_entry: dict | None) -> int:
     status = (carousel_entry or {}).get("status")
     if status is None:
-        # carousel_entry missing doesn't necessarily mean the match ended — it
+        # NEW: carousel_entry missing doesn't necessarily mean the match ended — it
         # can happen from a single transient miss on the /matches/v1/live poll, or a
         # Cricbuzz match-state string we don't map cleanly. Previously this fell
         # through to COLD_INTERVAL_SECONDS (30 min), which could silently freeze a
@@ -790,7 +735,7 @@ def _background_loop() -> None:
                 log.warning("Skipping scheduled refresh for match %s — quota exhausted", mid)
                 with _detail_cache_lock:
                     if mid in _detail_cache:
-                        # record that this match's refresh was blocked, and when,
+                        # NEW: record that this match's refresh was blocked, and when,
                         # so /api/health and /api/match-details can surface it instead
                         # of a scorecard silently going stale with no visible cause.
                         _detail_cache[mid]["last_blocked_at"] = datetime.now(timezone.utc).isoformat()
@@ -831,7 +776,7 @@ def get_match_details(match_id: str):
 
     if entry is None:
         return jsonify({"error": "Could not fetch match details"}), 502
-    # expose lastRefreshed and whether the most recent scheduled refresh was
+    # NEW: expose lastRefreshed and whether the most recent scheduled refresh was
     # blocked by quota exhaustion, so staleness has a visible, diagnosable cause
     # instead of silently serving old data with no signal.
     return jsonify({
