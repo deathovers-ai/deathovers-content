@@ -112,12 +112,61 @@ class InsightEngine:
         self.venue_stats = venue_stats or _load_json(VENUE_STATS_FILE)
         self.player_stats = player_stats or _load_json(PLAYER_STATS_FILE)
 
+    def _projected_score_at_point(self, venue_entry, match_type, legal_balls_so_far):
+        """
+        Estimate what a "typical" score at this venue would be after
+        `legal_balls_so_far` balls, using the phase-by-phase run rates
+        already computed in venue_stats.json - NOT the flat full-innings
+        average. Comparing a 6-over score against a 20-over average is
+        misleading (any early score looks dramatically "below average"
+        purely because the innings isn't finished yet) - this walks
+        through powerplay/middle/death phase rates up to the current
+        point instead, giving a fair "on pace" comparison.
+
+        Returns None if phase data isn't available for this format.
+        """
+        fmt = venue_entry["formats"].get(match_type)
+        if not fmt or "phase_breakdown" not in fmt:
+            return None
+        phases = fmt["phase_breakdown"]
+
+        # Phase over-boundaries, mirroring context_repository.py's
+        # PHASE_BOUNDARIES - kept in sync manually (small, stable table).
+        if match_type in ("ODI", "ODM"):
+            bounds = [("powerplay", 0, 10), ("middle", 10, 40), ("death", 40, 50)]
+        else:
+            bounds = [("powerplay", 0, 6), ("middle", 6, 15), ("death", 15, 20)]
+
+        overs_so_far = legal_balls_so_far / 6
+        projected = 0.0
+        for phase_name, start_over, end_over in bounds:
+            phase_data = phases.get(phase_name)
+            if not phase_data:
+                continue
+            phase_rate = phase_data.get("avg_run_rate", 0)
+            if overs_so_far <= start_over:
+                break
+            overs_in_this_phase = min(overs_so_far, end_over) - start_over
+            if overs_in_this_phase > 0:
+                projected += overs_in_this_phase * phase_rate
+        return round(projected, 1)
+
     def venue_score_insight(self, venue_key, match_type, current_score, current_wickets, overs_completed_str):
         """
-        Compare a live team score against the venue's historical average
-        first-innings score for this format. Returns a dict describing
-        the insight, or None if not significant enough or not reliable
-        enough to mention.
+        Compare a live team score against a FAIR baseline for this exact
+        point in the innings - the venue's phase-weighted projected score
+        by this many overs, not the flat full-innings average. This
+        avoids the misleading "73% below average" false alarm that a flat
+        comparison produces on any early-innings score (confirmed via a
+        real Edgbaston live match: 39/3 in 6.1 overs looked dramatically
+        "below" the 147.9 full-innings average, when it was actually a
+        completely normal powerplay score for that venue).
+
+        Falls back to the flat full-innings average only if we're at or
+        past the final over (comparing a completed/near-complete innings
+        to the full average is legitimate) or if phase data is missing.
+
+        Returns None if not significant enough or not reliable enough.
         """
         venue_entry = self.venue_stats.get(venue_key)
         if not venue_entry or not venue_data_is_reliable(venue_entry, match_type):
@@ -128,11 +177,25 @@ class InsightEngine:
         if avg_score == 0:
             return None
 
-        diff = current_score - avg_score
-        diff_pct = round((diff / avg_score) * 100, 1)
+        try:
+            legal_balls_so_far = int(round(float(overs_completed_str) * 6))
+        except (ValueError, TypeError):
+            legal_balls_so_far = None
+
+        total_overs = 50 if match_type in ("ODI", "ODM") else 20
+        baseline = avg_score
+        baseline_label = "historical"
+        if legal_balls_so_far is not None and legal_balls_so_far < total_overs * 6:
+            projected = self._projected_score_at_point(venue_entry, match_type, legal_balls_so_far)
+            if projected is not None and projected > 0:
+                baseline = projected
+                baseline_label = "on-pace"
+
+        diff = current_score - baseline
+        diff_pct = round((diff / baseline) * 100, 1)
 
         if abs(diff_pct) < SIGNIFICANCE_THRESHOLD_PCT:
-            return None  # too close to average to be worth saying anything
+            return None  # too close to the fair baseline to be worth saying anything
 
         direction = "above" if diff > 0 else "below"
         return {
@@ -143,15 +206,16 @@ class InsightEngine:
             "current_wickets": current_wickets,
             "overs": overs_completed_str,
             "venue_avg_first_innings_score": avg_score,
+            "baseline_used": baseline,
+            "baseline_type": baseline_label,
             "diff_runs": round(diff, 1),
             "diff_pct": diff_pct,
             "direction": direction,
             "sample_size": fmt["matches_with_data"],
             "text": (
                 f"At {venue_entry['display_name']}, this score of {current_score}/{current_wickets} "
-                f"in {overs_completed_str} overs is {abs(diff_pct)}% {direction} the historical "
-                f"{match_type} first-innings average of {avg_score} here "
-                f"(based on {fmt['matches_with_data']} matches)."
+                f"in {overs_completed_str} overs is {abs(diff_pct)}% {direction} the {baseline_label} "
+                f"score for this venue at this stage ({match_type}, based on {fmt['matches_with_data']} matches)."
             ),
         }
 
