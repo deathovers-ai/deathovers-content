@@ -171,6 +171,9 @@ export default function LiveCarousel() {
   const displayHomeScore = liveScore?.home || activeMatchMeta?.score?.home;
   const displayAwayScore = liveScore?.away || activeMatchMeta?.score?.away;
 
+  // NEW: intelligence insights from the Insight Engine (Epic 6), if present.
+  const insights = activeData?.intelligence?.insights || [];
+
   const safeTeamName = (raw, fallback) => {
     if (!raw) return fallback;
     if (raw.includes(',') || raw.length > 24) return fallback;
@@ -248,9 +251,9 @@ export default function LiveCarousel() {
                   </div>
 
                   <div className="team-line">
-                    <span className="team-code">
+                    <span className="team-code" title={homeTeam}>
                       <TeamCrest imageId={match.homeImageId} code={homeTeam} />
-                      {homeTeam}
+                      <span className="team-code-text">{homeTeam}</span>
                     </span>
                     <span className="team-score">
                       {match.score?.home?.score || '-'}
@@ -260,9 +263,9 @@ export default function LiveCarousel() {
 
                   {!awayIsPending && (
                     <div className="team-line">
-                      <span className="team-code">
+                      <span className="team-code" title={awayTeam}>
                         <TeamCrest imageId={match.awayImageId} code={awayTeam} />
-                        {awayTeam}
+                        <span className="team-code-text">{awayTeam}</span>
                       </span>
                       <span className="team-score">
                         {match.score.away.score}<span className="overs-sub"> ({match.score.away.info || ''})</span>
@@ -327,8 +330,10 @@ export default function LiveCarousel() {
 
                 <div className="scoreboard-grid">
                   <div className={`scoreboard-team ${!inn2 ? 'scoreboard-team-batting' : ''}`}>
-                    <div className="sb-team-name">
-                      {inn1?.team || safeTeamName(activeMatchMeta.teams?.[0] || activeMatchMeta.matchName?.split(' vs ')[0], "TEAM 1")}
+                    <div className="sb-team-name" title={inn1?.team || safeTeamName(activeMatchMeta.teams?.[0] || activeMatchMeta.matchName?.split(' vs ')[0], "TEAM 1")}>
+                      <span className="team-code-text">
+                        {inn1?.team || safeTeamName(activeMatchMeta.teams?.[0] || activeMatchMeta.matchName?.split(' vs ')[0], "TEAM 1")}
+                      </span>
                     </div>
                     <div className="sb-team-score">
                       {displayHomeScore?.score || '0/0'}
@@ -341,8 +346,10 @@ export default function LiveCarousel() {
                   </div>
 
                   <div className={`scoreboard-team scoreboard-team-right ${inn2 ? 'scoreboard-team-batting' : 'scoreboard-team-waiting'}`}>
-                    <div className="sb-team-name">
-                      {inn2?.team || safeTeamName(activeMatchMeta.teams?.[1] || activeMatchMeta.matchName?.split(' vs ')[1], "TEAM 2")}
+                    <div className="sb-team-name" title={inn2?.team || safeTeamName(activeMatchMeta.teams?.[1] || activeMatchMeta.matchName?.split(' vs ')[1], "TEAM 2")}>
+                      <span className="team-code-text">
+                        {inn2?.team || safeTeamName(activeMatchMeta.teams?.[1] || activeMatchMeta.matchName?.split(' vs ')[1], "TEAM 2")}
+                      </span>
                     </div>
                     <div className="sb-team-score">
                       {inn2 ? (
@@ -426,6 +433,23 @@ export default function LiveCarousel() {
                   <div className="scoreboard-toss">
                     <span className="toss-kicker">TOSS</span>
                     <span className="toss-line">{activeData.toss}</span>
+                  </div>
+                )}
+
+                {/* NEW: INSIGHT PANEL (Epic 6/7) -- venue/player context insights,
+                    rendered only when the Insight Engine actually produced something.
+                    Silent when empty, same "refuse rather than guess" philosophy as
+                    the backend - no placeholder/empty-state noise. */}
+                {insights.length > 0 && (
+                  <div className="insight-panel">
+                    <div className="insight-panel-head">
+                      <span className="insight-panel-label">INSIGHT</span>
+                    </div>
+                    {insights.map((insight, i) => (
+                      <div key={i} className="insight-row">
+                        {insight.text}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -534,9 +558,9 @@ export default function LiveCarousel() {
           border: 1px solid rgba(240,242,245,0.08);
           border-radius: 6px;
           width: 272px;
-          min-height: 148px;
+          min-height: 156px;
           flex-shrink: 0;
-          padding: 16px 18px;
+          padding: 16px 20px;
           position: relative;
           cursor: pointer;
           transition: border-color 0.22s ease, transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease;
@@ -573,10 +597,20 @@ export default function LiveCarousel() {
         .status-live { color: var(--blood-red); }
         .status-done { color: rgba(240,242,245,0.35); }
 
-        .team-line { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 7px; }
+        .team-line { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 9px; gap: 8px; }
         .team-line-pending { opacity: 0.55; }
-        .team-code { font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 0.01em; color: var(--crease-white); }
-        .team-score { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 700; color: var(--crease-white); }
+        .team-code {
+          display: inline-flex;
+          align-items: center;
+          max-width: 140px;
+          font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 0.01em; color: var(--crease-white);
+        }
+        .team-code-text {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .team-score { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 700; color: var(--crease-white); flex-shrink: 0; white-space: nowrap; }
         .pending-label { font-size: 11px; font-weight: 500; color: rgba(240,242,245,0.4); font-family: 'Inter', sans-serif; text-transform: uppercase; letter-spacing: 0.04em; }
         .overs-sub { font-size: 11px; color: rgba(240,242,245,0.4); font-family: 'Inter', sans-serif; font-weight: 400; }
         .chase-line { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--bail-amber); margin-top: 6px; min-height: 14px; }
@@ -609,13 +643,24 @@ export default function LiveCarousel() {
           border-radius: 4px; padding: 6px 12px; margin-bottom: 14px;
         }
 
-        .scoreboard-grid { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 20px; }
+        .scoreboard-grid { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 24px; }
 
-        .scoreboard-team { display: flex; flex-direction: column; gap: 4px; opacity: 0.5; transition: opacity 0.2s; }
+        .scoreboard-team { display: flex; flex-direction: column; gap: 4px; opacity: 0.5; transition: opacity 0.2s; min-width: 0; }
         .scoreboard-team-batting { opacity: 1; }
         .scoreboard-team-right { text-align: right; align-items: flex-end; }
 
-        .sb-team-name { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 0.02em; color: var(--crease-white); line-height: 1; }
+        .sb-team-name {
+          max-width: 100%;
+          overflow: hidden;
+          font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 0.02em; color: var(--crease-white); line-height: 1;
+        }
+        .sb-team-name .team-code-text {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          display: inline-block;
+          max-width: 100%;
+        }
         .sb-team-score { font-family: 'JetBrains Mono', monospace; font-size: 30px; font-weight: 700; color: var(--crease-white); line-height: 1.15; letter-spacing: -0.01em; }
         .sb-overs { font-size: 13px; font-weight: 400; color: rgba(240,242,245,0.4); margin-left: 6px; }
         .sb-pending { font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600; color: rgba(240,242,245,0.35); letter-spacing: 0.04em; }
@@ -654,6 +699,22 @@ export default function LiveCarousel() {
         .scoreboard-lastwkt, .scoreboard-toss { margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(240,242,245,0.06); display: flex; align-items: baseline; gap: 10px; }
         .toss-kicker { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.35); letter-spacing: 0.06em; flex-shrink: 0; }
         .toss-line { font-size: 12px; color: rgba(240,242,245,0.65); font-weight: 500; }
+
+        /* NEW: Insight panel (Epic 6/7) */
+        .insight-panel {
+          margin-top: 14px; padding: 14px 16px; border-radius: 6px;
+          background: rgba(245,166,35,0.05); border: 1px solid rgba(245,166,35,0.2);
+        }
+        .insight-panel-head { margin-bottom: 8px; }
+        .insight-panel-label {
+          font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--bail-amber);
+          letter-spacing: 0.08em; font-weight: 700;
+        }
+        .insight-row {
+          font-size: 13px; color: rgba(240,242,245,0.85); line-height: 1.5;
+          padding: 4px 0;
+        }
+        .insight-row + .insight-row { border-top: 1px solid rgba(240,242,245,0.06); margin-top: 4px; padding-top: 8px; }
 
         .mp-header-loading { padding: 60px 24px; text-align: center; border-radius: 8px; }
         .error-state { color: var(--blood-red); }
@@ -742,6 +803,7 @@ export default function LiveCarousel() {
           .innings-col.border-left, .mp-commentary-rail { border-left: none; border-top: 1px solid rgba(240,242,245,0.08); }
           .scoreboard-grid { gap: 10px; }
           .sb-team-score { font-size: 24px; }
+          .team-code { max-width: 100px; }
         }
       `}</style>
     </div>
