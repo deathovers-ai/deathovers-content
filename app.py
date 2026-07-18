@@ -228,8 +228,16 @@ def _is_system_announcement(text: str) -> bool:
     return False
 
 
-def _fetch_cricbuzz_commentary_and_miniscore(cricbuzz_match_id: str, innings_id: int = 1) -> dict:
-    data = _cricbuzz_get(f"/mcenter/v1/{cricbuzz_match_id}/comm", params={"iid": innings_id})
+def _fetch_cricbuzz_commentary_and_miniscore(cricbuzz_match_id: str, innings_id: int = 1, tms: int | None = None) -> dict:
+    """NEW: tms is the pagination cursor Cricbuzz's /comm endpoint uses -
+    pass the oldest timestamp seen so far to get the NEXT (older) page.
+    Leave None for the first/most-recent page. Confirmed working against
+    a real RapidAPI response (verified in the playground before building
+    this - paginating with tms correctly returned earlier overs)."""
+    params = {"iid": innings_id}
+    if tms:
+        params["tms"] = tms
+    data = _cricbuzz_get(f"/mcenter/v1/{cricbuzz_match_id}/comm", params=params)
     if data is None:
         return {"commentary": [], "miniscore": None}
 
@@ -280,6 +288,63 @@ def _fetch_cricbuzz_commentary_and_miniscore(cricbuzz_match_id: str, innings_id:
     # Cricbuzz gives us in this call; accumulation across refreshes (in
     # _refresh_match_detail) is what builds the full-innings history over time.
     return {"commentary": shaped, "miniscore": miniscore}
+
+
+# Backfill up to this many pages per innings (each page = ~1 RapidAPI call).
+# A full T20 innings is ~120-150 balls at ~20 balls/page -> 6-8 pages is
+# plenty; ODI innings are longer but we cap here regardless to protect
+# the daily quota - a few overs of missing very-early commentary is a
+# much smaller problem than running out of API budget for live scores,
+# which is the core product.
+MAX_BACKFILL_PAGES = 8
+# Never spend more than this fraction of the remaining daily quota on one
+# backfill operation - keeps one match's history fetch from starving
+# every other match's live updates.
+MAX_BACKFILL_QUOTA_FRACTION = 0.15
+
+
+def _backfill_full_commentary(cricbuzz_match_id: str, innings_id: int, first_page_result: dict) -> list[dict]:
+    """
+    Paginates backward through Cricbuzz's /comm endpoint using the `tms`
+    cursor until the start of the innings is reached (ballnbr hits 1) or
+    a safety limit is hit. Called ONCE per match/innings (the caller is
+    responsible for only invoking this the first time a match is opened,
+    not on every scheduled refresh) - see _refresh_match_detail for the
+    "have we backfilled this match already" check.
+    """
+    all_commentary = list(first_page_result["commentary"])
+    if not all_commentary:
+        return all_commentary
+
+    oldest_ballnbr = min((c["ballnbr"] for c in all_commentary if c["ballnbr"]), default=0)
+    oldest_timestamp = min((c["timestamp"] for c in all_commentary if c["timestamp"]), default=0)
+
+    pages_fetched = 0
+    while oldest_ballnbr > 1 and pages_fetched < MAX_BACKFILL_PAGES and oldest_timestamp:
+        snap = _quota_snapshot()
+        if snap["remaining"] < RAPIDAPI_DAILY_CALL_CAP * MAX_BACKFILL_QUOTA_FRACTION:
+            log.warning("Stopping commentary backfill for match %s - protecting remaining quota (%s calls left)",
+                        cricbuzz_match_id, snap["remaining"])
+            break
+
+        page = _fetch_cricbuzz_commentary_and_miniscore(cricbuzz_match_id, innings_id=innings_id, tms=oldest_timestamp)
+        pages_fetched += 1
+        new_entries = page["commentary"]
+        if not new_entries:
+            break  # no more history available
+
+        new_oldest_ballnbr = min((c["ballnbr"] for c in new_entries if c["ballnbr"]), default=0)
+        new_oldest_timestamp = min((c["timestamp"] for c in new_entries if c["timestamp"]), default=0)
+        if new_oldest_timestamp == oldest_timestamp or new_oldest_ballnbr >= oldest_ballnbr:
+            break  # not making progress - stop rather than loop forever
+
+        all_commentary.extend(new_entries)
+        oldest_ballnbr = new_oldest_ballnbr
+        oldest_timestamp = new_oldest_timestamp
+
+    log.info("Backfilled commentary for match %s innings %s: %s pages, %s total entries, reached ball %s",
+              cricbuzz_match_id, innings_id, pages_fetched, len(all_commentary), oldest_ballnbr)
+    return all_commentary
 
 
 def _fetch_cricbuzz_scorecard(cricbuzz_match_id: str) -> dict | None:
@@ -676,7 +741,20 @@ def _refresh_match_detail(match_id: str) -> None:
             None
         )
 
+    with _detail_cache_lock:
+        already_backfilled = (match_id in _detail_cache) and _detail_cache[match_id].get("backfilled_innings", set())
+        backfilled_innings = set(already_backfilled) if already_backfilled else set()
+
     comm_result = _fetch_cricbuzz_commentary_and_miniscore(cricbuzz_match_id, innings_id=1)
+    # NEW: on the FIRST fetch for this match/innings only, paginate backward
+    # through /comm using the tms cursor to backfill full innings history -
+    # this is what fixes commentary only ever showing a recent chunk instead
+    # of starting from ball 1. Subsequent refreshes skip this (rely on the
+    # existing incremental _merge_commentary instead) so we don't re-spend
+    # quota re-fetching history we already have cached.
+    if 1 not in backfilled_innings:
+        comm_result["commentary"] = _backfill_full_commentary(cricbuzz_match_id, 1, comm_result)
+        backfilled_innings.add(1)
     commentary = comm_result["commentary"]
     miniscore = comm_result["miniscore"]
     scorecard_data = _fetch_cricbuzz_scorecard(cricbuzz_match_id)
@@ -695,6 +773,11 @@ def _refresh_match_detail(match_id: str) -> None:
 
         if current_innings_id > 1:
             comm_result_current = _fetch_cricbuzz_commentary_and_miniscore(cricbuzz_match_id, innings_id=current_innings_id)
+            if current_innings_id not in backfilled_innings and comm_result_current["commentary"]:
+                comm_result_current["commentary"] = _backfill_full_commentary(
+                    cricbuzz_match_id, current_innings_id, comm_result_current
+                )
+                backfilled_innings.add(current_innings_id)
             if comm_result_current["commentary"]:
                 # Combine with innings-1 commentary rather than discarding it — the
                 # merge step below dedupes/sorts by (innings, ballnbr) so entries
@@ -721,6 +804,7 @@ def _refresh_match_detail(match_id: str) -> None:
             "data": shaped,
             "last_refreshed": datetime.now(timezone.utc).isoformat(),
             "cricbuzz_match_id": cricbuzz_match_id,
+            "backfilled_innings": backfilled_innings,
         }
 
 
