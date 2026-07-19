@@ -10,7 +10,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from context_repository import normalize_venue
+from context_repository import normalize_venue, resolve_venue_key
 from insight_engine import InsightEngine
 
 _engine = None
@@ -84,9 +84,15 @@ def get_match_insights(live_state):
 
     venue_key = None
     if live_state.get("venue_name"):
-        venue_key = normalize_venue(live_state["venue_name"])
-        if venue_key not in engine.venue_stats:
-            warnings.append(f"Venue '{venue_key}' (normalized from '{live_state['venue_name']}') "
+        # resolve_venue_key tries the direct normalized name first, then
+        # falls back to stripping a generic suffix word (e.g. "Lord's
+        # Cricket Ground, London" -> "Lord's") to bridge the gap between
+        # Cricbuzz's fuller venue naming and Cricsheet's terser one - see
+        # its docstring in context_repository.py.
+        venue_key = resolve_venue_key(live_state["venue_name"], engine.venue_stats)
+        if venue_key is None:
+            fallback_display = normalize_venue(live_state["venue_name"])
+            warnings.append(f"Venue '{fallback_display}' (normalized from '{live_state['venue_name']}') "
                              f"not found in venue_stats.json - venue insights skipped.")
 
     context = {}
