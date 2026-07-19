@@ -76,6 +76,11 @@ CRICBUZZ_BASE = f"https://{CRICBUZZ_HOST}"
 
 REFRESH_INTERVAL_SECONDS = int(os.environ.get("REFRESH_INTERVAL_SECONDS", 900))
 NO_LIVE_BACKOFF_SECONDS = int(os.environ.get("NO_LIVE_BACKOFF_SECONDS", 1800))  # when nothing is live
+# NEW: when the SITE ITSELF has had no visitors at all recently (regardless
+# of whether a match is live somewhere), back off much further than either
+# of the above - there's no point refreshing the carousel every 15 minutes
+# for a site nobody's currently browsing.
+SITE_IDLE_BACKOFF_SECONDS = int(os.environ.get("SITE_IDLE_BACKOFF_SECONDS", 3600))
 REQUEST_TIMEOUT_SECONDS = 10
 
 # RapidAPI free-tier daily cap for cricbuzz-cricket2. Set a few calls below your
@@ -1011,7 +1016,17 @@ def _background_loop() -> None:
 
         with _cache_lock:
             has_live = any(m.get("status") == "LIVE" for m in _cache["live_and_recent"])
-        live_list_interval = REFRESH_INTERVAL_SECONDS if has_live else NO_LIVE_BACKOFF_SECONDS
+
+        # NEW: three-tier interval instead of two - if the whole site has
+        # had zero visitors recently, back off much further regardless of
+        # whether a match happens to be live somewhere in the world. This
+        # is the other half of the quota-waste fix: previously the
+        # carousel kept refreshing at full speed as long as ANY match was
+        # live anywhere, even with zero actual visitors to deathovers.com.
+        if not _site_has_recent_activity():
+            live_list_interval = SITE_IDLE_BACKOFF_SECONDS
+        else:
+            live_list_interval = REFRESH_INTERVAL_SECONDS if has_live else NO_LIVE_BACKOFF_SECONDS
 
         if now - last_live_refresh >= live_list_interval:
             _refresh_live_matches()
@@ -1024,6 +1039,13 @@ def _background_loop() -> None:
 
         due_for_refresh = []
         for mid, entry in snapshot.items():
+            # NEW: the actual fix for quota being consumed with nobody
+            # watching - a match only gets background-refreshed if someone
+            # has requested it within the last VIEWER_ACTIVE_WINDOW_SECONDS.
+            # Previously any match ever opened kept refreshing forever,
+            # even minutes/hours after the last viewer closed the tab.
+            if not _match_has_active_viewer(mid):
+                continue
             interval = _refresh_interval_for_match(carousel_by_id.get(mid), entry)
             if now - datetime.fromisoformat(entry["last_refreshed"]).timestamp() >= interval:
                 due_for_refresh.append(mid)
@@ -1048,8 +1070,29 @@ def _background_loop() -> None:
 # Routes
 # ---------------------------------------------------------------------------
 
+_site_activity_lock = threading.Lock()
+# Updated by ANY API call (live-scores or match-details) - tracks whether
+# the site has had ANY visitor recently at all, separate from per-match
+# viewer tracking. Used to back off the carousel refresh hard when the
+# whole site is idle (e.g. overnight, nobody's browsing at all) rather
+# than just when there's no live match.
+_last_site_activity = {"timestamp": 0.0}
+
+
+def _mark_site_activity() -> None:
+    with _site_activity_lock:
+        _last_site_activity["timestamp"] = time.time()
+
+
+def _site_has_recent_activity(window_seconds: int = 120) -> bool:
+    with _site_activity_lock:
+        last = _last_site_activity["timestamp"]
+    return last > 0 and (time.time() - last) < window_seconds
+
+
 @app.route("/api/live-scores", methods=["GET"])
 def get_live_scores():
+    _mark_site_activity()  # NEW: any hit to this route means someone's actually on the site
     with _cache_lock:
         return jsonify({
             "liveAndRecent": _cache["live_and_recent"],
@@ -1058,8 +1101,37 @@ def get_live_scores():
         })
 
 
+_viewer_lock = threading.Lock()
+# match_id -> timestamp of the most recent /api/match-details request for it.
+# This is the actual fix for "quota burns even when nobody's watching" - the
+# background loop previously kept refreshing every match ever opened,
+# forever, regardless of whether anyone was still on that page. Now it only
+# refreshes matches someone has requested within VIEWER_ACTIVE_WINDOW_SECONDS.
+_last_viewed: dict[str, float] = {}
+
+# Comfortably longer than the frontend's 20s detail-poll interval (see
+# LiveCarousel.jsx's detailUpdater), so an actively-open match page never
+# sees a gap - but short enough that closing the tab stops burning quota
+# on that match within ~90s, not indefinitely.
+VIEWER_ACTIVE_WINDOW_SECONDS = 90
+
+
+def _mark_match_viewed(match_id: str) -> None:
+    with _viewer_lock:
+        _last_viewed[match_id] = time.time()
+
+
+def _match_has_active_viewer(match_id: str) -> bool:
+    with _viewer_lock:
+        last = _last_viewed.get(match_id)
+    return last is not None and (time.time() - last) < VIEWER_ACTIVE_WINDOW_SECONDS
+
+
 @app.route("/api/match-details/<match_id>", methods=["GET"])
 def get_match_details(match_id: str):
+    _mark_match_viewed(match_id)  # NEW: records that someone is actually looking at this match right now
+    _mark_site_activity()
+
     with _detail_cache_lock:
         entry = _detail_cache.get(match_id)
 
