@@ -64,7 +64,17 @@ def build_live_state(venue_name, match_format_str, is_ipl, miniscore):
         overs_val = current_innings.get("overs")
         if overs_val is not None:
             live_state["overs_completed_str"] = str(overs_val)
-            live_state["current_over_number"] = int(overs_val)
+            # Cricbuzz's "overs" is overs.balls notation (e.g. "15.4" means
+            # 15 overs and 4 balls), NOT a decimal number of overs - so this
+            # must be split on "." and only the whole-overs part parsed as
+            # an int. int("15.4") raises ValueError, which was previously
+            # uncaught here and silently killed every insight for any over
+            # that wasn't exactly on a boundary (i.e. almost always).
+            whole_overs_str = str(overs_val).split(".")[0]
+            try:
+                live_state["current_over_number"] = int(whole_overs_str)
+            except (TypeError, ValueError):
+                pass
 
     striker = miniscore.get("batsmanstriker")
     if striker and striker.get("name") and striker.get("runs") is not None and striker.get("balls") is not None:
