@@ -754,6 +754,59 @@ def _merge_commentary(existing: list[dict], new: list[dict]) -> list[dict]:
     return merged[:MAX_COMMENTARY_ENTRIES]
 
 
+def _synthesize_miniscore_from_shaped_innings(shaped: dict) -> dict | None:
+    """
+    Fallback for when Cricbuzz's real `miniscore` comes back None/empty
+    (a confirmed real, intermittent failure mode - not our bug, a gap in
+    the live data provider). shaped["innings1"]/["innings2"] are already
+    correctly populated by this point via the commentary-derived
+    _latest_oversep_from_commentary override (added earlier), even when
+    miniscore itself is missing - e.g. score "163/0", overs "24.6" showed
+    correctly in a real match where miniscore was None.
+
+    Builds a minimal dict in the SAME SHAPE build_live_state() expects
+    from a real miniscore (inningsscores.inningsscore list, inningsid),
+    using whichever shaped innings is currently being batted (the one
+    without a completed/"yet to bat" score). Returns None if neither
+    innings has usable data either - in which case there's genuinely
+    nothing to build insights from, and the Insight Engine correctly
+    stays silent.
+    """
+    import re as _re
+
+    def _parse_score_overs(inn: dict | None):
+        if not inn or not inn.get("score") or inn.get("score") == "yet to bat":
+            return None
+        m = _re.match(r"(\d+)/(\d+)", inn["score"])
+        if not m:
+            return None
+        runs, wickets = int(m.group(1)), int(m.group(2))
+        try:
+            overs = float(inn.get("overs") or 0)
+        except (ValueError, TypeError):
+            overs = 0.0
+        return {"runs": runs, "wickets": wickets, "overs": overs, "innings_id": inn.get("inningsId", 1)}
+
+    inn1_data = _parse_score_overs(shaped.get("innings1"))
+    inn2_data = _parse_score_overs(shaped.get("innings2"))
+    # Currently-batting innings is whichever has data and isn't finished -
+    # simplest reliable signal available here is just "the later one that
+    # has data", since a completed innings1 would already show inn2 batting.
+    current = inn2_data or inn1_data
+    if not current:
+        return None
+
+    return {
+        "inningsscores": {
+            "inningsscore": [
+                {"inningsid": current["innings_id"], "runs": current["runs"],
+                 "wickets": current["wickets"], "overs": current["overs"]}
+            ]
+        },
+        "inningsid": current["innings_id"],
+    }
+
+
 def _attach_intelligence(shaped: dict, carousel_entry: dict | None, miniscore: dict | None) -> None:
     """
     Mutates `shaped` in place, adding an "intelligence" key with venue/player
@@ -761,6 +814,13 @@ def _attach_intelligence(shaped: dict, carousel_entry: dict | None, miniscore: d
     never has to special-case a missing key vs an empty insights list.
     Never raises - any failure here should degrade to no insights, not break
     the whole match-details response.
+
+    NEW: falls back to a synthetic miniscore built from shaped["innings1"/
+    "innings2"] when the real miniscore is missing/empty - this is what
+    fixes the confirmed real case where venue/format resolve correctly
+    (Lord's, ODI, zero warnings) but insights still came back empty,
+    because miniscore was None for that poll even though the score WAS
+    actually available via the commentary-derived innings data.
     """
     if not _INTELLIGENCE_AVAILABLE:
         shaped["intelligence"] = {"insights": [], "meta": {"available": False}}
@@ -773,7 +833,21 @@ def _attach_intelligence(shaped: dict, carousel_entry: dict | None, miniscore: d
         match_format = carousel_entry.get("matchFormat", "")
         series_name = carousel_entry.get("seriesName", "")
         is_ipl = "indian premier league" in (series_name + " " + venue_name).lower()
-        result = get_insights_for_match(venue_name, match_format, is_ipl, miniscore)
+
+        effective_miniscore = miniscore
+        used_fallback = False
+        has_usable_scores = bool(
+            miniscore and (miniscore.get("inningsscores") or {}).get("inningsscore")
+        )
+        if not has_usable_scores:
+            synthetic = _synthesize_miniscore_from_shaped_innings(shaped)
+            if synthetic:
+                effective_miniscore = synthetic
+                used_fallback = True
+
+        result = get_insights_for_match(venue_name, match_format, is_ipl, effective_miniscore)
+        if used_fallback:
+            result.setdefault("meta", {})["score_source"] = "commentary_fallback"
         shaped["intelligence"] = result
     except Exception as e:
         log.error("Intelligence Engine failed for this match: %s", e)
