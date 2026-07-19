@@ -84,6 +84,63 @@ def normalize_venue(raw_name):
     return key
 
 
+# Generic venue-type suffix words that live providers (Cricbuzz) often
+# append but Cricsheet frequently omits, e.g. Cricbuzz's "Lord's Cricket
+# Ground, London" vs Cricsheet's bare "Lord's". Order matters: longer,
+# more specific suffixes are tried before shorter ones so "International
+# Cricket Stadium" is stripped as one unit rather than leaving "International"
+# behind after only "Stadium" is removed.
+GENERIC_VENUE_SUFFIXES = [
+    "International Cricket Stadium",
+    "International Stadium",
+    "Cricket Stadium",
+    "Cricket Ground",
+    "Sports Complex",
+    "Sports Club",
+    "Stadium",
+    "Ground",
+]
+
+
+def resolve_venue_key(raw_name, known_venue_keys):
+    """
+    Resolve a live-provider venue string to a key that actually exists in
+    venue_stats.json, tolerating a live provider's fuller naming (e.g.
+    Cricbuzz's "Lord's Cricket Ground, London") against Cricsheet's terser
+    convention (e.g. "Lord's").
+
+    Strategy, in order, stopping at the first hit:
+      1. normalize_venue() as-is - handles the common case (city/country
+         suffix stripping, initial-period normalization) and is checked
+         first since it's already reliable for the bulk of venues.
+      2. Strip one trailing generic suffix word ("Cricket Ground",
+         "Stadium", etc.) from the normalized name and check again - this
+         is what recovers "Lord's Cricket Ground" -> "Lord's" and similar
+         cases where the two providers just disagree on how much of the
+         venue's formal name to include.
+
+    Only ever strips a known generic suffix word, never guesses at
+    arbitrary substring matches - so this can't accidentally merge two
+    genuinely different grounds that happen to share a short prefix.
+
+    Returns the resolved key if found in known_venue_keys, else None.
+    """
+    if not raw_name:
+        return None
+
+    direct_key = normalize_venue(raw_name)
+    if direct_key in known_venue_keys:
+        return direct_key
+
+    for suffix in GENERIC_VENUE_SUFFIXES:
+        if direct_key.endswith(" " + suffix):
+            stripped_key = direct_key[: -(len(suffix) + 1)].strip()
+            if stripped_key and stripped_key in known_venue_keys:
+                return stripped_key
+
+    return None
+
+
 def build_venue_alias_map():
     """
     Scan the manifest + all match meta to build raw_venue -> normalized_key
