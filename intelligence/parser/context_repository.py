@@ -179,6 +179,46 @@ def phase_set_for_format(total_overs):
     return PHASE_BOUNDARIES["ODI_LIKE"] if total_overs > 20 else PHASE_BOUNDARIES["T20_LIKE"]
 
 
+def compute_match_result_facts(meta, innings_facts):
+    """
+    Derive match-level facts (toss, chase/defense outcome) from Cricsheet
+    meta + the per-innings facts already extracted for this match.
+    Returns None if the match doesn't have clean 2-innings + outcome data
+    (e.g. no result, D/L, abandoned) -- these are simply skipped rather
+    than guessed at, consistent with the deterministic-only approach.
+    """
+    toss = meta.get("toss", {})
+    outcome = meta.get("outcome", {})
+
+    toss_winner = toss.get("winner")
+    toss_decision = toss.get("decision")  # "bat" or "field"
+    if not toss_winner or not toss_decision:
+        return None
+
+    # outcome.winner absent => no result (tie/no-result/abandoned) - skip,
+    # we only aggregate toss-decision % from these, not win-rate
+    match_winner = outcome.get("winner")
+
+    first = next((i for i in innings_facts if i["innings_num"] == 1), None)
+    second = next((i for i in innings_facts if i["innings_num"] == 2), None)
+
+    fact = {
+        "toss_winner": toss_winner,
+        "toss_decision": toss_decision,
+        "match_winner": match_winner,  # may be None (no result)
+        "first_innings_score": first["final_runs"] if first else None,
+        "first_innings_wickets": first["final_wickets"] if first else None,
+        "second_innings_score": second["final_runs"] if second else None,
+        "second_innings_batting_team": second["batting_team"] if second else None,
+    }
+
+    if match_winner and second:
+        chased_successfully = (second["batting_team"] == match_winner)
+        fact["chase_successful"] = chased_successfully
+
+    return fact
+
+
 def compute_match_venue_facts(match_id, match_type, total_overs):
     """
     Replay one match fully and extract, per innings:
@@ -253,6 +293,8 @@ def build_venue_stats():
 
     # accumulator: normalized_venue -> match_type -> list of per-innings facts
     accum = {}
+    # accumulator: normalized_venue -> match_type -> list of match-level result facts
+    result_accum = {}
 
     limited_overs_matches = [m for m in manifest if m["competition_code"] in LIMITED_OVERS_FORMATS]
     print(f"Processing {len(limited_overs_matches)} limited-overs matches...")
@@ -279,6 +321,10 @@ def build_venue_stats():
             continue
 
         accum.setdefault(venue_key, {}).setdefault(match_type, []).extend(innings_facts)
+
+        result_fact = compute_match_result_facts(meta, innings_facts)
+        if result_fact:
+            result_accum.setdefault(venue_key, {}).setdefault(match_type, []).append(result_fact)
 
         processed += 1
         if processed % 3000 == 0:
@@ -315,10 +361,72 @@ def build_venue_stats():
                     "avg_run_rate": current_run_rate(total_runs, total_balls),
                 }
 
+            second_innings = [i for i in innings_list if i["innings_num"] == 2]
+            n2 = len(second_innings)
+            avg_second_innings_score = (
+                round(sum(i["final_runs"] for i in second_innings) / n2, 1)
+                if n2 else None
+            )
+
+            all_totals = [i["final_runs"] for i in innings_list]
+            highest_total = max(all_totals) if all_totals else None
+            lowest_total = min(all_totals) if all_totals else None
+
+            results = result_accum.get(venue_key, {}).get(match_type, [])
+            n_results = len(results)
+
+            successful_chases = [
+                r["second_innings_score"] for r in results
+                if r.get("chase_successful") is True
+            ]
+            defended_scores = [
+                r["first_innings_score"] for r in results
+                if r.get("chase_successful") is False
+            ]
+            highest_successful_chase = max(successful_chases) if successful_chases else None
+            lowest_score_defended = min(defended_scores) if defended_scores else None
+
+            bat_first_tosses = sum(1 for r in results if r["toss_decision"] == "bat")
+            toss_bat_first_pct = (
+                round(100 * bat_first_tosses / n_results, 1) if n_results else None
+            )
+
+            decided_results = [r for r in results if r.get("match_winner")]
+            n_decided = len(decided_results)
+            wins_batting_first = sum(
+                1 for r in decided_results
+                if r["match_winner"] != r["second_innings_batting_team"]
+            )
+            win_pct_batting_first = (
+                round(100 * wins_batting_first / n_decided, 1) if n_decided else None
+            )
+            win_pct_bowling_first = (
+                round(100 - win_pct_batting_first, 1) if win_pct_batting_first is not None else None
+            )
+
+            # Confidence guard: same spirit as the pre-2005 player-comparison
+            # guard -- don't present venue stats as reliable on tiny samples.
+            if n >= 8:
+                confidence = "high"
+            elif n >= 5:
+                confidence = "medium"
+            else:
+                confidence = "low"
+
             venue_entry["formats"][match_type] = {
                 "matches_with_data": n,
                 "avg_first_innings_score": avg_first_innings_score,
                 "avg_first_innings_wickets": avg_first_innings_wickets,
+                "avg_second_innings_score": avg_second_innings_score,
+                "highest_total": highest_total,
+                "lowest_total": lowest_total,
+                "highest_successful_chase": highest_successful_chase,
+                "lowest_score_defended": lowest_score_defended,
+                "toss_bat_first_pct": toss_bat_first_pct,
+                "win_pct_batting_first": win_pct_batting_first,
+                "win_pct_bowling_first": win_pct_bowling_first,
+                "matches_with_result": n_decided,
+                "confidence": confidence,
                 "phase_breakdown": phase_avg,
             }
 
