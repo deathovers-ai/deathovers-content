@@ -436,22 +436,14 @@ export default function LiveCarousel() {
                   </div>
                 )}
 
-                {/* NEW: INSIGHT PANEL (Epic 6/7) -- venue/player context insights,
-                    rendered only when the Insight Engine actually produced something.
-                    Silent when empty, same "refuse rather than guess" philosophy as
-                    the backend - no placeholder/empty-state noise. */}
-                {insights.length > 0 && (
-                  <div className="insight-panel">
-                    <div className="insight-panel-head">
-                      <span className="insight-panel-label">INSIGHT</span>
-                    </div>
-                    {insights.map((insight, i) => (
-                      <div key={i} className="insight-row">
-                        {insight.text}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                {/* Insight panel intentionally NOT rendered here anymore.
+                    The backend/Insight Engine still computes and returns
+                    activeData.intelligence.insights on every poll - it's
+                    just not surfaced on the live scorecard. These are
+                    meant to live in a separate Tactical Sheet view once
+                    that's built, not stick permanently under the live
+                    score where they read as stale/wrong once the moment
+                    they described has passed. */}
               </div>
 
               {/* INNINGS DETAIL + LIVE COMMENTARY */}
