@@ -77,10 +77,18 @@ def venue_data_is_reliable(venue_entry, match_type):
     Cricsheet coverage for T20 formats essentially only exists post-2003
     anyway (T20 as a format didn't exist until 2003), so this mostly
     matters for ODI venues with a long history.
+
+    Prefers the explicit "confidence" field (written by
+    context_repository.py's build_venue_stats) when present; falls back
+    to the raw matches_with_data threshold for venue_stats.json files
+    generated before that field existed, so this doesn't hard-break on
+    stale local output.
     """
     fmt = venue_entry.get("formats", {}).get(match_type)
     if not fmt:
         return False
+    if "confidence" in fmt:
+        return fmt["confidence"] in ("high", "medium")
     # Minimum sample size for a venue average to be meaningful at all -
     # this is a general statistical-confidence guard, separate from the
     # date-based data-quality guard.
@@ -259,6 +267,72 @@ class InsightEngine:
             ),
         }
 
+    def venue_pregame_insight(self, venue_key, match_type):
+        """
+        Start-of-match venue summary: toss tendency, chase-vs-defend
+        record, and historical extremes. Meant to be surfaced before a
+        ball is bowled, unlike venue_score_insight/venue_phase_insight
+        which need a live score to compare against.
+
+        Returns None if the venue/format isn't reliable enough, or if
+        the toss/outcome fields aren't present (older venue_stats.json
+        generated before context_repository.py tracked them).
+        """
+        venue_entry = self.venue_stats.get(venue_key)
+        if not venue_entry or not venue_data_is_reliable(venue_entry, match_type):
+            return None
+
+        fmt = venue_entry["formats"][match_type]
+        if "toss_bat_first_pct" not in fmt:
+            return None  # stale venue_stats.json, fields not computed yet
+
+        name = venue_entry["display_name"]
+        parts = []
+
+        if fmt.get("toss_bat_first_pct") is not None:
+            bat_pct = fmt["toss_bat_first_pct"]
+            lean = "bat first" if bat_pct >= 50 else "bowl first"
+            parts.append(
+                f"Teams winning the toss have chosen to {lean} "
+                f"{bat_pct if bat_pct >= 50 else round(100 - bat_pct, 1)}% of the time."
+            )
+
+        if fmt.get("win_pct_batting_first") is not None:
+            parts.append(
+                f"Sides batting first have won {fmt['win_pct_batting_first']}% of "
+                f"decided matches here (batting second: {fmt['win_pct_bowling_first']}%), "
+                f"based on {fmt['matches_with_result']} completed matches."
+            )
+
+        if fmt.get("highest_successful_chase") is not None:
+            parts.append(f"Highest successful chase: {fmt['highest_successful_chase']}.")
+        if fmt.get("lowest_score_defended") is not None:
+            parts.append(f"Lowest total successfully defended: {fmt['lowest_score_defended']}.")
+        if fmt.get("highest_total") is not None and fmt.get("lowest_total") is not None:
+            parts.append(
+                f"Innings totals here have ranged from {fmt['lowest_total']} to {fmt['highest_total']}."
+            )
+
+        if not parts:
+            return None  # guard passed but every individual field was None - nothing to say
+
+        return {
+            "type": "venue_pregame_summary",
+            "venue": name,
+            "match_type": match_type,
+            "avg_first_innings_score": fmt.get("avg_first_innings_score"),
+            "avg_second_innings_score": fmt.get("avg_second_innings_score"),
+            "toss_bat_first_pct": fmt.get("toss_bat_first_pct"),
+            "win_pct_batting_first": fmt.get("win_pct_batting_first"),
+            "win_pct_bowling_first": fmt.get("win_pct_bowling_first"),
+            "highest_total": fmt.get("highest_total"),
+            "lowest_total": fmt.get("lowest_total"),
+            "highest_successful_chase": fmt.get("highest_successful_chase"),
+            "lowest_score_defended": fmt.get("lowest_score_defended"),
+            "sample_size": fmt["matches_with_data"],
+            "text": f"At {name} ({match_type}): " + " ".join(parts),
+        }
+
     def player_form_insight(self, player_name, current_runs, current_balls):
         """
         Compare a batter's current-innings strike rate against their
@@ -320,6 +394,11 @@ class InsightEngine:
           player_current_balls
         """
         insights = []
+
+        if all(k in context for k in ("venue_key", "match_type")):
+            i = self.venue_pregame_insight(context["venue_key"], context["match_type"])
+            if i:
+                insights.append(i)
 
         if all(k in context for k in ("venue_key", "match_type", "current_score",
                                        "current_wickets", "overs_completed_str")):
