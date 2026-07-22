@@ -98,10 +98,14 @@ def get_match_insights(live_state):
     context = {}
 
     if match_type and venue_key and venue_key in engine.venue_stats:
+        # venue_key/match_type go in unconditionally here (not gated on a
+        # live score existing) so venue_pregame_insight can fire before a
+        # ball is bowled - the score-dependent insights below still only
+        # populate their own extra fields once live_state actually has them.
+        context.update({"venue_key": venue_key, "match_type": match_type})
+
         if all(k in live_state for k in ("current_score", "current_wickets", "overs_completed_str")):
             context.update({
-                "venue_key": venue_key,
-                "match_type": match_type,
                 "current_score": live_state["current_score"],
                 "current_wickets": live_state["current_wickets"],
                 "overs_completed_str": live_state["overs_completed_str"],
@@ -109,11 +113,7 @@ def get_match_insights(live_state):
 
         if "current_over_number" in live_state:
             phase = determine_phase(live_state["current_over_number"], match_type)
-            context.update({
-                "venue_key": venue_key,
-                "match_type": match_type,
-                "phase_name": phase,
-            })
+            context.update({"phase_name": phase})
 
     if live_state.get("striker_name") and "striker_current_runs" in live_state \
             and "striker_current_balls" in live_state:
