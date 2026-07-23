@@ -1,0 +1,13 @@
+---
+// Static page (this site builds statically, no SSR) - the match ID comes
+// from a query param (?id=...) and is read client-side, not as an Astro
+// dynamic route param, since match IDs are live/runtime data that can't
+// be enumerated at build time via getStaticPaths.
+import Base from '../../layouts/Base.astro';
+import Navbar from '../../components/Navbar.astro';
+import MatchRoom from '../../components/MatchRoom.jsx';
+---
+<Base title="Match Room — DeathOvers">
+  <Navbar />
+  <MatchRoom client:load />
+</Base>
