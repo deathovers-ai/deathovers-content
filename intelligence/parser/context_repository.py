@@ -138,6 +138,26 @@ def resolve_venue_key(raw_name, known_venue_keys):
             if stripped_key and stripped_key in known_venue_keys:
                 return stripped_key
 
+    # Strategy 3: some providers drop the word "Cricket" from the middle
+    # of a venue's formal name (Cricbuzz "Mahinda Rajapaksa International
+    # Stadium" vs Cricsheet "Mahinda Rajapaksa International Cricket
+    # Stadium") - this isn't a trailing-suffix case, so try inserting
+    # "Cricket" back in before the final generic suffix word, and also
+    # try removing a standalone "Cricket" token if the raw name has one
+    # Cricsheet doesn't.
+    words = direct_key.split(" ")
+    if "Cricket" not in words:
+        for suffix in GENERIC_VENUE_SUFFIXES:
+            suffix_words = suffix.split(" ")
+            if len(words) >= len(suffix_words) and words[-len(suffix_words):] == suffix_words:
+                candidate = " ".join(words[:-len(suffix_words)] + ["Cricket"] + suffix_words)
+                if candidate in known_venue_keys:
+                    return candidate
+    else:
+        without_cricket = " ".join(w for w in words if w != "Cricket")
+        if without_cricket in known_venue_keys:
+            return without_cricket
+
     return None
 
 
