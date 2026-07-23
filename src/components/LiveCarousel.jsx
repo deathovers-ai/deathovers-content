@@ -436,14 +436,11 @@ export default function LiveCarousel() {
                   </div>
                 )}
 
-                {/* Insight panel intentionally NOT rendered here anymore.
-                    The backend/Insight Engine still computes and returns
-                    activeData.intelligence.insights on every poll - it's
-                    just not surfaced on the live scorecard. These are
-                    meant to live in a separate Tactical Sheet view once
-                    that's built, not stick permanently under the live
-                    score where they read as stale/wrong once the moment
-                    they described has passed. */}
+                {insights.length > 0 && (
+                  <a href={`/match-room?id=${activeMatchId}`} className="match-room-link">
+                    TACTICAL READS AVAILABLE → MATCH ROOM
+                  </a>
+                )}
               </div>
 
               {/* INNINGS DETAIL + LIVE COMMENTARY */}
@@ -486,8 +483,6 @@ export default function LiveCarousel() {
                   )}
                 </div>
               </div>
-
-              <InsightPanel insights={insights} />
             </>
           )}
         </div>
@@ -691,6 +686,20 @@ export default function LiveCarousel() {
         .scoreboard-note { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--bail-amber); margin-top: 14px; }
 
         .scoreboard-lastwkt, .scoreboard-toss { margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(240,242,245,0.06); display: flex; align-items: baseline; gap: 10px; }
+        .match-room-link {
+          display: block;
+          margin-top: 14px;
+          padding-top: 14px;
+          border-top: 1px solid rgba(240,242,245,0.06);
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 11px;
+          letter-spacing: 0.04em;
+          color: var(--bail-amber);
+          text-decoration: none;
+          font-weight: bold;
+          transition: color 0.2s;
+        }
+        .match-room-link:hover { color: #fff; }
         .toss-kicker { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.35); letter-spacing: 0.06em; flex-shrink: 0; }
         .toss-line { font-size: 12px; color: rgba(240,242,245,0.65); font-weight: 500; }
 
@@ -812,112 +821,6 @@ const styleFor = {
   run: { bg: 'transparent', border: 'rgba(240,242,245,0.08)', label: 'rgba(240,242,245,0.4)', labelText: '', size: '13px', weight: '400' },
   dot: { bg: 'transparent', border: 'rgba(240,242,245,0.08)', label: 'rgba(240,242,245,0.3)', labelText: '', size: '13px', weight: '400' }
 };
-
-function InsightPanel({ insights }) {
-  const [expanded, setExpanded] = useState(false);
-
-  if (!insights || insights.length === 0) return null;
-
-  // Pre-match venue context is a standing fact, not a moment - it stays
-  // pinned separately rather than mixed into the chronological log below.
-  const pregame = insights.find(i => i.type === 'venue_pregame_summary');
-  const timeline = insights.filter(i => i.type !== 'venue_pregame_summary');
-
-  // Newest first: the API appends as the match progresses, so reverse
-  // for display so the most recent read is what you see without scrolling.
-  const timelineDesc = [...timeline].reverse();
-  const visibleTimeline = expanded ? timelineDesc : timelineDesc.slice(0, 3);
-
-  return (
-    <div className="insight-deck">
-      <div className="insight-deck-head">
-        <span className="insight-deck-label">TACTICAL SHEET</span>
-        <span className="insight-deck-sub">Venue &amp; in-play context, not a live score</span>
-      </div>
-
-      {pregame && (
-        <div className="insight-pregame">
-          <div className="stat-kicker">BEFORE A BALL IS BOWLED</div>
-          <p className="insight-pregame-text">{pregame.text}</p>
-        </div>
-      )}
-
-      {timelineDesc.length > 0 && (
-        <>
-          <div className="stat-kicker" style={{ marginTop: pregame ? '16px' : '0' }}>
-            AS THE MATCH DEVELOPED
-          </div>
-          <div className="insight-timeline">
-            {visibleTimeline.map((insight, i) => (
-              <div key={i} className="insight-timeline-row">
-                <div className="insight-timeline-text">{insight.text}</div>
-              </div>
-            ))}
-          </div>
-          {timelineDesc.length > 3 && (
-            <button
-              type="button"
-              className="stat-more stat-more-btn"
-              onClick={() => setExpanded(v => !v)}
-            >
-              {expanded ? 'show less' : `+${timelineDesc.length - 3} more`}
-            </button>
-          )}
-        </>
-      )}
-
-      <style>{`
-        .insight-deck {
-          max-width: 1050px;
-          margin: 24px auto 0;
-          background: var(--outfield, #11141d);
-          border: 1px solid rgba(240,242,245,0.08);
-          border-radius: 4px;
-          padding: 20px 24px;
-        }
-        .insight-deck-head {
-          display: flex;
-          justify-content: space-between;
-          align-items: baseline;
-          border-bottom: 1px solid rgba(240,242,245,0.08);
-          padding-bottom: 12px;
-          margin-bottom: 16px;
-          flex-wrap: wrap;
-          gap: 6px;
-        }
-        .insight-deck-label {
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 11px;
-          letter-spacing: 0.08em;
-          font-weight: bold;
-          color: var(--bail-amber, #F5A623);
-        }
-        .insight-deck-sub {
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 10px;
-          color: rgba(240,242,245,0.4);
-        }
-        .insight-pregame-text {
-          font-size: 13px;
-          line-height: 1.6;
-          color: rgba(240,242,245,0.85);
-          margin: 6px 0 0;
-        }
-        .insight-timeline-row {
-          padding: 8px 0;
-        }
-        .insight-timeline-row + .insight-timeline-row {
-          border-top: 1px solid rgba(240,242,245,0.06);
-        }
-        .insight-timeline-text {
-          font-size: 13px;
-          line-height: 1.5;
-          color: rgba(240,242,245,0.7);
-        }
-      `}</style>
-    </div>
-  );
-}
 
 function InningsPanel({ innings, accent, label }) {
   const batters = innings.batters || [];
