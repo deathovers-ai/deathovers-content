@@ -32,6 +32,17 @@ POSSIBLY pre-dating our coverage and refuse the comparison. This will
 produce some false refusals (genuine 2003/2004 debutants get excluded
 too) but that's the correct failure direction: refuse-when-unsure, not
 include-when-unsure.
+
+---
+UPDATED July 2026 (CTO decision - "pointers not paragraphs"): every
+insight's output was a single prose `text` string. Frontend now renders
+structured pointers instead of paragraphs, so each insight-building
+method below returns a `headline` (short, one line) + `pointers`
+(list of {label, value, unit?, pct?}) in place of `text`. All guards,
+thresholds, and calculations are UNCHANGED - this only touches how the
+already-computed numbers are packaged for output. `text` is intentionally
+no longer produced; see ARCHITECTURE.md pipeline note if a plain-string
+fallback is ever needed again.
 """
 import json
 import os
@@ -220,11 +231,13 @@ class InsightEngine:
             "diff_pct": diff_pct,
             "direction": direction,
             "sample_size": fmt["matches_with_data"],
-            "text": (
-                f"At {venue_entry['display_name']}, this score of {current_score}/{current_wickets} "
-                f"in {overs_completed_str} overs is {abs(diff_pct)}% {direction} the {baseline_label} "
-                f"score for this venue at this stage ({match_type}, based on {fmt['matches_with_data']} matches)."
-            ),
+            "headline": f"Score is {abs(diff_pct)}% {direction} {baseline_label} score",
+            "pointers": [
+                {"label": "Current Score", "value": f"{current_score}/{current_wickets}", "unit": f" ({overs_completed_str} ov)"},
+                {"label": f"{baseline_label.capitalize()} Baseline", "value": baseline},
+                {"label": "Difference", "value": round(diff, 1), "unit": " runs", "pct": diff_pct},
+                {"label": "Sample Size", "value": fmt["matches_with_data"], "unit": " matches"},
+            ],
         }
 
     def venue_phase_insight(self, venue_key, match_type, phase_name, current_phase_runs, current_phase_balls):
@@ -260,11 +273,12 @@ class InsightEngine:
             "venue_avg_run_rate": avg_rate,
             "diff_pct": diff_pct,
             "direction": direction,
-            "text": (
-                f"The {phase_name} run rate of {current_rate} is {abs(diff_pct)}% {direction} "
-                f"the historical {match_type} {phase_name}-overs average of {avg_rate} at "
-                f"{venue_entry['display_name']}."
-            ),
+            "headline": f"{phase_name.capitalize()} rate {abs(diff_pct)}% {direction} venue average",
+            "pointers": [
+                {"label": "Current Run Rate", "value": current_rate},
+                {"label": f"Venue {phase_name.capitalize()} Avg", "value": avg_rate},
+                {"label": "Difference", "value": round(current_rate - avg_rate, 2), "pct": diff_pct},
+            ],
         }
 
     def venue_pregame_insight(self, venue_key, match_type):
@@ -287,33 +301,30 @@ class InsightEngine:
             return None  # stale venue_stats.json, fields not computed yet
 
         name = venue_entry["display_name"]
-        parts = []
+        pointers = []
 
         if fmt.get("toss_bat_first_pct") is not None:
             bat_pct = fmt["toss_bat_first_pct"]
-            lean = "bat first" if bat_pct >= 50 else "bowl first"
-            parts.append(
-                f"Teams winning the toss have chosen to {lean} "
-                f"{bat_pct if bat_pct >= 50 else round(100 - bat_pct, 1)}% of the time."
-            )
+            lean = "Bat First" if bat_pct >= 50 else "Bowl First"
+            lean_pct = bat_pct if bat_pct >= 50 else round(100 - bat_pct, 1)
+            pointers.append({"label": f"Toss \u2192 {lean}", "value": lean_pct, "unit": "%"})
 
         if fmt.get("win_pct_batting_first") is not None:
-            parts.append(
-                f"Sides batting first have won {fmt['win_pct_batting_first']}% of "
-                f"decided matches here (batting second: {fmt['win_pct_bowling_first']}%), "
-                f"based on {fmt['matches_with_result']} completed matches."
-            )
+            pointers.append({"label": "Win % (Batting First)", "value": fmt["win_pct_batting_first"], "unit": "%"})
+            pointers.append({"label": "Win % (Batting Second)", "value": fmt["win_pct_bowling_first"], "unit": "%"})
+            pointers.append({"label": "Completed Matches", "value": fmt["matches_with_result"]})
 
         if fmt.get("highest_successful_chase") is not None:
-            parts.append(f"Highest successful chase: {fmt['highest_successful_chase']}.")
+            pointers.append({"label": "Highest Successful Chase", "value": fmt["highest_successful_chase"]})
         if fmt.get("lowest_score_defended") is not None:
-            parts.append(f"Lowest total successfully defended: {fmt['lowest_score_defended']}.")
+            pointers.append({"label": "Lowest Total Defended", "value": fmt["lowest_score_defended"]})
         if fmt.get("highest_total") is not None and fmt.get("lowest_total") is not None:
-            parts.append(
-                f"Innings totals here have ranged from {fmt['lowest_total']} to {fmt['highest_total']}."
-            )
+            pointers.append({
+                "label": "Innings Score Range",
+                "value": f"{fmt['lowest_total']} \u2013 {fmt['highest_total']}",
+            })
 
-        if not parts:
+        if not pointers:
             return None  # guard passed but every individual field was None - nothing to say
 
         return {
@@ -330,7 +341,8 @@ class InsightEngine:
             "highest_successful_chase": fmt.get("highest_successful_chase"),
             "lowest_score_defended": fmt.get("lowest_score_defended"),
             "sample_size": fmt["matches_with_data"],
-            "text": f"At {name} ({match_type}): " + " ".join(parts),
+            "headline": f"{name} \u2014 {match_type} venue record",
+            "pointers": pointers,
         }
 
     def player_form_insight(self, player_name, current_runs, current_balls):
@@ -374,10 +386,12 @@ class InsightEngine:
             "career_strike_rate": career_sr,
             "diff_pct": diff_pct,
             "direction": direction,
-            "text": (
-                f"{player_name} is scoring at {current_sr}, which is {abs(diff_pct)}% "
-                f"{direction} their career strike rate of {career_sr}."
-            ),
+            "headline": f"{player_name} scoring {abs(diff_pct)}% {direction} career rate",
+            "pointers": [
+                {"label": "Current Strike Rate", "value": current_sr},
+                {"label": "Career Strike Rate", "value": career_sr},
+                {"label": "Difference", "value": round(current_sr - career_sr, 2), "pct": diff_pct},
+            ],
         }
 
     def generate_all(self, context):
@@ -433,19 +447,19 @@ if __name__ == "__main__":
 
     print("--- Test 1: venue score insight (reliable venue) ---")
     r = engine.venue_score_insight("R Premadasa Stadium", "T20", 175, 4, "15.0")
-    print(r["text"] if r else "No insight (not significant or not reliable)")
+    print(json.dumps(r, indent=2) if r else "No insight (not significant or not reliable)")
 
     print("\n--- Test 2: player form insight, RELIABLE player (Kohli, career starts 2008) ---")
     r = engine.player_form_insight("V Kohli", 45, 20)  # fast innings vs his career SR
-    print(r["text"] if r else "No insight")
+    print(json.dumps(r, indent=2) if r else "No insight")
 
     print("\n--- Test 3: player form insight, UNRELIABLE player (Kallis, career starts 2003 in our data) ---")
     r = engine.player_form_insight("JH Kallis", 45, 20)
-    print(r["text"] if r else "REFUSED - guard correctly blocked comparison against unreliable data")
+    print(json.dumps(r, indent=2) if r else "REFUSED - guard correctly blocked comparison against unreliable data")
 
     print("\n--- Test 4: venue phase insight ---")
     r = engine.venue_phase_insight("R Premadasa Stadium", "T20", "death", 55, 30)
-    print(r["text"] if r else "No insight")
+    print(json.dumps(r, indent=2) if r else "No insight")
 
     print("\n--- Test 5: full generate_all with combined context ---")
     context = {
@@ -464,4 +478,7 @@ if __name__ == "__main__":
     all_insights = engine.generate_all(context)
     print(f"Generated {len(all_insights)} insights:")
     for i in all_insights:
-        print(" -", i["text"])
+        print(" -", i["headline"])
+        for p in i["pointers"]:
+            pct_str = f" ({p['pct']:+}%)" if "pct" in p else ""
+            print(f"     {p['label']}: {p['value']}{p.get('unit','')}{pct_str}")
