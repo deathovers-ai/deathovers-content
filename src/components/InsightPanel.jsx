@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 
 // Renders venue/in-play tactical insights (from the backend Insight Engine)
 // as a standalone panel - NOT meant to be embedded in the live scoreboard.
-// A point-in-time read like "52% below on-pace" is true for one ball and
-// stale a moment later; sticking it under the live score misrepresents it
-// as a persistent fact. This lives in its own Match Room view instead,
-// where it reads as what it actually is: tactical analysis, not a stat.
+//
+// UPDATED: backend now sends structured { headline, pointers: [{label, value, unit, pct}] }
+// instead of a single prose `text` string. Every stat is rendered as its own
+// row (label + value), and any % is always shown alongside its underlying
+// number - never a lone percentage.
 export default function InsightPanel({ insights }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -22,13 +23,9 @@ export default function InsightPanel({ insights }) {
     );
   }
 
-  // Pre-match venue context is a standing fact, not a moment - it stays
-  // pinned separately rather than mixed into the chronological log below.
   const pregame = insights.find(i => i.type === 'venue_pregame_summary');
   const timeline = insights.filter(i => i.type !== 'venue_pregame_summary');
 
-  // Newest first: the API appends as the match progresses, so reverse
-  // for display so the most recent read is what you see without scrolling.
   const timelineDesc = [...timeline].reverse();
   const visibleTimeline = expanded ? timelineDesc : timelineDesc.slice(0, 3);
 
@@ -42,7 +39,7 @@ export default function InsightPanel({ insights }) {
       {pregame && (
         <div className="insight-pregame">
           <div className="stat-kicker">BEFORE A BALL IS BOWLED</div>
-          <p className="insight-pregame-text">{pregame.text}</p>
+          <PointerBlock headline={pregame.headline} pointers={pregame.pointers} />
         </div>
       )}
 
@@ -54,7 +51,7 @@ export default function InsightPanel({ insights }) {
           <div className="insight-timeline">
             {visibleTimeline.map((insight, i) => (
               <div key={i} className="insight-timeline-row">
-                <div className="insight-timeline-text">{insight.text}</div>
+                <PointerBlock headline={insight.headline} pointers={insight.pointers} gauge={insight.gauge} />
               </div>
             ))}
           </div>
@@ -71,6 +68,39 @@ export default function InsightPanel({ insights }) {
       )}
 
       <style>{panelStyles}</style>
+    </div>
+  );
+}
+
+// Formats a pointer value: if a % is present, always pair it with the
+// underlying number - never render a lone percentage.
+function formatPointerValue(p) {
+  const sign = p.pct !== undefined && p.pct !== null && p.pct > 0 ? '+' : '';
+  if (p.pct !== undefined && p.pct !== null) {
+    return `${p.value}${p.unit || ''}  (${sign}${p.pct}%)`;
+  }
+  return `${p.value}${p.unit || ''}`;
+}
+
+function PointerBlock({ headline, pointers, gauge }) {
+  return (
+    <div className="pointer-block">
+      {headline && <div className="pointer-headline">{headline}</div>}
+      {gauge && (
+        <span className={`pointer-gauge gauge-${gauge.level?.toLowerCase()}`}>
+          {gauge.level}
+        </span>
+      )}
+      {pointers && pointers.length > 0 && (
+        <ul className="pointer-list">
+          {pointers.map((p, i) => (
+            <li key={i} className="pointer-row">
+              <span className="pointer-label">{p.label}</span>
+              <span className="pointer-value">{formatPointerValue(p)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -121,23 +151,61 @@ const panelStyles = `
     font-weight: bold;
     margin-bottom: 8px;
   }
-  .insight-pregame-text {
-    font-size: 13px;
-    line-height: 1.6;
-    color: rgba(240,242,245,0.85);
-    margin: 6px 0 0;
-  }
   .insight-timeline-row {
-    padding: 8px 0;
+    padding: 10px 0;
   }
   .insight-timeline-row + .insight-timeline-row {
     border-top: 1px solid rgba(240,242,245,0.06);
   }
-  .insight-timeline-text {
+
+  /* Pointer block - shared by pregame + timeline entries */
+  .pointer-headline {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px;
+    letter-spacing: 0.01em;
+    color: #fff;
+    margin-bottom: 6px;
+  }
+  .pointer-gauge {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: bold;
+    letter-spacing: 0.06em;
+    padding: 2px 8px;
+    border-radius: 3px;
+    margin-bottom: 8px;
+  }
+  .gauge-low { color: #4ade80; background: rgba(74,222,128,0.1); }
+  .gauge-moderate { color: #facc15; background: rgba(250,204,21,0.1); }
+  .gauge-high { color: #fb923c; background: rgba(251,146,60,0.1); }
+  .gauge-critical { color: var(--blood-red, #E8003A); background: rgba(232,0,58,0.1); }
+
+  .pointer-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .pointer-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 3px 0;
     font-size: 13px;
     line-height: 1.5;
-    color: rgba(240,242,245,0.7);
   }
+  .pointer-label {
+    color: rgba(240,242,245,0.6);
+    font-family: 'Inter', sans-serif;
+  }
+  .pointer-value {
+    color: rgba(240,242,245,0.95);
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: bold;
+    white-space: nowrap;
+    margin-left: 16px;
+  }
+
   .stat-more-btn {
     background: none;
     border: none;
