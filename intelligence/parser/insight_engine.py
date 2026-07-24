@@ -394,6 +394,314 @@ class InsightEngine:
             ],
         }
 
+    # ------------------------------------------------------------------
+    # Situation detection: collapse / momentum / pressure / partnership.
+    # Deterministic, rule-based - NOT LLM-narrated (see ARCHITECTURE.md
+    # "planned, not yet built" note this replaces). Reads recent_balls,
+    # the same shape MatchState.recent_balls already produces in
+    # replay_engine.py: [{"over", "ball_in_over", "runs_total",
+    # "is_wicket"}, ...]. Internal severity SCORES are computed but never
+    # returned to callers/frontend directly - only the derived label
+    # (gauge level) and the underlying counts/stats are exposed, per the
+    # "dimensions used internally only" decision.
+    # ------------------------------------------------------------------
+
+    def _situation_gauge_level(self, score):
+        if score >= 75:
+            return "CRITICAL"
+        if score >= 55:
+            return "HIGH"
+        if score >= 35:
+            return "MODERATE"
+        return "LOW"
+
+    def _collapse_score(self, recent_balls, innings_avg_run_rate):
+        """Last 24 legal balls (4 overs). Wicket clustering alone can
+        push this past threshold even before run rate visibly drops -
+        the slowdown often follows the wickets, not the other way round."""
+        window = recent_balls[-24:]
+        if not window:
+            return 0, 0, 0
+        wickets_in_window = sum(1 for b in window if b["is_wicket"])
+        runs_in_window = sum(b["runs_total"] for b in window)
+        window_rr = (runs_in_window / len(window)) * 6
+        rr_drop_pct = max(0.0, ((innings_avg_run_rate - window_rr) / innings_avg_run_rate) * 100) \
+            if innings_avg_run_rate > 0 else 0.0
+
+        wicket_component = min(wickets_in_window / 3, 1) * 75
+        rr_component = min(rr_drop_pct / 50, 1) * 25
+        score = round(wicket_component + rr_component)
+        return score, wickets_in_window, round(rr_drop_pct, 1)
+
+    def _momentum_score(self, recent_balls, innings_avg_strike_rate):
+        """Last 18 legal balls (3 overs). Boundary flow + SR spike, with
+        a hard penalty if a wicket fell in the window (a "momentum"
+        reading right after a wicket is a false positive)."""
+        window = recent_balls[-18:]
+        if not window:
+            return 0, 0, 0.0
+        runs_in_window = sum(b["runs_total"] for b in window)
+        window_sr = (runs_in_window / len(window)) * 100
+        sr_spike_pct = max(0.0, ((window_sr - innings_avg_strike_rate) / innings_avg_strike_rate) * 100) \
+            if innings_avg_strike_rate > 0 else 0.0
+        boundary_count = sum(1 for b in window if b["runs_total"] in (4, 6))
+        boundary_pct = (boundary_count / len(window)) * 100
+        wickets_in_window = sum(1 for b in window if b["is_wicket"])
+
+        sr_component = min(sr_spike_pct / 40, 1) * 50
+        boundary_component = min(boundary_pct / 25, 1) * 50
+        wicket_penalty = 30 if wickets_in_window > 0 else 0
+        score = max(0, round(sr_component + boundary_component - wicket_penalty))
+        return score, boundary_count, round(sr_spike_pct, 1)
+
+    def _pressure_score(self, recent_balls, required_run_rate, current_run_rate, balls_since_new_batter):
+        """Last 12 legal balls (2 overs). Dot-ball buildup, widened by a
+        widening RRR gap (2nd innings only) and a fresh batter still
+        settling in."""
+        window = recent_balls[-12:]
+        if not window:
+            return 0, 0, 0.0
+        dot_count = sum(1 for b in window if b["runs_total"] == 0 and not b["is_wicket"])
+        dot_pct = (dot_count / len(window)) * 100
+
+        rrr_gap_component = 0
+        if required_run_rate is not None and current_run_rate is not None:
+            gap = max(required_run_rate - current_run_rate, 0)
+            rrr_gap_component = min(gap / 6, 1) * 35
+
+        new_batter_component = 15 if balls_since_new_batter is not None and balls_since_new_batter <= 6 else 0
+        dot_component = min(dot_pct / 70, 1) * 50
+        score = min(round(dot_component + rrr_gap_component + new_batter_component), 100)
+        return score, dot_count, round(dot_pct, 1)
+
+    def _partnership_score(self, partnership_runs, partnership_balls):
+        """Sustained, unbroken stand - runs and strike rate together."""
+        if partnership_balls == 0:
+            return 0, 0.0
+        sr = (partnership_runs / partnership_balls) * 100
+        runs_component = min(partnership_runs / 100, 1) * 60
+        sr_component = min(sr / 150, 1) * 40
+        score = round(runs_component + sr_component)
+        return score, round(sr, 1)
+
+    def situation_insight(self, recent_balls, innings_avg_run_rate, innings_avg_strike_rate,
+                           partnership_runs, partnership_balls, required_run_rate=None,
+                           current_run_rate=None, balls_since_new_batter=None):
+        """
+        Runs all four situation detectors and returns the single
+        highest-priority one that clears its threshold (collapse beats
+        pressure beats acceleration beats partnership, if more than one
+        fires on the same ball). Returns None if nothing notable.
+
+        recent_balls: list of {"runs_total": int, "is_wicket": bool}
+        (only these two fields are read; extra keys like MatchState's
+        "over"/"ball_in_over" are ignored, so MatchState.recent_balls
+        can be passed straight through).
+        """
+        candidates = []
+
+        collapse_score, wkts_in_window, rr_drop_pct = self._collapse_score(recent_balls, innings_avg_run_rate)
+        if collapse_score >= 55 and wkts_in_window >= 3:
+            candidates.append({
+                "priority": 4,
+                "score": collapse_score,
+                "type": "collapse",
+                "headline": f"Collapse \u2014 {wkts_in_window} wickets in last {min(len(recent_balls), 24)} balls",
+                "pointers": [
+                    {"label": "Wickets (last 4 overs)", "value": wkts_in_window},
+                    {"label": "Run Rate Drop", "value": rr_drop_pct, "unit": "%"},
+                ],
+            })
+
+        pressure_score, dot_count, dot_pct = self._pressure_score(
+            recent_balls, required_run_rate, current_run_rate, balls_since_new_batter
+        )
+        if pressure_score >= 60:
+            candidates.append({
+                "priority": 3,
+                "score": pressure_score,
+                "type": "wicket_pressure",
+                "headline": "Pressure building \u2014 wicket chance rising",
+                "pointers": [
+                    {"label": "Dot Balls (last 2 overs)", "value": dot_count, "pct": dot_pct},
+                ],
+            })
+
+        momentum_score, boundary_count, sr_spike_pct = self._momentum_score(recent_balls, innings_avg_strike_rate)
+        if momentum_score >= 55:
+            candidates.append({
+                "priority": 2,
+                "score": momentum_score,
+                "type": "acceleration",
+                "headline": "Acceleration \u2014 scoring rate climbing",
+                "pointers": [
+                    {"label": "Boundaries (last 3 overs)", "value": boundary_count},
+                    {"label": "Strike Rate Spike", "value": sr_spike_pct, "unit": "%"},
+                ],
+            })
+
+        partnership_score, partnership_sr = self._partnership_score(partnership_runs, partnership_balls)
+        if partnership_score >= 50 and partnership_runs >= 50:
+            candidates.append({
+                "priority": 1,
+                "score": partnership_score,
+                "type": "partnership",
+                "headline": f"Partnership building \u2014 {partnership_runs} runs, unbroken",
+                "pointers": [
+                    {"label": "Partnership Runs", "value": partnership_runs},
+                    {"label": "Balls Faced", "value": partnership_balls},
+                    {"label": "Partnership Strike Rate", "value": partnership_sr},
+                ],
+            })
+
+        if not candidates:
+            return None
+
+        candidates.sort(key=lambda c: (c["priority"], c["score"]), reverse=True)
+        top = candidates[0]
+        return {
+            "type": f"situation_{top['type']}",
+            "gauge": {"level": self._situation_gauge_level(top["score"])},
+            "headline": top["headline"],
+            "pointers": top["pointers"],
+        }
+
+    # ------------------------------------------------------------------
+    # Post-10-over score projection (T20) / post-20-over (ODI). Blends
+    # current run rate with the venue's own middle/death phase rates
+    # rather than a naive flat-CRR extrapolation, since death overs
+    # typically accelerate beyond the rate set earlier in an innings.
+    # Always returns a RANGE, never a single false-precision number.
+    # ------------------------------------------------------------------
+
+    PROJECTION_MIN_OVER = {"T20": 10, "IT20": 10, "IPL": 10, "ODI": 20, "ODM": 20}
+
+    def projection_insight(self, venue_key, match_type, current_score, current_over_decimal):
+        """
+        current_over_decimal: e.g. 10.3 for "10.3 overs".
+        Returns None if not yet eligible (before the minimum over), the
+        venue/format isn't reliable, or phase data is missing - same
+        refuse-don't-guess posture as the rest of this module.
+        """
+        min_over = self.PROJECTION_MIN_OVER.get(match_type)
+        if min_over is None or current_over_decimal < min_over:
+            return None
+
+        venue_entry = self.venue_stats.get(venue_key)
+        if not venue_entry or not venue_data_is_reliable(venue_entry, match_type):
+            return None
+
+        fmt = venue_entry["formats"][match_type]
+        phases = fmt.get("phase_breakdown")
+        if not phases or "middle" not in phases or "death" not in phases:
+            return None
+
+        total_overs = 50 if match_type in ("ODI", "ODM") else 20
+        if match_type in ("ODI", "ODM"):
+            middle_end, death_start = 40, 40
+        else:
+            middle_end, death_start = 15, 15
+
+        middle_overs_remaining = max(0.0, middle_end - current_over_decimal)
+        death_overs_remaining = max(0.0, total_overs - max(current_over_decimal, death_start))
+
+        middle_rate = phases["middle"].get("avg_run_rate", 0)
+        death_rate = phases["death"].get("avg_run_rate", 0)
+        if middle_rate == 0 and death_rate == 0:
+            return None
+
+        mid_projection = current_score + (middle_overs_remaining * middle_rate) + (death_overs_remaining * death_rate)
+
+        overs_remaining = total_overs - current_over_decimal
+        uncertainty_pct = min(0.08 + (overs_remaining / total_overs) * 0.10, 0.18)
+        low = round(mid_projection * (1 - uncertainty_pct))
+        high = round(mid_projection * (1 + uncertainty_pct))
+        mid = round(mid_projection)
+
+        return {
+            "type": "score_projection",
+            "match_type": match_type,
+            "current_score": current_score,
+            "current_over": current_over_decimal,
+            "projected_low": low,
+            "projected_mid": mid,
+            "projected_high": high,
+            "headline": f"Projected {low}\u2013{high}",
+            "pointers": [
+                {"label": "Current Score", "value": current_score, "unit": f" ({current_over_decimal} ov)"},
+                {"label": "Projected Range", "value": f"{low} \u2013 {high}"},
+                {"label": "Projected Mid", "value": mid},
+            ],
+        }
+
+    # ------------------------------------------------------------------
+    # Second innings - triple comparison. Always returns all three
+    # lenses together (vs 1st innings same over, vs venue phase avg,
+    # vs required run rate) since any one alone can mislead - see CTO
+    # discussion this sprint.
+    # ------------------------------------------------------------------
+
+    def second_innings_comparison(self, venue_key, match_type, current_score, current_wickets,
+                                   current_over_decimal, target, balls_remaining,
+                                   first_innings_score_at_same_over, phase_name,
+                                   current_phase_runs, current_phase_balls):
+        """
+        first_innings_score_at_same_over: caller supplies the 1st
+        innings' score at the same over mark (from that innings' own
+        replay/live data) - this module doesn't store 1st-innings
+        history itself.
+
+        Returns None only if venue data is unreliable for lens 2; lenses
+        1 and 3 don't depend on historical venue data and are still
+        included when lens 2 is unavailable (never withhold the whole
+        comparison just because one lens can't be computed).
+        """
+        pointers = [
+            {"label": "Current Score", "value": f"{current_score}/{current_wickets}", "unit": f" ({current_over_decimal} ov)"},
+        ]
+
+        if first_innings_score_at_same_over is not None:
+            diff = current_score - first_innings_score_at_same_over
+            diff_pct = round((diff / first_innings_score_at_same_over) * 100, 1) if first_innings_score_at_same_over else None
+            pointers.append({
+                "label": "1st Innings (same over)",
+                "value": first_innings_score_at_same_over,
+                "unit": " runs",
+            })
+            pointer = {"label": "Difference", "value": diff, "unit": " runs"}
+            if diff_pct is not None:
+                pointer["pct"] = diff_pct
+            pointers.append(pointer)
+
+        venue_entry = self.venue_stats.get(venue_key)
+        if venue_entry and venue_data_is_reliable(venue_entry, match_type):
+            fmt = venue_entry["formats"][match_type]
+            phase_data = fmt.get("phase_breakdown", {}).get(phase_name)
+            if phase_data and current_phase_balls > 0:
+                current_phase_rate = round((current_phase_runs / current_phase_balls) * 6, 2)
+                venue_phase_rate = phase_data.get("avg_run_rate", 0)
+                if venue_phase_rate > 0:
+                    diff_pct = round(((current_phase_rate - venue_phase_rate) / venue_phase_rate) * 100, 1)
+                    pointers.append({"label": f"Venue {phase_name.capitalize()} Avg Rate", "value": venue_phase_rate})
+                    pointers.append({"label": "vs Venue Avg", "value": round(current_phase_rate - venue_phase_rate, 2), "pct": diff_pct})
+
+        if balls_remaining and balls_remaining > 0:
+            runs_needed = target - current_score
+            required_rr = round((runs_needed / balls_remaining) * 6, 2)
+            current_rr = round(current_score / current_over_decimal, 2) if current_over_decimal > 0 else 0
+            pointers.append({"label": "Required Run Rate", "value": required_rr})
+            pointers.append({"label": "Current Run Rate", "value": current_rr, "pct": round(((current_rr - required_rr) / required_rr) * 100, 1) if required_rr else None})
+            pointers.append({"label": "Runs Needed", "value": runs_needed})
+            pointers.append({"label": "Balls Remaining", "value": balls_remaining})
+
+        return {
+            "type": "second_innings_comparison",
+            "match_type": match_type,
+            "phase": phase_name,
+            "headline": f"Chasing {target} \u2014 need {target - current_score} from {balls_remaining} balls" if balls_remaining else f"Chasing {target}",
+            "pointers": pointers,
+        }
+
     def generate_all(self, context):
         """
         Convenience method: given a dict describing the current live
