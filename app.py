@@ -52,11 +52,13 @@ log = logging.getLogger("deathovers-backend")
 # is omitted from match-details responses until it's fixed.
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "intelligence", "parser"))
 try:
-    from app_integration import get_insights_for_match
+    from app_integration import build_live_state
+    from match_intelligence_api import get_match_insights
     _INTELLIGENCE_AVAILABLE = True
     log.info("Intelligence Engine loaded successfully.")
 except Exception as _intel_import_err:
-    get_insights_for_match = None
+    build_live_state = None
+    get_match_insights = None
     _INTELLIGENCE_AVAILABLE = False
     log.warning(
         "Intelligence Engine unavailable at startup (%s) - /api/match-details will "
@@ -812,7 +814,114 @@ def _synthesize_miniscore_from_shaped_innings(shaped: dict) -> dict | None:
     }
 
 
-def _attach_intelligence(shaped: dict, carousel_entry: dict | None, miniscore: dict | None) -> None:
+# Max legal deliveries kept for situation detection (collapse/momentum/
+# pressure windows only look back 24/18/12 balls respectively - 30 gives
+# headroom without holding a whole innings in memory per match).
+MAX_RECENT_BALLS = 30
+
+
+def _runs_for_commentary_type(ctype: str, text: str) -> int:
+    """Map a shaped commentary entry's `type` to a runs value. 'run' is the
+    ambiguous one (covers 1/2/3/5) - text usually contains the digit as a
+    leading token in Cricbuzz's commentary strings ('1 run', '2 runs').
+    Falls back to 1 (a single) if no digit is found - reasonable default
+    since ambiguous 'run' entries are overwhelmingly singles in real data,
+    and the pointers this feeds (wicket/dot/boundary counts) aren't
+    sensitive to a single-vs-double misclassification."""
+    if ctype == "wicket":
+        return 0
+    if ctype == "six":
+        return 6
+    if ctype == "four":
+        return 4
+    if ctype == "dot":
+        return 0
+    m = re.match(r"^\s*(\d+)\s*run", text or "", re.IGNORECASE)
+    if m:
+        return int(m.group(1))
+    return 1
+
+
+def _derive_recent_balls_from_commentary(commentary: list[dict], innings_id: int) -> list[dict]:
+    """
+    Builds the `recent_balls` list situation_insight() needs, from the
+    commentary we're already fetching/merging for the frontend feed - no
+    new Cricbuzz calls required. commentary is newest-first (see
+    _merge_commentary's final sort); this returns OLDEST-FIRST, matching
+    what situation_insight()'s window slicing (recent_balls[-24:] etc)
+    expects. Filtered to one innings only, so collapse/momentum detection
+    never mixes balls from two different innings.
+    """
+    this_innings = [c for c in commentary if c.get("innings", 1) == innings_id]
+    recent = this_innings[:MAX_RECENT_BALLS]
+    return [
+        {
+            "runs_total": _runs_for_commentary_type(c.get("type"), c.get("text", "")),
+            "is_wicket": c.get("type") == "wicket",
+        }
+        for c in reversed(recent)
+    ]
+
+
+def _derive_partnership_from_commentary(commentary: list[dict], innings_id: int) -> tuple:
+    """
+    Walks commentary (newest-first) forward until the most recent wicket
+    for this innings, summing runs/balls along the way - everything more
+    recent than that wicket is the current, unbroken partnership. Returns
+    (partnership_runs, partnership_balls, balls_since_new_batter).
+    balls_since_new_batter is None if no wicket has fallen yet this innings
+    (no "new batter settling in" state applies at the very start).
+    """
+    this_innings = [c for c in commentary if c.get("innings", 1) == innings_id]
+    runs, balls = 0, 0
+    for c in this_innings:
+        if c.get("type") == "wicket":
+            break
+        runs += _runs_for_commentary_type(c.get("type"), c.get("text", ""))
+        balls += 1
+    balls_since_new_batter = balls if any(c.get("type") == "wicket" for c in this_innings) else None
+    return runs, balls, balls_since_new_batter
+
+
+# ---------------------------------------------------------------------------
+# First-innings score archive (Epic 6 extension - 2nd innings triple
+# comparison needs "what was innings-1's score at this same over mark").
+# Keyed by match_id -> list of {"over": float, "runs": int} snapshots,
+# appended once per refresh while innings 1 is the live innings. Small
+# (a few dozen points per match) and lives only in memory, same lifetime
+# as _detail_cache - no persistence needed since this is only useful
+# during the live match itself.
+# ---------------------------------------------------------------------------
+_first_innings_archive_lock = threading.Lock()
+_first_innings_archive: dict[str, list[dict]] = {}
+
+
+def _record_first_innings_point(match_id: str, over_decimal: "float | None", runs: "int | None") -> None:
+    if over_decimal is None or runs is None:
+        return
+    with _first_innings_archive_lock:
+        points = _first_innings_archive.setdefault(match_id, [])
+        # Avoid duplicate/out-of-order points from re-polling the same over.
+        if points and points[-1]["over"] >= over_decimal:
+            return
+        points.append({"over": over_decimal, "runs": runs})
+
+
+def _lookup_first_innings_score_at_over(match_id: str, over_decimal: float) -> "int | None":
+    """Finds the closest recorded innings-1 point at or before over_decimal.
+    Returns None if we never captured innings 1 for this match (e.g. the
+    app was restarted mid-match, or this match was only ever viewed from
+    innings 2 onward) - correctly refuses rather than guessing."""
+    with _first_innings_archive_lock:
+        points = _first_innings_archive.get(match_id, [])
+    candidates = [p for p in points if p["over"] <= over_decimal]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda p: p["over"])["runs"]
+
+
+def _attach_intelligence(shaped: dict, carousel_entry: dict | None, miniscore: dict | None,
+                          match_id: str = "", commentary: list | None = None) -> None:
     """
     Mutates `shaped` in place, adding an "intelligence" key with venue/player
     insights - or a clean empty/error shape if unavailable, so the frontend
@@ -820,12 +929,21 @@ def _attach_intelligence(shaped: dict, carousel_entry: dict | None, miniscore: d
     Never raises - any failure here should degrade to no insights, not break
     the whole match-details response.
 
-    NEW: falls back to a synthetic miniscore built from shaped["innings1"/
+    Falls back to a synthetic miniscore built from shaped["innings1"/
     "innings2"] when the real miniscore is missing/empty - this is what
     fixes the confirmed real case where venue/format resolve correctly
     (Lord's, ODI, zero warnings) but insights still came back empty,
     because miniscore was None for that poll even though the score WAS
     actually available via the commentary-derived innings data.
+
+    UPDATED (Epic 6 extension): also derives recent_balls/partnership from
+    commentary (for situation_insight), current_over_decimal (for
+    projection_insight), and first-innings-archive lookups + target/
+    balls_remaining (for second_innings_comparison) - all optional, all
+    silently skipped if the underlying data isn't available, same
+    refuse-don't-guess posture as the rest of the Insight Engine. match_id/
+    commentary are new optional params so existing callers/tests that don't
+    pass them still work unchanged (defaults keep prior behavior exactly).
     """
     if not _INTELLIGENCE_AVAILABLE:
         shaped["intelligence"] = {"insights": [], "meta": {"available": False}}
@@ -850,7 +968,52 @@ def _attach_intelligence(shaped: dict, carousel_entry: dict | None, miniscore: d
                 effective_miniscore = synthetic
                 used_fallback = True
 
-        result = get_insights_for_match(venue_name, match_format, is_ipl, effective_miniscore)
+        live_state = build_live_state(venue_name, match_format, is_ipl, effective_miniscore)
+
+        # --- Extend live_state with the new fields, all best-effort ---
+        current_innings_id = live_state.get("current_over_number") is not None and (
+            (effective_miniscore or {}).get("inningsid")
+        )
+        overs_completed_str = live_state.get("overs_completed_str")
+        current_over_decimal = None
+        if overs_completed_str is not None:
+            try:
+                current_over_decimal = float(overs_completed_str)
+                live_state["current_over_decimal"] = current_over_decimal
+            except (ValueError, TypeError):
+                pass
+
+        if commentary and current_innings_id:
+            recent_balls = _derive_recent_balls_from_commentary(commentary, current_innings_id)
+            if recent_balls:
+                live_state["recent_balls"] = recent_balls
+                live_state["legal_balls_bowled"] = int(round((current_over_decimal or 0) * 6)) \
+                    if current_over_decimal is not None else None
+            p_runs, p_balls, balls_since_new = _derive_partnership_from_commentary(commentary, current_innings_id)
+            live_state["partnership_runs"] = p_runs
+            live_state["partnership_balls"] = p_balls
+            if balls_since_new is not None:
+                live_state["balls_since_new_batter"] = balls_since_new
+
+        if current_innings_id == 1 and match_id and current_over_decimal is not None \
+                and "current_score" in live_state:
+            _record_first_innings_point(match_id, current_over_decimal, live_state["current_score"])
+
+        if current_innings_id == 2 and match_id:
+            live_state["is_second_innings"] = True
+            target = (effective_miniscore or {}).get("target")
+            if target:
+                live_state["target"] = target
+                total_overs = 50 if match_format.upper() in ("ODI", "ODM") else 20
+                legal_balls_bowled = live_state.get("legal_balls_bowled")
+                if legal_balls_bowled is not None:
+                    live_state["balls_remaining"] = max(0, total_overs * 6 - legal_balls_bowled)
+            if current_over_decimal is not None:
+                fi_score = _lookup_first_innings_score_at_over(match_id, current_over_decimal)
+                if fi_score is not None:
+                    live_state["first_innings_score_at_same_over"] = fi_score
+
+        result = get_match_insights(live_state)
         if used_fallback:
             result.setdefault("meta", {})["score_source"] = "commentary_fallback"
         shaped["intelligence"] = result
@@ -931,10 +1094,13 @@ def _refresh_match_detail(match_id: str) -> None:
 
     shaped = _shape_match_details_from_cricbuzz(scorecard_data, commentary, miniscore, raw_comwrapper)
 
-    # NEW: Epic 6 - attach venue/player insights alongside the existing
+    # Epic 6 - attach venue/player insights alongside the existing
     # scorecard/commentary data. Purely additive - nothing above this line
-    # changes behavior for existing frontend fields.
-    _attach_intelligence(shaped, carousel_entry, miniscore)
+    # changes behavior for existing frontend fields. match_id/commentary
+    # passed through so situation_insight/projection_insight/
+    # second_innings_comparison have what they need (see _attach_intelligence
+    # docstring for what each optional field unlocks).
+    _attach_intelligence(shaped, carousel_entry, miniscore, match_id=match_id, commentary=commentary)
 
     with _detail_cache_lock:
         _detail_cache[match_id] = {
