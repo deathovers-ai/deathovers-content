@@ -53,12 +53,13 @@ log = logging.getLogger("deathovers-backend")
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "intelligence", "parser"))
 try:
     from app_integration import build_live_state
-    from match_intelligence_api import get_match_insights
+    from match_intelligence_api import get_match_insights, determine_phase
     _INTELLIGENCE_AVAILABLE = True
     log.info("Intelligence Engine loaded successfully.")
 except Exception as _intel_import_err:
     build_live_state = None
     get_match_insights = None
+    determine_phase = None
     _INTELLIGENCE_AVAILABLE = False
     log.warning(
         "Intelligence Engine unavailable at startup (%s) - /api/match-details will "
@@ -850,7 +851,13 @@ def _derive_recent_balls_from_commentary(commentary: list[dict], innings_id: int
     _merge_commentary's final sort); this returns OLDEST-FIRST, matching
     what situation_insight()'s window slicing (recent_balls[-24:] etc)
     expects. Filtered to one innings only, so collapse/momentum detection
-    never mixes balls from two different innings.
+    never mixes balls from two different innings. Each returned ball
+    carries its source ballnbr too (situation_insight ignores unknown
+    keys, so this is safe for that caller) - used by
+    _derive_full_innings_balls_from_commentary below to identify exactly
+    which balls are new since a previous phase-bucketing pass, since this
+    function's own output is a sliding window and NOT safe to use for
+    that purpose on its own.
     """
     this_innings = [c for c in commentary if c.get("innings", 1) == innings_id]
     recent = this_innings[:MAX_RECENT_BALLS]
@@ -858,8 +865,33 @@ def _derive_recent_balls_from_commentary(commentary: list[dict], innings_id: int
         {
             "runs_total": _runs_for_commentary_type(c.get("type"), c.get("text", "")),
             "is_wicket": c.get("type") == "wicket",
+            "ballnbr": c.get("ballnbr", 0),
         }
         for c in reversed(recent)
+    ]
+
+
+def _derive_full_innings_balls_from_commentary(commentary: list[dict], innings_id: int) -> list[dict]:
+    """
+    Unlike _derive_recent_balls_from_commentary (capped to the most recent
+    MAX_RECENT_BALLS for situation detection), this returns EVERY legal
+    ball we currently have commentary for in this innings, oldest-first,
+    each tagged with ballnbr and an approximate over number (ballnbr-1)//6.
+    Used specifically for phase-bucketing the first-innings archive, where
+    we need ball-number identity to correctly skip balls we've already
+    attributed on a prior poll - a sliding recent-balls window can't do
+    that safely once an innings passes 30 balls.
+    """
+    this_innings = [c for c in commentary if c.get("innings", 1) == innings_id and c.get("ballnbr")]
+    ordered = sorted(this_innings, key=lambda c: c["ballnbr"])
+    return [
+        {
+            "ballnbr": c["ballnbr"],
+            "over": (c["ballnbr"] - 1) // 6,
+            "runs_total": _runs_for_commentary_type(c.get("type"), c.get("text", "")),
+            "is_wicket": c.get("type") == "wicket",
+        }
+        for c in ordered
     ]
 
 
@@ -885,26 +917,70 @@ def _derive_partnership_from_commentary(commentary: list[dict], innings_id: int)
 
 # ---------------------------------------------------------------------------
 # First-innings score archive (Epic 6 extension - 2nd innings triple
-# comparison needs "what was innings-1's score at this same over mark").
-# Keyed by match_id -> list of {"over": float, "runs": int} snapshots,
-# appended once per refresh while innings 1 is the live innings. Small
-# (a few dozen points per match) and lives only in memory, same lifetime
-# as _detail_cache - no persistence needed since this is only useful
-# during the live match itself.
+# comparison needs "what was innings-1's score at this same over mark",
+# AND "what did innings-1 actually score in each phase" for a true
+# phase-vs-phase comparison rather than only a venue-historical one).
+#
+# Keyed by match_id -> {
+#     "points": [{"over": float, "runs": int}, ...],   # for same-over lookup
+#     "phase_scores": {"powerplay": {"runs": int, "balls": int}, "middle": {...}, "death": {...}}
+# }
+# Appended/accumulated once per refresh while innings 1 is the live innings.
+# Small (a few dozen points + 3 phase counters per match) and lives only in
+# memory, same lifetime as _detail_cache - no persistence needed since this
+# is only useful during the live match itself. Known limitation: lost on a
+# mid-match Render restart (ephemeral process memory, no disk/DB backing
+# this yet) - _lookup functions correctly return None in that case rather
+# than guessing, same refuse-don't-guess posture as the rest of the
+# Insight Engine.
 # ---------------------------------------------------------------------------
 _first_innings_archive_lock = threading.Lock()
-_first_innings_archive: dict[str, list[dict]] = {}
+_first_innings_archive: dict[str, dict] = {}
+
+_EMPTY_PHASE_SCORES = {
+    "powerplay": {"runs": 0, "balls": 0},
+    "middle": {"runs": 0, "balls": 0},
+    "death": {"runs": 0, "balls": 0},
+}
 
 
-def _record_first_innings_point(match_id: str, over_decimal: "float | None", runs: "int | None") -> None:
+def _record_first_innings_point(match_id: str, over_decimal: "float | None", runs: "int | None",
+                                 match_type: "str | None" = None, full_innings_balls: "list | None" = None) -> None:
+    """
+    Records a same-over snapshot point (existing behavior, unchanged in
+    effect) AND, when full_innings_balls + match_type are supplied,
+    buckets each ball this call has visibility into that we haven't
+    already attributed to a phase on a prior call. Identifies "new" balls
+    by ballnbr (tracked via the archive's own "highest_ballnbr_attributed"
+    counter) rather than list position, since commentary/recent_balls can
+    be a sliding window - position-based dedup breaks once an innings
+    passes that window size, ballnbr identity does not. match_type/
+    full_innings_balls are optional so this stays backward compatible
+    with any caller that only wants the same-over point recorded.
+    """
     if over_decimal is None or runs is None:
         return
     with _first_innings_archive_lock:
-        points = _first_innings_archive.setdefault(match_id, [])
+        entry = _first_innings_archive.setdefault(
+            match_id,
+            {"points": [], "phase_scores": {k: dict(v) for k, v in _EMPTY_PHASE_SCORES.items()},
+             "highest_ballnbr_attributed": 0},
+        )
+        points = entry["points"]
         # Avoid duplicate/out-of-order points from re-polling the same over.
-        if points and points[-1]["over"] >= over_decimal:
-            return
-        points.append({"over": over_decimal, "runs": runs})
+        already_seen_this_over = bool(points) and points[-1]["over"] >= over_decimal
+        if not already_seen_this_over:
+            points.append({"over": over_decimal, "runs": runs})
+
+        if match_type is not None and full_innings_balls:
+            highest_seen = entry["highest_ballnbr_attributed"]
+            new_balls = [b for b in full_innings_balls if b["ballnbr"] > highest_seen]
+            for ball in new_balls:
+                phase = determine_phase(ball["over"], match_type)
+                entry["phase_scores"][phase]["runs"] += ball["runs_total"]
+                entry["phase_scores"][phase]["balls"] += 1
+            if new_balls:
+                entry["highest_ballnbr_attributed"] = max(b["ballnbr"] for b in new_balls)
 
 
 def _lookup_first_innings_score_at_over(match_id: str, over_decimal: float) -> "int | None":
@@ -913,11 +989,30 @@ def _lookup_first_innings_score_at_over(match_id: str, over_decimal: float) -> "
     app was restarted mid-match, or this match was only ever viewed from
     innings 2 onward) - correctly refuses rather than guessing."""
     with _first_innings_archive_lock:
-        points = _first_innings_archive.get(match_id, [])
+        entry = _first_innings_archive.get(match_id)
+    points = entry["points"] if entry else []
     candidates = [p for p in points if p["over"] <= over_decimal]
     if not candidates:
         return None
     return max(candidates, key=lambda p: p["over"])["runs"]
+
+
+def _lookup_first_innings_phase_score(match_id: str, phase_name: str) -> "dict | None":
+    """Returns {"runs": int, "balls": int} for the given phase of innings 1
+    at this match, or None if we have no archive for this match at all, or
+    zero balls recorded for that specific phase (innings-1 simply hasn't
+    reached - or was never observed in - that phase, e.g. the app started
+    watching mid-innings and missed the powerplay). Never fabricates a
+    partial/estimated figure - same posture as every other guard in this
+    codebase."""
+    with _first_innings_archive_lock:
+        entry = _first_innings_archive.get(match_id)
+    if not entry:
+        return None
+    phase_data = entry["phase_scores"].get(phase_name)
+    if not phase_data or phase_data["balls"] == 0:
+        return None
+    return dict(phase_data)
 
 
 def _attach_intelligence(shaped: dict, carousel_entry: dict | None, miniscore: dict | None,
@@ -997,7 +1092,14 @@ def _attach_intelligence(shaped: dict, carousel_entry: dict | None, miniscore: d
 
         if current_innings_id == 1 and match_id and current_over_decimal is not None \
                 and "current_score" in live_state:
-            _record_first_innings_point(match_id, current_over_decimal, live_state["current_score"])
+            full_innings_balls = (
+                _derive_full_innings_balls_from_commentary(commentary, current_innings_id)
+                if commentary else None
+            )
+            _record_first_innings_point(
+                match_id, current_over_decimal, live_state["current_score"],
+                match_type=match_format, full_innings_balls=full_innings_balls,
+            )
 
         if current_innings_id == 2 and match_id:
             live_state["is_second_innings"] = True
@@ -1012,6 +1114,14 @@ def _attach_intelligence(shaped: dict, carousel_entry: dict | None, miniscore: d
                 fi_score = _lookup_first_innings_score_at_over(match_id, current_over_decimal)
                 if fi_score is not None:
                     live_state["first_innings_score_at_same_over"] = fi_score
+                # Phase-wise 1st innings comparison: only meaningful if we
+                # actually recorded innings-1 balls in that exact phase -
+                # correctly stays unset (not guessed) otherwise.
+                current_phase = determine_phase(int(current_over_decimal), match_format)
+                fi_phase = _lookup_first_innings_phase_score(match_id, current_phase)
+                if fi_phase is not None:
+                    live_state["first_innings_phase_runs"] = fi_phase["runs"]
+                    live_state["first_innings_phase_balls"] = fi_phase["balls"]
 
         result = get_match_insights(live_state)
         if used_fallback:
