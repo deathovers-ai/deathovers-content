@@ -66,6 +66,20 @@ except Exception as _intel_import_err:
         "omit the 'intelligence' key until this is resolved.", _intel_import_err
     )
 
+# Weather (Open-Meteo, free, no key) - separate, independent import so a
+# failure here never takes down the Intelligence Engine or the rest of
+# the app. Coordinates come from Cricbuzz's own venueInfo, not a
+# geocoding step - see weather_service.py docstring.
+try:
+    from weather_service import fetch_weather, compute_local_hour, check_dew_risk
+    _WEATHER_AVAILABLE = True
+except Exception as _weather_import_err:
+    fetch_weather = None
+    compute_local_hour = None
+    check_dew_risk = None
+    _WEATHER_AVAILABLE = False
+    log.warning("Weather service unavailable at startup (%s) - weather chip will be omitted.", _weather_import_err)
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -485,6 +499,56 @@ def _get_archived_toss(match_id: str) -> "dict | None":
         return _toss_archive.get(match_id)
 
 
+# ---------------------------------------------------------------------------
+# Weather cache - fetched once pregame + once at innings break per match,
+# not on every poll (weather doesn't change meaningfully within a single
+# refresh cycle, and this keeps calls minimal even though Open-Meteo's
+# free tier is generous). Keyed by match_id -> {"weather": {...}, "fetched_for_innings": int}.
+# In-memory only, same lifetime/tradeoff as the other archives in this file.
+# ---------------------------------------------------------------------------
+_weather_cache_lock = threading.Lock()
+_weather_cache: dict[str, dict] = {}
+
+
+def _should_fetch_weather(match_id: str, current_innings_id: "int | None") -> bool:
+    """True if we've never fetched weather for this match, OR the innings
+    has changed since our last fetch (innings-break refresh point)."""
+    if current_innings_id is None:
+        return False
+    with _weather_cache_lock:
+        entry = _weather_cache.get(match_id)
+    if entry is None:
+        return True
+    return entry.get("fetched_for_innings") != current_innings_id
+
+
+def _refresh_weather_if_needed(match_id: str, carousel_entry: "dict | None",
+                                current_innings_id: "int | None") -> "dict | None":
+    """
+    Fetches and caches weather for this match if due (see
+    _should_fetch_weather). Returns the cached (possibly just-updated)
+    weather dict, or None if weather is unavailable for any reason
+    (service down, venue has no coordinates, fetch failed) - never
+    raises, weather is purely additive.
+    """
+    if not _WEATHER_AVAILABLE or not carousel_entry:
+        return None
+    lat = carousel_entry.get("venueLatitude")
+    lon = carousel_entry.get("venueLongitude")
+    if lat is None or lon is None:
+        return None
+
+    if _should_fetch_weather(match_id, current_innings_id):
+        weather = fetch_weather(lat, lon)
+        if weather is not None:
+            with _weather_cache_lock:
+                _weather_cache[match_id] = {"weather": weather, "fetched_for_innings": current_innings_id}
+
+    with _weather_cache_lock:
+        entry = _weather_cache.get(match_id)
+    return entry["weather"] if entry else None
+
+
 def _shape_match_for_carousel(m: dict) -> dict:
     info = m.get("matchInfo", m)
     team1 = info.get("team1", {}) or {}
@@ -536,6 +600,23 @@ def _shape_match_for_carousel(m: dict) -> dict:
     venue = info.get("venueInfo", info.get("venueinfo", {})) or {}
     venue_label = venue.get("ground", "") or info.get("seriesName", info.get("seriesname", ""))
 
+    # NEW (weather): Cricbuzz's own venueInfo already includes latitude/
+    # longitude/timezone directly - confirmed real from live carousel data,
+    # no separate geocoding step needed. startDate (epoch ms) + venue
+    # timezone together let us compute the match's local start hour for
+    # dew-risk detection. All optional - venues without these fields
+    # simply get no weather chip, never a guessed/wrong one.
+    def _to_float(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+    venue_lat = _to_float(venue.get("latitude"))
+    venue_lon = _to_float(venue.get("longitude"))
+    venue_timezone = venue.get("timezone")
+    start_date_epoch_ms = info.get("startDate")
+
     return {
         "id": info.get("matchId", info.get("matchid")),
         "venue": venue_label,
@@ -551,6 +632,11 @@ def _shape_match_for_carousel(m: dict) -> dict:
         # matches (Cricbuzz's matchFormat field alone doesn't distinguish IPL from
         # a generic international T20).
         "seriesName": info.get("seriesName", info.get("seriesname", "")),
+        # NEW: weather inputs (see comment above)
+        "venueLatitude": venue_lat,
+        "venueLongitude": venue_lon,
+        "venueTimezone": venue_timezone,
+        "startDateEpochMs": start_date_epoch_ms,
     }
 
 
@@ -1270,6 +1356,27 @@ def _refresh_match_detail(match_id: str) -> None:
     # for this match (e.g. app started watching mid-match) - frontend
     # should treat a missing/None toss the same as "not shown", not an error.
     shaped["toss"] = _get_archived_toss(match_id)
+
+    # Weather (Open-Meteo, free) - fetched once pregame + once per innings
+    # change, using coordinates already present in the carousel entry's
+    # venueInfo. Dew risk is computed alongside it since it needs the same
+    # weather reading + the match's local start hour + current innings.
+    current_innings_id_for_weather = (miniscore or {}).get("inningsid")
+    weather = _refresh_weather_if_needed(match_id, carousel_entry, current_innings_id_for_weather)
+    shaped["weather"] = weather
+
+    if weather and check_dew_risk and carousel_entry:
+        local_hour = compute_local_hour(
+            carousel_entry.get("startDateEpochMs"), carousel_entry.get("venueTimezone")
+        )
+        dew = check_dew_risk(
+            is_second_innings=(current_innings_id_for_weather == 2),
+            local_start_hour=local_hour,
+            current_humidity_pct=weather.get("humidity_pct"),
+        )
+        shaped["dewRisk"] = dew
+    else:
+        shaped["dewRisk"] = None
 
     # Epic 6 - attach venue/player insights alongside the existing
     # scorecard/commentary data. Purely additive - nothing above this line
