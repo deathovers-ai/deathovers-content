@@ -433,6 +433,58 @@ def _extract_ball_tracker(miniscore: dict | None) -> list[dict]:
     return balls
 
 
+def _parse_toss_from_status(status_text: "str | None", team1_name: str, team2_name: str) -> "dict | None":
+    """
+    Cricbuzz's matchInfo.status field carries the toss announcement as a
+    plain string ONLY while matchInfo.state == "Toss" - e.g. "Zimbabwe
+    opt to bowl", "France opt to bat" (confirmed via real live data, 25
+    Jul 2026). Once play starts, status is overwritten with a live-state
+    description instead (e.g. "Sri Lanka Women need 117 runs") and no
+    longer contains toss info - callers MUST capture this once while
+    state is "Toss" and persist it (see _toss_archive below), not
+    re-parse status on every poll.
+
+    Returns {"winner": str, "decision": "bat"|"bowl"} or None if the
+    string doesn't match the toss-announcement pattern.
+    """
+    if not status_text:
+        return None
+    m = re.match(r"^(.+?)\s+opt(?:ed)?\s+to\s+(bat|bowl)\b", status_text.strip(), re.IGNORECASE)
+    if not m:
+        return None
+    winner_raw = m.group(1).strip()
+    decision = m.group(2).lower()
+    for name in (team1_name, team2_name):
+        if name and winner_raw.lower() == name.lower():
+            return {"winner": name, "decision": decision}
+    return {"winner": winner_raw, "decision": decision}
+
+
+# ---------------------------------------------------------------------------
+# Toss archive - same "capture once, persist" pattern as
+# _first_innings_archive, and the same reason: Cricbuzz's status field
+# only carries the toss announcement transiently (see
+# _parse_toss_from_status docstring above), so it must be captured the
+# moment it's seen and cached for the rest of the match. In-memory only,
+# same known restart-loses-history tradeoff as the first-innings archive.
+# ---------------------------------------------------------------------------
+_toss_archive_lock = threading.Lock()
+_toss_archive: dict[str, dict] = {}
+
+
+def _record_toss_if_new(match_id: str, toss: "dict | None") -> None:
+    if not match_id or not toss:
+        return
+    with _toss_archive_lock:
+        if match_id not in _toss_archive:
+            _toss_archive[match_id] = toss
+
+
+def _get_archived_toss(match_id: str) -> "dict | None":
+    with _toss_archive_lock:
+        return _toss_archive.get(match_id)
+
+
 def _shape_match_for_carousel(m: dict) -> dict:
     info = m.get("matchInfo", m)
     team1 = info.get("team1", {}) or {}
@@ -440,6 +492,14 @@ def _shape_match_for_carousel(m: dict) -> dict:
 
     home_name = team1.get("teamName", team1.get("teamname", "TBD"))
     away_name = team2.get("teamName", team2.get("teamname", "TBD"))
+
+    # Capture toss the moment we see it (state == "Toss"), before status
+    # gets overwritten by live-play text on the next poll.
+    match_id_for_toss = info.get("matchId", info.get("matchid"))
+    if (info.get("state") or "").lower() == "toss":
+        parsed_toss = _parse_toss_from_status(info.get("status"), home_name, away_name)
+        if match_id_for_toss and parsed_toss:
+            _record_toss_if_new(str(match_id_for_toss), parsed_toss)
 
     state = (info.get("state") or "").lower()
     if state in ("in progress", "innings break", "toss", "stumps"):
@@ -1203,6 +1263,13 @@ def _refresh_match_detail(match_id: str) -> None:
     commentary = _merge_commentary(prior_commentary, commentary)
 
     shaped = _shape_match_details_from_cricbuzz(scorecard_data, commentary, miniscore, raw_comwrapper)
+
+    # Toss result, if we've captured it for this match (see
+    # _record_toss_if_new - captured once, while state=="Toss", from the
+    # carousel entry). None if the archive never saw a "Toss" state poll
+    # for this match (e.g. app started watching mid-match) - frontend
+    # should treat a missing/None toss the same as "not shown", not an error.
+    shaped["toss"] = _get_archived_toss(match_id)
 
     # Epic 6 - attach venue/player insights alongside the existing
     # scorecard/commentary data. Purely additive - nothing above this line
