@@ -4,39 +4,23 @@ import React, { useState } from 'react';
  * MATCH INFO STRIP
  * Replaces the old always-expanded, prose-paragraph pregame venue block.
  * Toss result stays visible throughout the match (it's a fixed fact people
- * reference all match long - "why is X batting first"). Weather is a
- * pregame decision-relevant fact only, so it fades out once the match is
- * live (no live weather feed exists here, and updating it mid-match isn't
- * meaningful). Venue record (toss %, win %, chase history) moves behind a
- * disclosure - reference material you dip into, not a wall of numbers you
- * stare at every time you open the Match Room.
+ * reference all match long - "why is X batting first"). Venue record
+ * (toss %, win %, chase history) moves behind a disclosure - reference
+ * material you dip into, not a wall of numbers you stare at every time
+ * you open the Match Room.
+ *
+ * NOTE: weather was scoped originally but confirmed NOT available in the
+ * Cricbuzz RapidAPI payload this backend uses (checked matchInfo directly
+ * against live matches - no weather field present anywhere in the
+ * response). Dropped rather than shipped as a fake/always-empty field.
+ * If a future weather source is added, re-introduce the chip then.
  *
  * Props:
  *   toss: { winner: string, decision: "bat"|"bowl" } | null
- *   weather: { condition: string, tempC: number, icon?: string } | null
- *   isLive: boolean - controls whether the weather chip renders at all
  *   venuePointers: [{label, value, unit?, pct?}] - the existing pregame
  *     pointer list (toss %, win %, chase records etc), now tucked behind
  *     the disclosure instead of always shown inline.
  */
-
-const WEATHER_ICONS = {
-  clear: '☀️',
-  sunny: '☀️',
-  cloudy: '☁️',
-  overcast: '☁️',
-  rain: '🌧️',
-  drizzle: '🌦️',
-  storm: '⛈️',
-  humid: '💧',
-  default: '🌤️',
-};
-
-function weatherIcon(condition) {
-  if (!condition) return WEATHER_ICONS.default;
-  const key = condition.trim().toLowerCase();
-  return WEATHER_ICONS[key] || WEATHER_ICONS.default;
-}
 
 function TossChip({ toss }) {
   if (!toss || !toss.winner) return null;
@@ -51,18 +35,6 @@ function TossChip({ toss }) {
   );
 }
 
-function WeatherChip({ weather }) {
-  if (!weather || !weather.condition) return null;
-  return (
-    <div className="info-chip">
-      <span className="info-chip-icon" aria-hidden="true">{weatherIcon(weather.condition)}</span>
-      <span className="info-chip-text">
-        {weather.condition}{weather.tempC != null ? `, ${Math.round(weather.tempC)}°C` : ''}
-      </span>
-    </div>
-  );
-}
-
 function formatPointerValue(p) {
   const sign = p.pct !== undefined && p.pct !== null && p.pct > 0 ? '+' : '';
   if (p.pct !== undefined && p.pct !== null) {
@@ -71,21 +43,19 @@ function formatPointerValue(p) {
   return `${p.value}${p.unit || ''}`;
 }
 
-export default function MatchInfoStrip({ toss, weather, isLive, venuePointers }) {
+export default function MatchInfoStrip({ toss, venuePointers }) {
   const [venueOpen, setVenueOpen] = useState(false);
 
   const hasToss = toss && toss.winner;
-  const hasWeather = weather && weather.condition && !isLive;
   const hasVenuePointers = venuePointers && venuePointers.length > 0;
 
-  if (!hasToss && !hasWeather && !hasVenuePointers) return null;
+  if (!hasToss && !hasVenuePointers) return null;
 
   return (
     <div className="match-info-strip">
-      {(hasToss || hasWeather) && (
+      {hasToss && (
         <div className="info-chip-row">
           <TossChip toss={toss} />
-          <WeatherChip weather={weather} />
         </div>
       )}
 
