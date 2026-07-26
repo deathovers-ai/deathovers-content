@@ -283,10 +283,16 @@ class InsightEngine:
 
     def venue_pregame_insight(self, venue_key, match_type):
         """
-        Start-of-match venue summary: toss tendency, chase-vs-defend
-        record, and historical extremes. Meant to be surfaced before a
-        ball is bowled, unlike venue_score_insight/venue_phase_insight
-        which need a live score to compare against.
+        Start-of-match venue summary, restructured (CTO decision, this
+        sprint) into 4 explicit named sections instead of one flat
+        pointer list - each section maps 1:1 to a distinct Match Room UI
+        block, and each carries its own sample-size/basis label so the
+        frontend never has to guess what a number means. All figures are
+        ALL-TIME (matches_with_data) - a recent-N-matches variant was
+        considered and deliberately deferred: pitch character changes
+        are rare/slow (relaid pitch, renovation), so a 20-match recent
+        window mostly adds noise (mixed tournaments/seasons/ball types)
+        without a real signal to justify the added pipeline complexity.
 
         Returns None if the venue/format isn't reliable enough, or if
         the toss/outcome fields aren't present (older venue_stats.json
@@ -301,48 +307,81 @@ class InsightEngine:
             return None  # stale venue_stats.json, fields not computed yet
 
         name = venue_entry["display_name"]
-        pointers = []
+        sample_size = fmt["matches_with_data"]
+        result_sample_size = fmt.get("matches_with_result", sample_size)
 
-        if fmt.get("toss_bat_first_pct") is not None:
+        # --- Section: toss & decision record ---
+        toss_record = None
+        if fmt.get("toss_bat_first_pct") is not None and fmt.get("win_pct_batting_first") is not None:
             bat_pct = fmt["toss_bat_first_pct"]
             lean = "Bat First" if bat_pct >= 50 else "Bowl First"
             lean_pct = bat_pct if bat_pct >= 50 else round(100 - bat_pct, 1)
-            pointers.append({"label": f"Toss \u2192 {lean}", "value": lean_pct, "unit": "%"})
+            toss_record = {
+                "basis": f"all-time, {result_sample_size} completed matches",
+                "pointers": [
+                    {"label": f"Toss \u2192 {lean}", "value": lean_pct, "unit": "%"},
+                    {"label": "Win % (Batting First)", "value": fmt["win_pct_batting_first"], "unit": "%"},
+                    {"label": "Win % (Batting Second)", "value": fmt["win_pct_bowling_first"], "unit": "%"},
+                ],
+            }
 
-        if fmt.get("win_pct_batting_first") is not None:
-            pointers.append({"label": "Win % (Batting First)", "value": fmt["win_pct_batting_first"], "unit": "%"})
-            pointers.append({"label": "Win % (Batting Second)", "value": fmt["win_pct_bowling_first"], "unit": "%"})
-            pointers.append({"label": "Completed Matches", "value": fmt["matches_with_result"]})
+        # --- Section: venue score record (highest/lowest/avg) ---
+        score_record = None
+        if fmt.get("highest_total") is not None and fmt.get("lowest_total") is not None \
+                and fmt.get("avg_first_innings_score") is not None:
+            score_record = {
+                "basis": f"all-time, {sample_size} matches",
+                "pointers": [
+                    {"label": "Highest Total", "value": fmt["highest_total"]},
+                    {"label": "Lowest Total", "value": fmt["lowest_total"]},
+                    {"label": "Avg 1st Innings Score", "value": fmt["avg_first_innings_score"]},
+                ],
+            }
+            if fmt.get("avg_second_innings_score") is not None:
+                score_record["pointers"].append(
+                    {"label": "Avg 2nd Innings Score", "value": fmt["avg_second_innings_score"]}
+                )
 
-        if fmt.get("highest_successful_chase") is not None:
-            pointers.append({"label": "Highest Successful Chase", "value": fmt["highest_successful_chase"]})
-        if fmt.get("lowest_score_defended") is not None:
-            pointers.append({"label": "Lowest Total Defended", "value": fmt["lowest_score_defended"]})
+        # --- Section: chase record ---
+        chase_record = None
+        if fmt.get("highest_successful_chase") is not None or fmt.get("lowest_score_defended") is not None:
+            chase_pointers = []
+            if fmt.get("highest_successful_chase") is not None:
+                chase_pointers.append({"label": "Highest Successful Chase", "value": fmt["highest_successful_chase"]})
+            if fmt.get("lowest_score_defended") is not None:
+                chase_pointers.append({"label": "Lowest Total Defended", "value": fmt["lowest_score_defended"]})
+            chase_record = {
+                "basis": f"all-time, {result_sample_size} completed matches",
+                "pointers": chase_pointers,
+            }
+
+        # --- Section: innings score range, with explicit basis so the
+        # frontend/user knows exactly what population this range is
+        # drawn from (this was the ask: "must define on what base"). ---
+        score_range = None
         if fmt.get("highest_total") is not None and fmt.get("lowest_total") is not None:
-            pointers.append({
-                "label": "Innings Score Range",
-                "value": f"{fmt['lowest_total']} \u2013 {fmt['highest_total']}",
-            })
+            score_range = {
+                "basis": f"all completed innings at this venue, {match_type}, all-time ({sample_size} matches)",
+                "low": fmt["lowest_total"],
+                "high": fmt["highest_total"],
+            }
 
-        if not pointers:
-            return None  # guard passed but every individual field was None - nothing to say
+        sections = {
+            "toss_record": toss_record,
+            "score_record": score_record,
+            "chase_record": chase_record,
+            "score_range": score_range,
+        }
+        if not any(sections.values()):
+            return None  # guard passed but every individual section was empty - nothing to say
 
         return {
             "type": "venue_pregame_summary",
             "venue": name,
             "match_type": match_type,
-            "avg_first_innings_score": fmt.get("avg_first_innings_score"),
-            "avg_second_innings_score": fmt.get("avg_second_innings_score"),
-            "toss_bat_first_pct": fmt.get("toss_bat_first_pct"),
-            "win_pct_batting_first": fmt.get("win_pct_batting_first"),
-            "win_pct_bowling_first": fmt.get("win_pct_bowling_first"),
-            "highest_total": fmt.get("highest_total"),
-            "lowest_total": fmt.get("lowest_total"),
-            "highest_successful_chase": fmt.get("highest_successful_chase"),
-            "lowest_score_defended": fmt.get("lowest_score_defended"),
-            "sample_size": fmt["matches_with_data"],
+            "sample_size": sample_size,
             "headline": f"{name} \u2014 {match_type} venue record",
-            "pointers": pointers,
+            **sections,
         }
 
     def player_form_insight(self, player_name, current_runs, current_balls):
