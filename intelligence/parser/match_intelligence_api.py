@@ -117,6 +117,23 @@ def get_match_insights(live_state):
             phase = determine_phase(live_state["current_over_number"], match_type)
             context.update({"phase_name": phase})
 
+            # NEW: run-rate comparison (venue_phase_insight, fed by this
+            # phase_name key alongside current_phase_runs/balls below)
+            # should surface as a checkpoint every 5 overs, not on every
+            # single poll - CTO decision this sprint, same interval for
+            # both T20 and ODI. current_phase_runs/current_phase_balls
+            # are only meaningful for the CURRENT phase anyway (see
+            # app_integration.py's phase-tracking notes), so this simply
+            # withholds those two keys from context on off-checkpoint
+            # overs, which correctly makes venue_phase_insight's own
+            # guard in generate_all() skip it for that poll.
+            is_five_over_checkpoint = live_state["current_over_number"] > 0 \
+                and live_state["current_over_number"] % 5 == 0
+            if not is_five_over_checkpoint:
+                live_state = dict(live_state)  # avoid mutating caller's dict
+                live_state.pop("current_phase_runs", None)
+                live_state.pop("current_phase_balls", None)
+
     if live_state.get("striker_name") and "striker_current_runs" in live_state \
             and "striker_current_balls" in live_state:
         context.update({
@@ -159,10 +176,15 @@ def get_match_insights(live_state):
             warnings.append("recent_balls present but legal_balls_bowled missing - situation_insight skipped.")
 
     # ------------------------------------------------------------------
-    # NEW: projection_insight - needs venue_key/match_type (already
-    # resolved above) plus current_over as a decimal (e.g. 10.3).
+    # UPDATED: projection_insight is 1ST INNINGS ONLY (a flat score
+    # projection doesn't make sense once there's a target - see
+    # chase_projection_insight below, which replaces it for the chase).
+    # Needs venue_key/match_type (already resolved above) plus current
+    # over as a decimal (e.g. 10.3). Threshold: T20 over 10, ODI over 25
+    # (halfway point for both formats, CTO decision this sprint).
     # ------------------------------------------------------------------
-    if match_type and venue_key and "current_over_decimal" in live_state \
+    is_second_innings = bool(live_state.get("is_second_innings"))
+    if not is_second_innings and match_type and venue_key and "current_over_decimal" in live_state \
             and "current_score" in live_state:
         projection = engine.projection_insight(
             venue_key=venue_key,
@@ -172,6 +194,25 @@ def get_match_insights(live_state):
         )
         if projection:
             insights.append(projection)
+
+    # ------------------------------------------------------------------
+    # NEW: chase_projection_insight - 2ND INNINGS ONLY. Same halfway-point
+    # threshold as projection_insight, but answers "are they on track to
+    # reach the target" instead of "what would they score" - a different
+    # question with a different, more volatile answer shape.
+    # ------------------------------------------------------------------
+    if is_second_innings and match_type and venue_key \
+            and all(k in live_state for k in ("current_score", "target", "current_over_decimal", "balls_remaining")):
+        chase_projection = engine.chase_projection_insight(
+            venue_key=venue_key,
+            match_type=match_type,
+            current_score=live_state["current_score"],
+            target=live_state["target"],
+            current_over_decimal=live_state["current_over_decimal"],
+            balls_remaining=live_state["balls_remaining"],
+        )
+        if chase_projection:
+            insights.append(chase_projection)
 
     # ------------------------------------------------------------------
     # NEW: second_innings_comparison - needs target + 1st innings
