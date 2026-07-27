@@ -1361,7 +1361,25 @@ def _refresh_match_detail(match_id: str) -> None:
     # change, using coordinates already present in the carousel entry's
     # venueInfo. Dew risk is computed alongside it since it needs the same
     # weather reading + the match's local start hour + current innings.
+    #
+    # BUGFIX: previously read current_innings_id directly off miniscore,
+    # which is None on the confirmed-real intermittent Cricbuzz failure
+    # mode (see ARCHITECTURE.md / _synthesize_miniscore_from_shaped_innings)
+    # - meaning weather silently never fetched on exactly the polls where
+    # the score itself was already correctly falling back to commentary-
+    # derived data. Now uses the same fallback: prefer miniscore's own
+    # inningsid when present, else derive it from whichever of
+    # shaped["innings1"/"innings2"] actually has live data (mirrors
+    # _synthesize_miniscore_from_shaped_innings's own "yet to bat" check).
     current_innings_id_for_weather = (miniscore or {}).get("inningsid")
+    if current_innings_id_for_weather is None:
+        inn2 = shaped.get("innings2")
+        inn1 = shaped.get("innings1")
+        if inn2 and inn2.get("score") and inn2["score"] != "yet to bat":
+            current_innings_id_for_weather = inn2.get("inningsId", 2)
+        elif inn1 and inn1.get("score") and inn1["score"] != "yet to bat":
+            current_innings_id_for_weather = inn1.get("inningsId", 1)
+
     weather = _refresh_weather_if_needed(match_id, carousel_entry, current_innings_id_for_weather)
     shaped["weather"] = weather
 
