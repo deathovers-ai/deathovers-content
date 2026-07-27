@@ -606,21 +606,30 @@ class InsightEngine:
         }
 
     # ------------------------------------------------------------------
-    # Post-10-over score projection (T20) / post-20-over (ODI). Blends
+    # Post-halfway score projection: T20 after over 10 (of 20), ODI after
+    # over 25 (of 50) - same ratio, per CTO decision this sprint. Blends
     # current run rate with the venue's own middle/death phase rates
     # rather than a naive flat-CRR extrapolation, since death overs
     # typically accelerate beyond the rate set earlier in an innings.
     # Always returns a RANGE, never a single false-precision number.
+    #
+    # 1ST INNINGS ONLY. The 2nd innings (a chase) should never show a flat
+    # "projected final score" - what matters there is whether the chase is
+    # on/ahead/behind pace, which is a different question with a different
+    # answer shape (see chase_projection_insight below). Callers must not
+    # call this method once is_second_innings is true; match_intelligence_api.py
+    # enforces this at the call-site level.
     # ------------------------------------------------------------------
 
-    PROJECTION_MIN_OVER = {"T20": 10, "IT20": 10, "IPL": 10, "ODI": 20, "ODM": 20}
+    PROJECTION_MIN_OVER = {"T20": 10, "IT20": 10, "IPL": 10, "ODI": 25, "ODM": 25}
 
     def projection_insight(self, venue_key, match_type, current_score, current_over_decimal):
         """
         current_over_decimal: e.g. 10.3 for "10.3 overs".
         Returns None if not yet eligible (before the minimum over), the
         venue/format isn't reliable, or phase data is missing - same
-        refuse-don't-guess posture as the rest of this module.
+        refuse-don't-guess posture as the rest of this module. 1st innings
+        only - see class docstring above.
         """
         min_over = self.PROJECTION_MIN_OVER.get(match_type)
         if min_over is None or current_over_decimal < min_over:
@@ -739,6 +748,98 @@ class InsightEngine:
             "phase": phase_name,
             "headline": f"Chasing {target} \u2014 need {target - current_score} from {balls_remaining} balls" if balls_remaining else f"Chasing {target}",
             "pointers": pointers,
+        }
+
+    # ------------------------------------------------------------------
+    # 2nd innings ONLY - "Projected Chase" replaces projection_insight's
+    # flat score projection, which doesn't make sense once there's a
+    # target to chase. This blends three lenses (CTO decision, this
+    # sprint): live chase trajectory (current RR vs required RR),
+    # historical venue chase success at this target band, and remaining-
+    # phase venue rates (same phase data projection_insight uses) - to
+    # answer "are they on track to actually get there", not just "what
+    # would they score if this were a free-standing innings".
+    # ------------------------------------------------------------------
+
+    def chase_projection_insight(self, venue_key, match_type, current_score, target,
+                                  current_over_decimal, balls_remaining):
+        """
+        Returns None if not yet eligible (before the same halfway-point
+        threshold as projection_insight - a chase projection this early
+        is just as noisy as a score projection would be), or if venue
+        phase data is unavailable. Result is a WIN PROBABILITY-FLAVORED
+        outcome (on-track / ahead / behind pace + a projected final score
+        band if the current rate holds), not a single confident number -
+        chases are inherently more volatile than a free innings since
+        required rate itself changes every ball.
+        """
+        min_over = self.PROJECTION_MIN_OVER.get(match_type)
+        if min_over is None or current_over_decimal < min_over or balls_remaining is None or balls_remaining <= 0:
+            return None
+
+        venue_entry = self.venue_stats.get(venue_key)
+        if not venue_entry or not venue_data_is_reliable(venue_entry, match_type):
+            return None
+
+        fmt = venue_entry["formats"].get(match_type)
+        phases = fmt.get("phase_breakdown") if fmt else None
+        if not phases or "middle" not in phases or "death" not in phases:
+            return None
+
+        total_overs = 50 if match_type in ("ODI", "ODM") else 20
+        if match_type in ("ODI", "ODM"):
+            middle_end, death_start = 40, 40
+        else:
+            middle_end, death_start = 15, 15
+
+        middle_overs_remaining = max(0.0, middle_end - current_over_decimal)
+        death_overs_remaining = max(0.0, total_overs - max(current_over_decimal, death_start))
+        middle_rate = phases["middle"].get("avg_run_rate", 0)
+        death_rate = phases["death"].get("avg_run_rate", 0)
+        if middle_rate == 0 and death_rate == 0:
+            return None
+
+        # Lens 1: if they simply continue at venue-typical remaining-phase
+        # rates (not their own current rate - this answers "does the
+        # venue's usual pace get them there", independent of how this
+        # specific chase has gone so far).
+        venue_pace_projection = current_score + (middle_overs_remaining * middle_rate) + (death_overs_remaining * death_rate)
+
+        # Lens 2: required run rate vs their actual current run rate -
+        # the live chase-pace signal.
+        runs_needed = target - current_score
+        required_rr = round((runs_needed / balls_remaining) * 6, 2) if balls_remaining > 0 else None
+        current_rr = round(current_score / current_over_decimal, 2) if current_over_decimal > 0 else 0
+        rr_gap = round(current_rr - required_rr, 2) if required_rr is not None else None
+
+        # Combine: if current pace continues exactly, where do they land?
+        current_pace_projection = current_score + (current_rr * (balls_remaining / 6))
+
+        uncertainty_pct = 0.10
+        low = round(min(venue_pace_projection, current_pace_projection) * (1 - uncertainty_pct))
+        high = round(max(venue_pace_projection, current_pace_projection) * (1 + uncertainty_pct))
+
+        if rr_gap is None:
+            status = "UNKNOWN"
+        elif rr_gap >= 0.5:
+            status = "AHEAD OF PACE"
+        elif rr_gap <= -0.5:
+            status = "BEHIND PACE"
+        else:
+            status = "ON PACE"
+
+        return {
+            "type": "chase_projection",
+            "match_type": match_type,
+            "status": status,
+            "headline": f"Chase {status.title()} \u2014 projected {low}\u2013{high} at current rate",
+            "pointers": [
+                {"label": "Target", "value": target},
+                {"label": "Current Run Rate", "value": current_rr},
+                {"label": "Required Run Rate", "value": required_rr},
+                {"label": "Gap to Required Rate", "value": rr_gap, "unit": " rpo"},
+                {"label": "Projected Range (current pace)", "value": f"{low} \u2013 {high}"},
+            ],
         }
 
     def generate_all(self, context):
