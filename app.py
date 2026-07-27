@@ -1352,10 +1352,25 @@ def _refresh_match_detail(match_id: str) -> None:
 
     # Toss result, if we've captured it for this match (see
     # _record_toss_if_new - captured once, while state=="Toss", from the
-    # carousel entry). None if the archive never saw a "Toss" state poll
-    # for this match (e.g. app started watching mid-match) - frontend
-    # should treat a missing/None toss the same as "not shown", not an error.
+    # carousel entry). Falls back to parsing the SCORECARD endpoint's own
+    # top-level "status" field, which - confirmed via a real live
+    # scorecard response, match 155349 at over 29 - keeps the toss
+    # announcement text ("Nepal opt to bowl") even well after toss,
+    # unlike the live-matches feed's matchInfo.status which gets
+    # overwritten by live-play text. This recovers toss for matches the
+    # app started watching AFTER the "Toss" state had already passed
+    # (the one real gap in the archive-only approach) - at zero extra
+    # API cost, since scorecard_data is already being fetched every
+    # refresh for the batting/bowling card.
     shaped["toss"] = _get_archived_toss(match_id)
+    if shaped["toss"] is None and scorecard_data and carousel_entry:
+        scorecard_status = scorecard_data.get("status")
+        team1_name = carousel_entry["teams"][0] if carousel_entry.get("teams") else ""
+        team2_name = carousel_entry["teams"][1] if len(carousel_entry.get("teams", [])) > 1 else ""
+        fallback_toss = _parse_toss_from_status(scorecard_status, team1_name, team2_name)
+        if fallback_toss:
+            shaped["toss"] = fallback_toss
+            _record_toss_if_new(match_id, fallback_toss)
 
     # Weather (Open-Meteo, free) - fetched once pregame + once per innings
     # change, using coordinates already present in the carousel entry's
