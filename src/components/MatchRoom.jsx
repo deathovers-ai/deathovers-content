@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import MatchInfoCard from './MatchInfoCard.jsx';
+import MatchInfoCard from './MatchInfoStrip.jsx';
 import InsightPanel from './InsightPanel.jsx';
 
 // Standalone page-level component: fetches one match's details independently
