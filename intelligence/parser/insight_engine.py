@@ -613,6 +613,17 @@ class InsightEngine:
     # typically accelerate beyond the rate set earlier in an innings.
     # Always returns a RANGE, never a single false-precision number.
     #
+    # WICKETS-IN-HAND ADJUSTMENT (CTO decision, this sprint): the venue
+    # phase rate alone is wicket-blind - 90/1 and 90/6 at the same over
+    # would otherwise project identically, which is a real, visible
+    # accuracy gap. Applied as a multiplier on the projected remaining
+    # runs, banded by wickets down (not per-wicket - insufficient
+    # per-venue sample to support that granularity without a full
+    # Cricsheet re-aggregation, deferred as a documented future upgrade).
+    # This is a reasoned estimate, not historically-derived from Cricsheet
+    # like the phase rates themselves are - flagged honestly rather than
+    # presented as equally rigorous.
+    #
     # 1ST INNINGS ONLY. The 2nd innings (a chase) should never show a flat
     # "projected final score" - what matters there is whether the chase is
     # on/ahead/behind pace, which is a different question with a different
@@ -623,9 +634,32 @@ class InsightEngine:
 
     PROJECTION_MIN_OVER = {"T20": 10, "IT20": 10, "IPL": 10, "ODI": 25, "ODM": 25}
 
-    def projection_insight(self, venue_key, match_type, current_score, current_over_decimal):
+    # Multiplier applied to the venue-pace-projected REMAINING runs (not
+    # the current score), banded by wickets already down at the point of
+    # projection. 0-2 down: deep batting still ahead, slight upward
+    # allowance. 3-5 down: new batters in, more conservative scoring.
+    # 6+ down: tail exposed, real risk of not batting out the full overs -
+    # scaled down further, on top of the hard cap below.
+    WICKET_ADJUSTMENT = {
+        "0-2": 1.05,
+        "3-5": 0.85,
+        "6+": 0.65,
+    }
+
+    @staticmethod
+    def _wicket_bucket(wickets_down):
+        if wickets_down <= 2:
+            return "0-2"
+        if wickets_down <= 5:
+            return "3-5"
+        return "6+"
+
+    def projection_insight(self, venue_key, match_type, current_score, current_over_decimal, current_wickets):
         """
         current_over_decimal: e.g. 10.3 for "10.3 overs".
+        current_wickets: wickets already down at the point of projection -
+        REQUIRED (not optional), since a wicket-blind projection is the
+        specific gap this method exists to avoid repeating.
         Returns None if not yet eligible (before the minimum over), the
         venue/format isn't reliable, or phase data is missing - same
         refuse-don't-guess posture as the rest of this module. 1st innings
@@ -658,10 +692,31 @@ class InsightEngine:
         if middle_rate == 0 and death_rate == 0:
             return None
 
-        mid_projection = current_score + (middle_overs_remaining * middle_rate) + (death_overs_remaining * death_rate)
+        raw_remaining_runs = (middle_overs_remaining * middle_rate) + (death_overs_remaining * death_rate)
+
+        bucket = self._wicket_bucket(current_wickets)
+        adjustment = self.WICKET_ADJUSTMENT[bucket]
+        adjusted_remaining_runs = raw_remaining_runs * adjustment
+
+        # Tail-exposed hard cap: with 8+ down, there's a real chance the
+        # innings ends before overs run out (all out), which a rate
+        # multiplier alone doesn't capture - this isn't "slower scoring",
+        # it's "the innings may simply stop". Cap the upside further to
+        # reflect that risk rather than extrapolating a full-overs total.
+        if current_wickets >= 8:
+            adjusted_remaining_runs = min(adjusted_remaining_runs, raw_remaining_runs * 0.45)
+
+        mid_projection = current_score + adjusted_remaining_runs
 
         overs_remaining = total_overs - current_over_decimal
         uncertainty_pct = min(0.08 + (overs_remaining / total_overs) * 0.10, 0.18)
+        # Wider uncertainty band once wickets are down - the tail-exposed
+        # scenario is inherently less predictable than a settled top order.
+        if bucket == "3-5":
+            uncertainty_pct = min(uncertainty_pct * 1.25, 0.28)
+        elif bucket == "6+":
+            uncertainty_pct = min(uncertainty_pct * 1.6, 0.35)
+
         low = round(mid_projection * (1 - uncertainty_pct))
         high = round(mid_projection * (1 + uncertainty_pct))
         mid = round(mid_projection)
@@ -671,12 +726,14 @@ class InsightEngine:
             "match_type": match_type,
             "current_score": current_score,
             "current_over": current_over_decimal,
+            "current_wickets": current_wickets,
+            "wicket_adjustment_bucket": bucket,
             "projected_low": low,
             "projected_mid": mid,
             "projected_high": high,
             "headline": f"Projected {low}\u2013{high}",
             "pointers": [
-                {"label": "Current Score", "value": current_score, "unit": f" ({current_over_decimal} ov)"},
+                {"label": "Current Score", "value": f"{current_score}/{current_wickets}", "unit": f" ({current_over_decimal} ov)"},
                 {"label": "Projected Range", "value": f"{low} \u2013 {high}"},
                 {"label": "Projected Mid", "value": mid},
             ],
