@@ -182,15 +182,20 @@ def get_match_insights(live_state):
     # Needs venue_key/match_type (already resolved above) plus current
     # over as a decimal (e.g. 10.3). Threshold: T20 over 10, ODI over 25
     # (halfway point for both formats, CTO decision this sprint).
+    # current_wickets is now REQUIRED (wickets-in-hand adjustment, CTO
+    # decision this sprint) - a projection without it would be exactly
+    # the wicket-blind gap this update exists to close, so it's withheld
+    # entirely rather than silently falling back to a wicket-blind number.
     # ------------------------------------------------------------------
     is_second_innings = bool(live_state.get("is_second_innings"))
     if not is_second_innings and match_type and venue_key and "current_over_decimal" in live_state \
-            and "current_score" in live_state:
+            and "current_score" in live_state and "current_wickets" in live_state:
         projection = engine.projection_insight(
             venue_key=venue_key,
             match_type=match_type,
             current_score=live_state["current_score"],
             current_over_decimal=live_state["current_over_decimal"],
+            current_wickets=live_state["current_wickets"],
         )
         if projection:
             insights.append(projection)
