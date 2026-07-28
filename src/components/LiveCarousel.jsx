@@ -429,10 +429,20 @@ export default function LiveCarousel() {
                   </div>
                 )}
 
-                {activeData.toss && (
+                {/* BUGFIX: activeData.toss is now an OBJECT {winner, decision},
+                    not a plain string - the backend changed shape this sprint to
+                    support the Match Room's structured toss rendering. Rendering
+                    {activeData.toss} directly here crashed the page (React error
+                    #31, "Objects are not valid as a React child"), which is why
+                    clicking a match card was bouncing back to the homepage - an
+                    uncaught render error unmounts the whole tree. Now formats it
+                    into text, same as MatchInfoStrip.jsx already does correctly. */}
+                {activeData.toss && activeData.toss.winner && (
                   <div className="scoreboard-toss">
                     <span className="toss-kicker">TOSS</span>
-                    <span className="toss-line">{activeData.toss}</span>
+                    <span className="toss-line">
+                      {activeData.toss.winner} won the toss, elected to {activeData.toss.decision === 'bat' ? 'bat' : 'bowl'}
+                    </span>
                   </div>
                 )}
 
