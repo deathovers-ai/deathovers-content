@@ -1,4 +1,5 @@
-"""
+
+insight_engine_full = '''"""
 Epic 5 - Insight Engine
 
 Goal: Turn facts (metrics_engine.py) and historical context
@@ -53,20 +54,20 @@ CONTEXT_DIR = os.path.join(BASE_DIR, "output", "context")
 VENUE_STATS_FILE = os.path.join(CONTEXT_DIR, "venue_stats.json")
 PLAYER_STATS_FILE = os.path.join(CONTEXT_DIR, "player_stats.json")
 
-# Widened safety margin: refuse comparisons for any player whose earliest
-# recorded match falls before this date. This is deliberately later than
-# our corpus's real coverage start (~2003) specifically because a
-# player's EARLIEST RECORDED match can't distinguish "debuted in 2003"
-# from "career started earlier, Cricsheet just doesn't have it" - see
-# module docstring. Widening the margin trades some false refusals
-# (real early-2000s debutants excluded too) for eliminating false
-# inclusions (Kallis-style silent undercounting) entirely.
-DATA_CONFIDENCE_CUTOFF = "2005-01-01"
+# Import from shared constants (F01 refactor)
+from constants import (
+    PHASE_BOUNDARIES,
+    SIGNIFICANCE_THRESHOLD,
+    DATA_CONFIDENCE_CUTOFF,
+    MIN_VENUE_INNINGS,
+    MIN_PHASE_BALLS,
+    MIN_MATCHUP_BALLS,
+)
 
 # How far a live number needs to diverge from the historical average
 # before we consider it worth mentioning at all. Below this, silence -
 # an insight engine that comments on every trivial wobble is just noise.
-SIGNIFICANCE_THRESHOLD_PCT = 10.0
+SIGNIFICANCE_THRESHOLD_PCT = SIGNIFICANCE_THRESHOLD * 100  # Keep backward compat
 
 
 class DataConfidenceError(Exception):
@@ -103,7 +104,7 @@ def venue_data_is_reliable(venue_entry, match_type):
     # Minimum sample size for a venue average to be meaningful at all -
     # this is a general statistical-confidence guard, separate from the
     # date-based data-quality guard.
-    return fmt.get("matches_with_data", 0) >= 5
+    return fmt.get("matches_with_data", 0) >= MIN_VENUE_INNINGS
 
 
 def player_data_is_reliable(player_entry):
@@ -131,6 +132,16 @@ class InsightEngine:
         self.venue_stats = venue_stats or _load_json(VENUE_STATS_FILE)
         self.player_stats = player_stats or _load_json(PLAYER_STATS_FILE)
 
+    def _phase_bounds_for_format(self, match_type):
+        """Return phase boundaries from shared constants."""
+        fmt_key = match_type if match_type in PHASE_BOUNDARIES else None
+        if fmt_key:
+            return PHASE_BOUNDARIES[fmt_key]
+        # Legacy fallback for ODI/ODM/T20-like formats not yet in constants
+        if match_type in ("ODI", "ODM"):
+            return PHASE_BOUNDARIES["odi"]
+        return PHASE_BOUNDARIES["t20"]
+
     def _projected_score_at_point(self, venue_entry, match_type, legal_balls_so_far):
         """
         Estimate what a "typical" score at this venue would be after
@@ -149,16 +160,18 @@ class InsightEngine:
             return None
         phases = fmt["phase_breakdown"]
 
-        # Phase over-boundaries, mirroring context_repository.py's
-        # PHASE_BOUNDARIES - kept in sync manually (small, stable table).
-        if match_type in ("ODI", "ODM"):
-            bounds = [("powerplay", 0, 10), ("middle", 10, 40), ("death", 40, 50)]
-        else:
-            bounds = [("powerplay", 0, 6), ("middle", 6, 15), ("death", 15, 20)]
+        # Use shared constants instead of hardcoded bounds
+        bounds = self._phase_bounds_for_format(match_type)
+        # Convert to list of (phase_name, start_over, end_over) tuples
+        bound_list = []
+        prev_end = 0
+        for phase_name, (start, end) in bounds.items():
+            bound_list.append((phase_name, start, end))
+            prev_end = end
 
         overs_so_far = legal_balls_so_far / 6
         projected = 0.0
-        for phase_name, start_over, end_over in bounds:
+        for phase_name, start_over, end_over in bound_list:
             phase_data = phases.get(phase_name)
             if not phase_data:
                 continue
@@ -319,7 +332,7 @@ class InsightEngine:
             toss_record = {
                 "basis": f"all-time, {result_sample_size} completed matches",
                 "pointers": [
-                    {"label": f"Toss \u2192 {lean}", "value": lean_pct, "unit": "%"},
+                    {"label": f"Toss \\u2192 {lean}", "value": lean_pct, "unit": "%"},
                     {"label": "Win % (Batting First)", "value": fmt["win_pct_batting_first"], "unit": "%"},
                     {"label": "Win % (Batting Second)", "value": fmt["win_pct_bowling_first"], "unit": "%"},
                 ],
@@ -327,7 +340,7 @@ class InsightEngine:
 
         # --- Section: venue score record (highest/lowest/avg) ---
         score_record = None
-        if fmt.get("highest_total") is not None and fmt.get("lowest_total") is not None \
+        if fmt.get("highest_total") is not None and fmt.get("lowest_total") is not None \\
                 and fmt.get("avg_first_innings_score") is not None:
             score_record = {
                 "basis": f"all-time, {sample_size} matches",
@@ -380,7 +393,7 @@ class InsightEngine:
             "venue": name,
             "match_type": match_type,
             "sample_size": sample_size,
-            "headline": f"{name} \u2014 {match_type} venue record",
+            "headline": f"{name} \\u2014 {match_type} venue record",
             **sections,
         }
 
@@ -391,7 +404,7 @@ class InsightEngine:
         the player's data predates the confidence cutoff (see module
         docstring) - raises DataConfidenceError internally, caught here
         and converted to a clean None so callers don't need their own
-        try/except for this.
+try/except for this.
         """
         player_entry = self.player_stats.get(player_name)
         if not player_entry:
@@ -464,7 +477,7 @@ class InsightEngine:
         wickets_in_window = sum(1 for b in window if b["is_wicket"])
         runs_in_window = sum(b["runs_total"] for b in window)
         window_rr = (runs_in_window / len(window)) * 6
-        rr_drop_pct = max(0.0, ((innings_avg_run_rate - window_rr) / innings_avg_run_rate) * 100) \
+        rr_drop_pct = max(0.0, ((innings_avg_run_rate - window_rr) / innings_avg_run_rate) * 100) \\
             if innings_avg_run_rate > 0 else 0.0
 
         wicket_component = min(wickets_in_window / 3, 1) * 75
@@ -481,7 +494,7 @@ class InsightEngine:
             return 0, 0, 0.0
         runs_in_window = sum(b["runs_total"] for b in window)
         window_sr = (runs_in_window / len(window)) * 100
-        sr_spike_pct = max(0.0, ((window_sr - innings_avg_strike_rate) / innings_avg_strike_rate) * 100) \
+        sr_spike_pct = max(0.0, ((window_sr - innings_avg_strike_rate) / innings_avg_strike_rate) * 100) \\
             if innings_avg_strike_rate > 0 else 0.0
         boundary_count = sum(1 for b in window if b["runs_total"] in (4, 6))
         boundary_pct = (boundary_count / len(window)) * 100
@@ -545,7 +558,7 @@ class InsightEngine:
                 "priority": 4,
                 "score": collapse_score,
                 "type": "collapse",
-                "headline": f"Collapse \u2014 {wkts_in_window} wickets in last {min(len(recent_balls), 24)} balls",
+                "headline": f"Collapse \\u2014 {wkts_in_window} wickets in last {min(len(recent_balls), 24)} balls",
                 "pointers": [
                     {"label": "Wickets (last 4 overs)", "value": wkts_in_window},
                     {"label": "Run Rate Drop", "value": rr_drop_pct, "unit": "%"},
@@ -560,7 +573,7 @@ class InsightEngine:
                 "priority": 3,
                 "score": pressure_score,
                 "type": "wicket_pressure",
-                "headline": "Pressure building \u2014 wicket chance rising",
+                "headline": "Pressure building \\u2014 wicket chance rising",
                 "pointers": [
                     {"label": "Dot Balls (last 2 overs)", "value": dot_count, "pct": dot_pct},
                 ],
@@ -572,7 +585,7 @@ class InsightEngine:
                 "priority": 2,
                 "score": momentum_score,
                 "type": "acceleration",
-                "headline": "Acceleration \u2014 scoring rate climbing",
+                "headline": "Acceleration \\u2014 scoring rate climbing",
                 "pointers": [
                     {"label": "Boundaries (last 3 overs)", "value": boundary_count},
                     {"label": "Strike Rate Spike", "value": sr_spike_pct, "unit": "%"},
@@ -585,7 +598,7 @@ class InsightEngine:
                 "priority": 1,
                 "score": partnership_score,
                 "type": "partnership",
-                "headline": f"Partnership building \u2014 {partnership_runs} runs, unbroken",
+                "headline": f"Partnership building \\u2014 {partnership_runs} runs, unbroken",
                 "pointers": [
                     {"label": "Partnership Runs", "value": partnership_runs},
                     {"label": "Balls Faced", "value": partnership_balls},
@@ -731,10 +744,10 @@ class InsightEngine:
             "projected_low": low,
             "projected_mid": mid,
             "projected_high": high,
-            "headline": f"Projected {low}\u2013{high}",
+            "headline": f"Projected {low}\\u2013{high}",
             "pointers": [
                 {"label": "Current Score", "value": f"{current_score}/{current_wickets}", "unit": f" ({current_over_decimal} ov)"},
-                {"label": "Projected Range", "value": f"{low} \u2013 {high}"},
+                {"label": "Projected Range", "value": f"{low} \\u2013 {high}"},
                 {"label": "Projected Mid", "value": mid},
             ],
         }
@@ -803,7 +816,7 @@ class InsightEngine:
             "type": "second_innings_comparison",
             "match_type": match_type,
             "phase": phase_name,
-            "headline": f"Chasing {target} \u2014 need {target - current_score} from {balls_remaining} balls" if balls_remaining else f"Chasing {target}",
+            "headline": f"Chasing {target} \\u2014 need {target - current_score} from {balls_remaining} balls" if balls_remaining else f"Chasing {target}",
             "pointers": pointers,
         }
 
@@ -889,13 +902,13 @@ class InsightEngine:
             "type": "chase_projection",
             "match_type": match_type,
             "status": status,
-            "headline": f"Chase {status.title()} \u2014 projected {low}\u2013{high} at current rate",
+            "headline": f"Chase {status.title()} \\u2014 projected {low}\\u2013{high} at current rate",
             "pointers": [
                 {"label": "Target", "value": target},
                 {"label": "Current Run Rate", "value": current_rr},
                 {"label": "Required Run Rate", "value": required_rr},
                 {"label": "Gap to Required Rate", "value": rr_gap, "unit": " rpo"},
-                {"label": "Projected Range (current pace)", "value": f"{low} \u2013 {high}"},
+                {"label": "Projected Range (current pace)", "value": f"{low} \\u2013 {high}"},
             ],
         }
 
@@ -954,19 +967,19 @@ if __name__ == "__main__":
     r = engine.venue_score_insight("R Premadasa Stadium", "T20", 175, 4, "15.0")
     print(json.dumps(r, indent=2) if r else "No insight (not significant or not reliable)")
 
-    print("\n--- Test 2: player form insight, RELIABLE player (Kohli, career starts 2008) ---")
+    print("\\n--- Test 2: player form insight, RELIABLE player (Kohli, career starts 2008) ---")
     r = engine.player_form_insight("V Kohli", 45, 20)  # fast innings vs his career SR
     print(json.dumps(r, indent=2) if r else "No insight")
 
-    print("\n--- Test 3: player form insight, UNRELIABLE player (Kallis, career starts 2003 in our data) ---")
+    print("\\n--- Test 3: player form insight, UNRELIABLE player (Kallis, career starts 2003 in our data) ---")
     r = engine.player_form_insight("JH Kallis", 45, 20)
     print(json.dumps(r, indent=2) if r else "REFUSED - guard correctly blocked comparison against unreliable data")
 
-    print("\n--- Test 4: venue phase insight ---")
+    print("\\n--- Test 4: venue phase insight ---")
     r = engine.venue_phase_insight("R Premadasa Stadium", "T20", "death", 55, 30)
     print(json.dumps(r, indent=2) if r else "No insight")
 
-    print("\n--- Test 5: full generate_all with combined context ---")
+    print("\\n--- Test 5: full generate_all with combined context ---")
     context = {
         "venue_key": "R Premadasa Stadium",
         "match_type": "T20",
@@ -987,3 +1000,13 @@ if __name__ == "__main__":
         for p in i["pointers"]:
             pct_str = f" ({p['pct']:+}%)" if "pct" in p else ""
             print(f"     {p['label']}: {p['value']}{p.get('unit','')}{pct_str}")
+'''
+
+# Save to file
+output_path = "/mnt/agents/output/insight_engine_refactored.py"
+with open(output_path, 'w') as f:
+    f.write(insight_engine_full)
+
+print(f"Saved to: {output_path}")
+print(f"Total lines: {len(insight_engine_full.splitlines()):,}")
+print(f"Total characters: {len(insight_engine_full):,}")
