@@ -23,6 +23,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from context_repository import normalize_venue, resolve_venue_key
 from insight_engine import InsightEngine
+from constants import PHASE_BOUNDARIES, SIGNIFICANCE_THRESHOLD
 
 _engine = None
 
@@ -51,21 +52,24 @@ def map_format(cricbuzz_format_str, is_ipl=False):
 
 def determine_phase(over_number, match_type):
     """Given the current over (0-indexed) and format, return which phase
-    we're in. Mirrors the boundaries used in context_repository.py."""
-    if match_type in ("ODI", "ODM"):
-        if over_number < 10:
-            return "powerplay"
-        elif over_number < 40:
-            return "middle"
-        else:
-            return "death"
+    we're in. Uses shared PHASE_BOUNDARIES from constants.py."""
+    fmt = match_type.upper() if match_type else ""
+    # Map internal format codes to PHASE_BOUNDARIES keys
+    if fmt in ("ODI", "ODM"):
+        phase_key = "ODI_LIKE"
+    elif fmt in ("T20", "IT20", "IPL"):
+        phase_key = "T20_LIKE"
     else:
-        if over_number < 6:
-            return "powerplay"
-        elif over_number < 15:
-            return "middle"
-        else:
-            return "death"
+        # Fallback for unknown formats
+        phase_key = "T20_LIKE"
+    
+    phases = PHASE_BOUNDARIES.get(phase_key, PHASE_BOUNDARIES["T20_LIKE"])
+    
+    for phase_name, (start, end) in phases.items():
+        if start <= over_number < end:
+            return phase_name
+    
+    return "death"  # Default for edge cases (e.g., over 20 in a T20)
 
 
 def get_match_insights(live_state):
@@ -221,7 +225,7 @@ def get_match_insights(live_state):
 
     # ------------------------------------------------------------------
     # NEW: second_innings_comparison - needs target + 1st innings
-    # archive (app.py must have stored innings-1's over-by-over score
+    # archive (app.py must have stored innings-1's own over-by-over score
     # somewhere retrievable - see wiring notes at bottom of this file).
     # Only runs when live_state explicitly marks this as the 2nd innings
     # via "is_second_innings" and supplies "target"/"balls_remaining".
