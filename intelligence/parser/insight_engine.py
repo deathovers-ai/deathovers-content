@@ -1,5 +1,4 @@
-
-insight_engine_full = '''"""
+"""
 Epic 5 - Insight Engine
 
 Goal: Turn facts (metrics_engine.py) and historical context
@@ -47,7 +46,7 @@ fallback is ever needed again.
 """
 import json
 import os
-from datetime import date
+from datetime import date, datetime
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONTEXT_DIR = os.path.join(BASE_DIR, "output", "context")
@@ -82,6 +81,46 @@ def _load_json(path):
         return json.load(f)
 
 
+def _parse_date(d):
+    """Safely parse a date from string or date object."""
+    if isinstance(d, date) and not isinstance(d, datetime):
+        return d
+    if isinstance(d, str):
+        return datetime.strptime(d, "%Y-%m-%d").date()
+    return None
+
+
+def _overs_to_balls(overs_str):
+    """
+    Convert cricket overs notation (e.g. '15.3' = 15 overs + 3 balls)
+    to total legal balls. Returns None if unparseable.
+    """
+    try:
+        s = str(overs_str).strip()
+        if "." in s:
+            whole, frac = s.split(".", 1)
+            whole = int(whole)
+            balls = int(frac)
+            if not (0 <= balls <= 5):
+                return None
+            return whole * 6 + balls
+        else:
+            return int(s) * 6
+    except (ValueError, TypeError):
+        return None
+
+
+def _cricket_over_to_decimal(overs_str):
+    """
+    Convert cricket overs notation (e.g. '15.3') to true decimal overs
+    (e.g. 15.5). Returns None if unparseable.
+    """
+    balls = _overs_to_balls(overs_str)
+    if balls is None:
+        return None
+    return balls / 6
+
+
 def venue_data_is_reliable(venue_entry, match_type):
     """
     Venue reliability check: do we have enough matches (not just any
@@ -110,12 +149,38 @@ def venue_data_is_reliable(venue_entry, match_type):
 def player_data_is_reliable(player_entry):
     """
     The hard guard: refuse comparisons for players whose earliest
-    recorded match predates our confirmed-reliable coverage window.
+    recorded match predates our confirmed-reliable coverage window,
+    OR whose earliest recorded match falls in the first ~18 months of
+    our corpus (2003-2004) - since a 2003 recorded date may simply mean
+    'before our coverage starts' rather than a genuine 2003 debut.
     """
-    earliest = player_entry.get("earliest_match_date")
-    if earliest is None:
-        return False  # no date info at all - can't vouch for it, refuse
-    return earliest >= DATA_CONFIDENCE_CUTOFF
+    earliest_raw = player_entry.get("earliest_match_date")
+    if earliest_raw is None:
+        return False
+
+    earliest = _parse_date(earliest_raw)
+    cutoff = (
+        _parse_date(DATA_CONFIDENCE_CUTOFF)
+        if not isinstance(DATA_CONFIDENCE_CUTOFF, date)
+        else DATA_CONFIDENCE_CUTOFF
+    )
+
+    if earliest is None or cutoff is None:
+        return False
+
+    # Explicit cutoff guard
+    if earliest < cutoff:
+        return False
+
+    # Early-coverage guard: 2003-2004 recorded dates are unreliable
+    # signals because Cricsheet coverage also begins in 2003. A player
+    # whose real career started in 1995 will show earliest_match_date
+    # in 2003 indistinguishable from a genuine 2003 debutant.
+    early_coverage_end = date(2004, 6, 30)
+    if earliest <= early_coverage_end:
+        return False
+
+    return True
 
 
 class InsightEngine:
@@ -164,10 +229,8 @@ class InsightEngine:
         bounds = self._phase_bounds_for_format(match_type)
         # Convert to list of (phase_name, start_over, end_over) tuples
         bound_list = []
-        prev_end = 0
         for phase_name, (start, end) in bounds.items():
             bound_list.append((phase_name, start, end))
-            prev_end = end
 
         overs_so_far = legal_balls_so_far / 6
         projected = 0.0
@@ -209,10 +272,7 @@ class InsightEngine:
         if avg_score == 0:
             return None
 
-        try:
-            legal_balls_so_far = int(round(float(overs_completed_str) * 6))
-        except (ValueError, TypeError):
-            legal_balls_so_far = None
+        legal_balls_so_far = _overs_to_balls(overs_completed_str)
 
         total_overs = 50 if match_type in ("ODI", "ODM") else 20
         baseline = avg_score
@@ -325,14 +385,15 @@ class InsightEngine:
 
         # --- Section: toss & decision record ---
         toss_record = None
-        if fmt.get("toss_bat_first_pct") is not None and fmt.get("win_pct_batting_first") is not None:
+        if (fmt.get("toss_bat_first_pct") is not None and
+                fmt.get("win_pct_batting_first") is not None):
             bat_pct = fmt["toss_bat_first_pct"]
             lean = "Bat First" if bat_pct >= 50 else "Bowl First"
             lean_pct = bat_pct if bat_pct >= 50 else round(100 - bat_pct, 1)
             toss_record = {
                 "basis": f"all-time, {result_sample_size} completed matches",
                 "pointers": [
-                    {"label": f"Toss \\u2192 {lean}", "value": lean_pct, "unit": "%"},
+                    {"label": f"Toss \u2192 {lean}", "value": lean_pct, "unit": "%"},
                     {"label": "Win % (Batting First)", "value": fmt["win_pct_batting_first"], "unit": "%"},
                     {"label": "Win % (Batting Second)", "value": fmt["win_pct_bowling_first"], "unit": "%"},
                 ],
@@ -340,8 +401,9 @@ class InsightEngine:
 
         # --- Section: venue score record (highest/lowest/avg) ---
         score_record = None
-        if fmt.get("highest_total") is not None and fmt.get("lowest_total") is not None \\
-                and fmt.get("avg_first_innings_score") is not None:
+        if (fmt.get("highest_total") is not None and
+                fmt.get("lowest_total") is not None and
+                fmt.get("avg_first_innings_score") is not None):
             score_record = {
                 "basis": f"all-time, {sample_size} matches",
                 "pointers": [
@@ -357,7 +419,8 @@ class InsightEngine:
 
         # --- Section: chase record ---
         chase_record = None
-        if fmt.get("highest_successful_chase") is not None or fmt.get("lowest_score_defended") is not None:
+        if (fmt.get("highest_successful_chase") is not None or
+                fmt.get("lowest_score_defended") is not None):
             chase_pointers = []
             if fmt.get("highest_successful_chase") is not None:
                 chase_pointers.append({"label": "Highest Successful Chase", "value": fmt["highest_successful_chase"]})
@@ -386,14 +449,14 @@ class InsightEngine:
             "score_range": score_range,
         }
         if not any(sections.values()):
-            return None  # guard passed but every individual section was empty - nothing to say
+            return None
 
         return {
             "type": "venue_pregame_summary",
             "venue": name,
             "match_type": match_type,
             "sample_size": sample_size,
-            "headline": f"{name} \\u2014 {match_type} venue record",
+            "headline": f"{name} \u2014 {match_type} venue record",
             **sections,
         }
 
@@ -404,7 +467,7 @@ class InsightEngine:
         the player's data predates the confidence cutoff (see module
         docstring) - raises DataConfidenceError internally, caught here
         and converted to a clean None so callers don't need their own
-try/except for this.
+        try/except for this.
         """
         player_entry = self.player_stats.get(player_name)
         if not player_entry:
@@ -422,7 +485,7 @@ try/except for this.
         career_sr = player_entry["batting"]["strike_rate"]
         career_balls = player_entry["batting"]["balls"]
         if career_sr == 0 or current_balls == 0 or career_balls < 30:
-            return None  # not enough career sample to be a meaningful baseline either
+            return None
 
         current_sr = round((current_runs / current_balls) * 100, 2)
         diff_pct = round(((current_sr - career_sr) / career_sr) * 100, 1)
@@ -477,8 +540,10 @@ try/except for this.
         wickets_in_window = sum(1 for b in window if b["is_wicket"])
         runs_in_window = sum(b["runs_total"] for b in window)
         window_rr = (runs_in_window / len(window)) * 6
-        rr_drop_pct = max(0.0, ((innings_avg_run_rate - window_rr) / innings_avg_run_rate) * 100) \\
+        rr_drop_pct = (
+            max(0.0, ((innings_avg_run_rate - window_rr) / innings_avg_run_rate) * 100)
             if innings_avg_run_rate > 0 else 0.0
+        )
 
         wicket_component = min(wickets_in_window / 3, 1) * 75
         rr_component = min(rr_drop_pct / 50, 1) * 25
@@ -494,8 +559,10 @@ try/except for this.
             return 0, 0, 0.0
         runs_in_window = sum(b["runs_total"] for b in window)
         window_sr = (runs_in_window / len(window)) * 100
-        sr_spike_pct = max(0.0, ((window_sr - innings_avg_strike_rate) / innings_avg_strike_rate) * 100) \\
+        sr_spike_pct = (
+            max(0.0, ((window_sr - innings_avg_strike_rate) / innings_avg_strike_rate) * 100)
             if innings_avg_strike_rate > 0 else 0.0
+        )
         boundary_count = sum(1 for b in window if b["runs_total"] in (4, 6))
         boundary_pct = (boundary_count / len(window)) * 100
         wickets_in_window = sum(1 for b in window if b["is_wicket"])
@@ -558,7 +625,7 @@ try/except for this.
                 "priority": 4,
                 "score": collapse_score,
                 "type": "collapse",
-                "headline": f"Collapse \\u2014 {wkts_in_window} wickets in last {min(len(recent_balls), 24)} balls",
+                "headline": f"Collapse \u2014 {wkts_in_window} wickets in last {min(len(recent_balls), 24)} balls",
                 "pointers": [
                     {"label": "Wickets (last 4 overs)", "value": wkts_in_window},
                     {"label": "Run Rate Drop", "value": rr_drop_pct, "unit": "%"},
@@ -573,7 +640,7 @@ try/except for this.
                 "priority": 3,
                 "score": pressure_score,
                 "type": "wicket_pressure",
-                "headline": "Pressure building \\u2014 wicket chance rising",
+                "headline": "Pressure building \u2014 wicket chance rising",
                 "pointers": [
                     {"label": "Dot Balls (last 2 overs)", "value": dot_count, "pct": dot_pct},
                 ],
@@ -585,7 +652,7 @@ try/except for this.
                 "priority": 2,
                 "score": momentum_score,
                 "type": "acceleration",
-                "headline": "Acceleration \\u2014 scoring rate climbing",
+                "headline": "Acceleration \u2014 scoring rate climbing",
                 "pointers": [
                     {"label": "Boundaries (last 3 overs)", "value": boundary_count},
                     {"label": "Strike Rate Spike", "value": sr_spike_pct, "unit": "%"},
@@ -598,7 +665,7 @@ try/except for this.
                 "priority": 1,
                 "score": partnership_score,
                 "type": "partnership",
-                "headline": f"Partnership building \\u2014 {partnership_runs} runs, unbroken",
+                "headline": f"Partnership building \u2014 {partnership_runs} runs, unbroken",
                 "pointers": [
                     {"label": "Partnership Runs", "value": partnership_runs},
                     {"label": "Balls Faced", "value": partnership_balls},
@@ -669,7 +736,7 @@ try/except for this.
 
     def projection_insight(self, venue_key, match_type, current_score, current_over_decimal, current_wickets):
         """
-        current_over_decimal: e.g. 10.3 for "10.3 overs".
+        current_over_decimal: e.g. 10.3 for "10.3 overs" (cricket notation).
         current_wickets: wickets already down at the point of projection -
         REQUIRED (not optional), since a wicket-blind projection is the
         specific gap this method exists to avoid repeating.
@@ -678,8 +745,12 @@ try/except for this.
         refuse-don't-guess posture as the rest of this module. 1st innings
         only - see class docstring above.
         """
+        true_decimal = _cricket_over_to_decimal(current_over_decimal)
+        if true_decimal is None:
+            return None
+
         min_over = self.PROJECTION_MIN_OVER.get(match_type)
-        if min_over is None or current_over_decimal < min_over:
+        if min_over is None or true_decimal < min_over:
             return None
 
         venue_entry = self.venue_stats.get(venue_key)
@@ -697,8 +768,8 @@ try/except for this.
         else:
             middle_end, death_start = 15, 15
 
-        middle_overs_remaining = max(0.0, middle_end - current_over_decimal)
-        death_overs_remaining = max(0.0, total_overs - max(current_over_decimal, death_start))
+        middle_overs_remaining = max(0.0, middle_end - true_decimal)
+        death_overs_remaining = max(0.0, total_overs - max(true_decimal, death_start))
 
         middle_rate = phases["middle"].get("avg_run_rate", 0)
         death_rate = phases["death"].get("avg_run_rate", 0)
@@ -721,7 +792,7 @@ try/except for this.
 
         mid_projection = current_score + adjusted_remaining_runs
 
-        overs_remaining = total_overs - current_over_decimal
+        overs_remaining = total_overs - true_decimal
         uncertainty_pct = min(0.08 + (overs_remaining / total_overs) * 0.10, 0.18)
         # Wider uncertainty band once wickets are down - the tail-exposed
         # scenario is inherently less predictable than a settled top order.
@@ -744,10 +815,10 @@ try/except for this.
             "projected_low": low,
             "projected_mid": mid,
             "projected_high": high,
-            "headline": f"Projected {low}\\u2013{high}",
+            "headline": f"Projected {low}\u2013{high}",
             "pointers": [
                 {"label": "Current Score", "value": f"{current_score}/{current_wickets}", "unit": f" ({current_over_decimal} ov)"},
-                {"label": "Projected Range", "value": f"{low} \\u2013 {high}"},
+                {"label": "Projected Range", "value": f"{low} \u2013 {high}"},
                 {"label": "Projected Mid", "value": mid},
             ],
         }
@@ -806,7 +877,8 @@ try/except for this.
         if balls_remaining and balls_remaining > 0:
             runs_needed = target - current_score
             required_rr = round((runs_needed / balls_remaining) * 6, 2)
-            current_rr = round(current_score / current_over_decimal, 2) if current_over_decimal > 0 else 0
+            true_decimal = _cricket_over_to_decimal(current_over_decimal) or 0
+            current_rr = round(current_score / true_decimal, 2) if true_decimal > 0 else 0
             pointers.append({"label": "Required Run Rate", "value": required_rr})
             pointers.append({"label": "Current Run Rate", "value": current_rr, "pct": round(((current_rr - required_rr) / required_rr) * 100, 1) if required_rr else None})
             pointers.append({"label": "Runs Needed", "value": runs_needed})
@@ -816,7 +888,7 @@ try/except for this.
             "type": "second_innings_comparison",
             "match_type": match_type,
             "phase": phase_name,
-            "headline": f"Chasing {target} \\u2014 need {target - current_score} from {balls_remaining} balls" if balls_remaining else f"Chasing {target}",
+            "headline": f"Chasing {target} \u2014 need {target - current_score} from {balls_remaining} balls" if balls_remaining else f"Chasing {target}",
             "pointers": pointers,
         }
 
@@ -843,8 +915,12 @@ try/except for this.
         chases are inherently more volatile than a free innings since
         required rate itself changes every ball.
         """
+        true_decimal = _cricket_over_to_decimal(current_over_decimal)
+        if true_decimal is None:
+            return None
+
         min_over = self.PROJECTION_MIN_OVER.get(match_type)
-        if min_over is None or current_over_decimal < min_over or balls_remaining is None or balls_remaining <= 0:
+        if min_over is None or true_decimal < min_over or balls_remaining is None or balls_remaining <= 0:
             return None
 
         venue_entry = self.venue_stats.get(venue_key)
@@ -862,8 +938,8 @@ try/except for this.
         else:
             middle_end, death_start = 15, 15
 
-        middle_overs_remaining = max(0.0, middle_end - current_over_decimal)
-        death_overs_remaining = max(0.0, total_overs - max(current_over_decimal, death_start))
+        middle_overs_remaining = max(0.0, middle_end - true_decimal)
+        death_overs_remaining = max(0.0, total_overs - max(true_decimal, death_start))
         middle_rate = phases["middle"].get("avg_run_rate", 0)
         death_rate = phases["death"].get("avg_run_rate", 0)
         if middle_rate == 0 and death_rate == 0:
@@ -879,7 +955,7 @@ try/except for this.
         # the live chase-pace signal.
         runs_needed = target - current_score
         required_rr = round((runs_needed / balls_remaining) * 6, 2) if balls_remaining > 0 else None
-        current_rr = round(current_score / current_over_decimal, 2) if current_over_decimal > 0 else 0
+        current_rr = round(current_score / true_decimal, 2) if true_decimal > 0 else 0
         rr_gap = round(current_rr - required_rr, 2) if required_rr is not None else None
 
         # Combine: if current pace continues exactly, where do they land?
@@ -902,13 +978,13 @@ try/except for this.
             "type": "chase_projection",
             "match_type": match_type,
             "status": status,
-            "headline": f"Chase {status.title()} \\u2014 projected {low}\\u2013{high} at current rate",
+            "headline": f"Chase {status.title()} \u2014 projected {low}\u2013{high} at current rate",
             "pointers": [
                 {"label": "Target", "value": target},
                 {"label": "Current Run Rate", "value": current_rr},
                 {"label": "Required Run Rate", "value": required_rr},
                 {"label": "Gap to Required Rate", "value": rr_gap, "unit": " rpo"},
-                {"label": "Projected Range (current pace)", "value": f"{low} \\u2013 {high}"},
+                {"label": "Projected Range (current pace)", "value": f"{low} \u2013 {high}"},
             ],
         }
 
@@ -923,7 +999,11 @@ try/except for this.
           venue_key, match_type, current_score, current_wickets,
           overs_completed_str, phase_name, current_phase_runs,
           current_phase_balls, player_name, player_current_runs,
-          player_current_balls
+          player_current_balls, recent_balls, innings_avg_run_rate,
+          innings_avg_strike_rate, partnership_runs, partnership_balls,
+          required_run_rate, current_run_rate, balls_since_new_batter,
+          current_over_decimal, target, balls_remaining,
+          first_innings_score_at_same_over, is_second_innings
         """
         insights = []
 
@@ -957,6 +1037,61 @@ try/except for this.
             if i:
                 insights.append(i)
 
+        # Situation detection
+        if all(k in context for k in ("recent_balls", "innings_avg_run_rate",
+                                       "innings_avg_strike_rate", "partnership_runs",
+                                       "partnership_balls")):
+            i = self.situation_insight(
+                context["recent_balls"],
+                context["innings_avg_run_rate"],
+                context["innings_avg_strike_rate"],
+                context["partnership_runs"],
+                context["partnership_balls"],
+                required_run_rate=context.get("required_run_rate"),
+                current_run_rate=context.get("current_run_rate"),
+                balls_since_new_batter=context.get("balls_since_new_batter"),
+            )
+            if i:
+                insights.append(i)
+
+        # Projection insights (1st innings only)
+        is_second = context.get("is_second_innings", False)
+        if not is_second:
+            if all(k in context for k in ("venue_key", "match_type", "current_score",
+                                           "current_over_decimal", "current_wickets")):
+                i = self.projection_insight(
+                    context["venue_key"], context["match_type"], context["current_score"],
+                    context["current_over_decimal"], context["current_wickets"]
+                )
+                if i:
+                    insights.append(i)
+        else:
+            # Chase projection (2nd innings)
+            if all(k in context for k in ("venue_key", "match_type", "current_score",
+                                           "target", "current_over_decimal", "balls_remaining")):
+                i = self.chase_projection_insight(
+                    context["venue_key"], context["match_type"], context["current_score"],
+                    context["target"], context["current_over_decimal"], context["balls_remaining"]
+                )
+                if i:
+                    insights.append(i)
+
+            # Second innings comparison
+            if all(k in context for k in ("venue_key", "match_type", "current_score",
+                                           "current_wickets", "current_over_decimal",
+                                           "target", "balls_remaining", "phase_name",
+                                           "current_phase_runs", "current_phase_balls")):
+                i = self.second_innings_comparison(
+                    context["venue_key"], context["match_type"], context["current_score"],
+                    context["current_wickets"], context["current_over_decimal"],
+                    context["target"], context["balls_remaining"],
+                    context.get("first_innings_score_at_same_over"),
+                    context["phase_name"], context["current_phase_runs"],
+                    context["current_phase_balls"]
+                )
+                if i:
+                    insights.append(i)
+
         return insights
 
 
@@ -967,19 +1102,19 @@ if __name__ == "__main__":
     r = engine.venue_score_insight("R Premadasa Stadium", "T20", 175, 4, "15.0")
     print(json.dumps(r, indent=2) if r else "No insight (not significant or not reliable)")
 
-    print("\\n--- Test 2: player form insight, RELIABLE player (Kohli, career starts 2008) ---")
-    r = engine.player_form_insight("V Kohli", 45, 20)  # fast innings vs his career SR
+    print("\n--- Test 2: player form insight, RELIABLE player (Kohli, career starts 2008) ---")
+    r = engine.player_form_insight("V Kohli", 45, 20)
     print(json.dumps(r, indent=2) if r else "No insight")
 
-    print("\\n--- Test 3: player form insight, UNRELIABLE player (Kallis, career starts 2003 in our data) ---")
+    print("\n--- Test 3: player form insight, UNRELIABLE player (Kallis, career starts 2003 in our data) ---")
     r = engine.player_form_insight("JH Kallis", 45, 20)
     print(json.dumps(r, indent=2) if r else "REFUSED - guard correctly blocked comparison against unreliable data")
 
-    print("\\n--- Test 4: venue phase insight ---")
+    print("\n--- Test 4: venue phase insight ---")
     r = engine.venue_phase_insight("R Premadasa Stadium", "T20", "death", 55, 30)
     print(json.dumps(r, indent=2) if r else "No insight")
 
-    print("\\n--- Test 5: full generate_all with combined context ---")
+    print("\n--- Test 5: full generate_all with combined context ---")
     context = {
         "venue_key": "R Premadasa Stadium",
         "match_type": "T20",
@@ -1000,13 +1135,3 @@ if __name__ == "__main__":
         for p in i["pointers"]:
             pct_str = f" ({p['pct']:+}%)" if "pct" in p else ""
             print(f"     {p['label']}: {p['value']}{p.get('unit','')}{pct_str}")
-'''
-
-# Save to file
-output_path = "/mnt/agents/output/insight_engine_refactored.py"
-with open(output_path, 'w') as f:
-    f.write(insight_engine_full)
-
-print(f"Saved to: {output_path}")
-print(f"Total lines: {len(insight_engine_full.splitlines()):,}")
-print(f"Total characters: {len(insight_engine_full):,}")
