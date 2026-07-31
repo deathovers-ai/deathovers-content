@@ -1,21 +1,27 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-// Never show provider/quota internals on a customer-facing live scoreboard.
-const CUSTOMER_SAFE_DETAIL_ERROR =
-  "Live scorecard temporarily unavailable. Please try again shortly.";
-
-function toCustomerSafeDetailError(payload) {
-  if (payload?.quotaExhausted) return CUSTOMER_SAFE_DETAIL_ERROR;
-  const raw = String(payload?.error || "").toLowerCase();
-  if (
-    raw.includes("quota") ||
-    raw.includes("api") ||
-    raw.includes("rapidapi") ||
-    raw.includes("rate limit")
-  ) {
-    return CUSTOMER_SAFE_DETAIL_ERROR;
-  }
-  return payload?.error || "Could not load match details.";
+function scoreboardFromCarousel(meta) {
+  if (!meta) return null;
+  const home = meta.score?.home || null;
+  const away = meta.score?.away || null;
+  return {
+    liveScore: {
+      home: home || { score: 'yet to bat', info: '' },
+      away: away || { score: 'yet to bat', info: '' },
+      target: 0,
+      crr: 0,
+      rrr: 0,
+      lastWicket: '',
+      customStatus: meta.chaseNote || '',
+    },
+    commentary: [],
+    innings1: null,
+    innings2: null,
+    innings: [],
+    toss: null,
+    ballTracker: [],
+    intelligence: { insights: [] },
+  };
 }
 
 export default function LiveCarousel() {
@@ -27,7 +33,6 @@ export default function LiveCarousel() {
   const [activeMatchId, setActiveMatchId] = useState(null);
   const [matchDetails, setMatchDetails] = useState({});
   const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState(null); // customer-safe load failure only — never quota/API internals
 
   // Reference for manual scrolling
   const scrollRef = useRef(null);
@@ -82,23 +87,19 @@ export default function LiveCarousel() {
   const fetchMatchDetails = async (matchId, { showLoading = false } = {}) => {
     if (showLoading) {
       setDetailLoading(true);
-      setDetailError(null);
     }
     try {
       const res = await fetch(`https://deathovers-ai-engine.onrender.com/api/match-details/${matchId}`);
       const data = await res.json();
       if (!res.ok) {
-        // Surface a retryable state instead of a blank page, but never leak
-        // quota/API consumption language to customers on a live scoreboard.
-        // Only surface as a blocking error if this was the initial load — a failed
-        // background poll shouldn't wipe out a match page someone's already reading.
-        if (showLoading) setDetailError(toCustomerSafeDetailError(data));
+        // Sports product rule: never blank the scoreboard. Keep carousel
+        // totals on screen; a failed detail poll just means no enrichment yet.
+        console.error("Match detail refresh failed:", data?.error || res.status);
       } else {
         setMatchDetails(prev => ({ ...prev, [matchId]: data }));
       }
     } catch (err) {
       console.error("Failed to load match drilldown data:", err);
-      if (showLoading) setDetailError("Could not reach the live-data server. Please try again shortly.");
     } finally {
       if (showLoading) setDetailLoading(false);
     }
@@ -126,7 +127,6 @@ export default function LiveCarousel() {
 
   const closeMatch = () => {
     setActiveMatchId(null);
-    setDetailError(null);
   };
 
   const scrollByCard = (direction) => {
@@ -168,8 +168,11 @@ export default function LiveCarousel() {
     );
   }
 
-  const activeData = activeMatchId ? (matchDetails[activeMatchId] || null) : null;
   const activeMatchMeta = displayMatches.find(m => m.id === activeMatchId);
+  // Always prefer full detail; fall back to carousel header so live + completed
+  // boards never disappear behind a loading/error wall.
+  const activeData = (activeMatchId && matchDetails[activeMatchId])
+    || scoreboardFromCarousel(activeMatchMeta);
 
   // NEW: flags if the scorecard hasn't updated in a while for a match that's
   // supposed to be live — surfaces the staleness instead of silently showing
@@ -314,22 +317,11 @@ export default function LiveCarousel() {
       )}
 
       {/* ================= VIEW 2: FULL WIDTH MATCH PAGE ================= */}
-      {activeMatchId && activeMatchMeta && (
+      {activeMatchId && activeMatchMeta && activeData && (
         <div className="matchpage">
           <button className="back-btn" onClick={closeMatch}>&larr; BACK TO LIVE MATCHES</button>
 
-          {detailError ? (
-            <div className="mp-header mp-header-loading">
-              <div className="loading-state font-mono error-state">
-                {detailError}
-              </div>
-            </div>
-          ) : detailLoading || !activeData ? (
-            <div className="mp-header mp-header-loading">
-              <div className="loading-state font-mono">PULLING LIVE TELEMETRY...</div>
-            </div>
-          ) : (
-            <>
+          <>
               {/* GLANCE SCOREBOARD */}
               <div className="scoreboard">
                 <div className="scoreboard-top">
@@ -377,7 +369,7 @@ export default function LiveCarousel() {
                       </span>
                     </div>
                     <div className="sb-team-score">
-                      {inn2 || displayAwayScore?.score ? (
+                      {inn2 || (displayAwayScore?.score && displayAwayScore.score !== 'yet to bat') ? (
                         <>
                           <span className="score-main">{displayAwayScore?.score || inn2?.score || '0/0'}</span>
                           <span className="sb-overs">({displayAwayScore?.info || inn2?.overs || '0.0'})</span>
@@ -389,14 +381,8 @@ export default function LiveCarousel() {
                   </div>
                 </div>
 
-                {activeData.detailNote && (
-                  <div className={`detail-note ${activeData.detailSource === 'carousel_fallback' ? 'detail-note-soft' : ''}`}>
-                    {activeData.detailNote}
-                  </div>
-                )}
-
                 {/* ENDPOINTS: TARGET, CRR, RRR */}
-                {liveScore && (
+                {liveScore && (liveScore.target > 0 || liveScore.crr > 0 || liveScore.rrr > 0) && (
                   <div className="scoreboard-stats" style={{
                     display: 'flex',
                     justifyContent: 'center',
@@ -512,9 +498,9 @@ export default function LiveCarousel() {
                 {!inn1 && !inn2 && (
                   <div className="innings-col">
                     <div className="stat-empty">
-                      {activeData.detailSource === 'carousel_only'
-                        ? 'Full batting and bowling cards are not available for this match source.'
-                        : 'Pulling full batting and bowling cards… live totals above stay up to date.'}
+                      {detailLoading
+                        ? 'Loading batting and bowling cards…'
+                        : 'Batting and bowling cards will appear here when available.'}
                     </div>
                   </div>
                 )}
@@ -542,18 +528,17 @@ export default function LiveCarousel() {
                   ) : (
                     <div className="commentary-waiting">
                       <div className="commentary-waiting-text">
-                        {activeData.detailSource === 'carousel_only'
-                          ? 'Ball-by-ball commentary is not available for this match source.'
+                        {detailLoading
+                          ? 'Loading ball-by-ball commentary…'
                           : activeMatchMeta.status === 'COMPLETED'
                             ? 'Ball-by-ball commentary is not available for this completed match.'
-                            : 'Pulling ball-by-ball commentary…'}
+                            : 'Ball-by-ball commentary will appear here when available.'}
                       </div>
                     </div>
                   )}
                 </div>
               </div>
-            </>
-          )}
+          </>
         </div>
       )}
 
