@@ -1226,6 +1226,164 @@ def _lookup_first_innings_phase_score(match_id: str, phase_name: str) -> "dict |
     return dict(phase_data)
 
 
+def _current_innings_id_for_intelligence(shaped: dict, effective_miniscore: dict | None) -> int | None:
+    """Resolve which innings is active for commentary-derived insight fields.
+
+    The previous `live_state.get("current_over_number") is not None and miniscore...`
+    expression collapsed to False whenever overs weren't on live_state yet, which
+    silently skipped situation insights for many live and completed matches.
+    """
+    mid = (effective_miniscore or {}).get("inningsid")
+    try:
+        if mid is not None:
+            return int(mid)
+    except (TypeError, ValueError):
+        pass
+    inn2 = shaped.get("innings2")
+    inn1 = shaped.get("innings1")
+    if inn2 and inn2.get("score") and inn2.get("score") != "yet to bat":
+        return int(inn2.get("inningsId") or 2)
+    if inn1 and inn1.get("score") and inn1.get("score") != "yet to bat":
+        return int(inn1.get("inningsId") or 1)
+    return None
+
+
+def _parse_runs_wickets(score: str | None) -> tuple[int | None, int | None]:
+    if not score or score == "yet to bat":
+        return None, None
+    m = re.match(r"(\d+)/(\d+)", str(score))
+    if not m:
+        return None, None
+    return int(m.group(1)), int(m.group(2))
+
+
+def _top_batters(innings: dict | None, limit: int = 2) -> list[dict]:
+    batters = list((innings or {}).get("batters") or [])
+    scored = [b for b in batters if isinstance(b.get("r"), (int, float)) or str(b.get("r", "")).isdigit()]
+    scored.sort(key=lambda b: int(b.get("r") or 0), reverse=True)
+    return scored[:limit]
+
+
+def _build_match_tactical_fallback(shaped: dict, carousel_entry: dict | None) -> list[dict]:
+    """Venue-agnostic tactical reads so Match Room is never empty when we already
+    have a scoreline. Complements (does not replace) venue/situation insights."""
+    insights: list[dict] = []
+    status = (carousel_entry or {}).get("status") or ""
+    chase_note = (carousel_entry or {}).get("chaseNote") or (shaped.get("liveScore") or {}).get("customStatus") or ""
+    match_format = ((carousel_entry or {}).get("matchFormat") or "T20").upper()
+    inn1 = shaped.get("innings1")
+    inn2 = shaped.get("innings2")
+    live = shaped.get("liveScore") or {}
+
+    # 1) Match state / result card — always useful for live + completed.
+    if status == "COMPLETED" and chase_note:
+        pointers = [{"label": "Result", "value": chase_note}]
+        if inn1 and inn1.get("score"):
+            pointers.append({"label": inn1.get("team") or "1st innings", "value": f"{inn1.get('score')} ({inn1.get('overs') or '-'} ov)"})
+        if inn2 and inn2.get("score"):
+            pointers.append({"label": inn2.get("team") or "2nd innings", "value": f"{inn2.get('score')} ({inn2.get('overs') or '-'} ov)"})
+        insights.append({
+            "type": "match_recap",
+            "headline": "Match recap",
+            "pointers": pointers,
+        })
+    elif chase_note or live.get("target") or live.get("crr") or live.get("rrr"):
+        pointers = []
+        if chase_note:
+            pointers.append({"label": "Situation", "value": chase_note})
+        if live.get("target"):
+            pointers.append({"label": "Target", "value": live.get("target")})
+        if live.get("crr"):
+            pointers.append({"label": "CRR", "value": live.get("crr")})
+        if live.get("rrr"):
+            pointers.append({"label": "RRR", "value": live.get("rrr")})
+        if pointers:
+            insights.append({
+                "type": "match_situation",
+                "headline": "Live tactical snapshot",
+                "pointers": pointers,
+            })
+
+    # 2) Phase read from current overs (format-aware, no venue required).
+    active = inn2 if (inn2 and inn2.get("score") and inn2.get("score") != "yet to bat") else inn1
+    if active and active.get("overs") not in (None, ""):
+        try:
+            overs_now = float(active.get("overs") or 0)
+        except (TypeError, ValueError):
+            overs_now = None
+        runs, wickets = _parse_runs_wickets(active.get("score"))
+        if overs_now is not None and runs is not None:
+            if match_format in ("ODI", "ODM"):
+                phase = "powerplay" if overs_now < 10 else ("middle" if overs_now < 40 else "death")
+                total_ov = 50
+            else:
+                phase = "powerplay" if overs_now < 6 else ("middle" if overs_now < 15 else "death")
+                total_ov = 20
+            balls = int(overs_now) * 6 + int(round((overs_now % 1) * 10))
+            crr = round((runs / balls) * 6, 2) if balls > 0 else None
+            insights.append({
+                "type": "phase_snapshot",
+                "headline": f"{phase.title()} phase — {active.get('team') or 'batting side'}",
+                "pointers": [
+                    {"label": "Score", "value": f"{runs}/{wickets if wickets is not None else '-'}"},
+                    {"label": "Overs", "value": overs_now},
+                    *([{"label": "CRR", "value": crr}] if crr is not None else []),
+                    {"label": "Phase", "value": f"{phase} (of {total_ov} ov)"},
+                ],
+            })
+
+    # 3) Top-scorer card from the batting lists we already shaped.
+    top_rows = []
+    for inn, label in ((inn1, "1st innings"), (inn2, "2nd innings")):
+        for b in _top_batters(inn, limit=1):
+            if int(b.get("r") or 0) <= 0:
+                continue
+            top_rows.append({
+                "label": f"{b.get('name')} ({label})",
+                "value": f"{b.get('r')} ({b.get('b')}b, SR {b.get('sr') or '-'})",
+            })
+    if top_rows:
+        insights.append({
+            "type": "top_scorers",
+            "headline": "Key batting performances",
+            "pointers": top_rows,
+        })
+
+    return insights
+
+
+def _merge_tactical_insights(primary: list, fallback: list) -> list:
+    """Keep engine insights first; add fallback types that aren't already covered."""
+    existing_types = {i.get("type") for i in primary if isinstance(i, dict)}
+    # map related engine types so we don't duplicate the same story
+    covered = set(existing_types)
+    if "venue_pregame_summary" in existing_types:
+        covered.add("match_recap")
+    if any(t.startswith("situation_") or t in {"collapse", "pressure", "acceleration", "partnership"} for t in existing_types):
+        covered.add("match_situation")
+        covered.add("phase_snapshot")
+    # also cover by headline-ish engine situation type names
+    for t in list(existing_types):
+        if t and "situation" in str(t):
+            covered.add("match_situation")
+            covered.add("phase_snapshot")
+
+    merged = list(primary)
+    for item in fallback:
+        if item.get("type") in covered:
+            continue
+        # If engine already produced any venue/situation content, still allow
+        # top_scorers + completed match_recap for even Match Room population.
+        if primary and item.get("type") in {"match_situation", "phase_snapshot"} and (
+            "venue_score_insight" in existing_types
+            or any("situation" in str(t) for t in existing_types)
+        ):
+            continue
+        merged.append(item)
+        covered.add(item.get("type"))
+    return merged
+
+
 def _attach_intelligence(shaped: dict, carousel_entry: dict | None, miniscore: dict | None,
                           match_id: str = "", commentary: list | None = None) -> None:
     """
@@ -1250,18 +1408,44 @@ def _attach_intelligence(shaped: dict, carousel_entry: dict | None, miniscore: d
     refuse-don't-guess posture as the rest of the Insight Engine. match_id/
     commentary are new optional params so existing callers/tests that don't
     pass them still work unchanged (defaults keep prior behavior exactly).
+
+    UPDATED (even Match Room population): always merges venue-agnostic
+    tactical fallback reads from the scorecard/chase line so live and
+    completed matches still get Match Room content when the venue isn't in
+    venue_stats.json or carousel lookup briefly misses.
     """
+    fallback = _build_match_tactical_fallback(shaped, carousel_entry)
+
     if not _INTELLIGENCE_AVAILABLE:
-        shaped["intelligence"] = {"insights": [], "meta": {"available": False}}
+        shaped["intelligence"] = {
+            "insights": fallback,
+            "meta": {"available": False, "fallback_used": bool(fallback)},
+        }
         return
+
     if not carousel_entry:
-        shaped["intelligence"] = {"insights": [], "meta": {"available": True, "warnings": ["no carousel entry for this match"]}}
+        # Still attach fallback reads from the scorecard we do have, instead of
+        # leaving Match Room completely empty on a multi-worker cache miss.
+        shaped["intelligence"] = {
+            "insights": fallback,
+            "meta": {
+                "available": True,
+                "warnings": ["no carousel entry for this match"],
+                "fallback_used": bool(fallback),
+            },
+        }
         return
+
     try:
-        venue_name = carousel_entry.get("venue", "")
+        venue_name = carousel_entry.get("venue", "") or shaped.get("venue") or ""
         match_format = carousel_entry.get("matchFormat", "")
         series_name = carousel_entry.get("seriesName", "")
         is_ipl = "indian premier league" in (series_name + " " + venue_name).lower()
+
+        # Keep venue on the shaped payload so Match Room / later refreshes
+        # still have it even if carousel lookup briefly misses.
+        if venue_name and not shaped.get("venue"):
+            shaped["venue"] = venue_name
 
         effective_miniscore = miniscore
         used_fallback = False
@@ -1277,9 +1461,7 @@ def _attach_intelligence(shaped: dict, carousel_entry: dict | None, miniscore: d
         live_state = build_live_state(venue_name, match_format, is_ipl, effective_miniscore)
 
         # --- Extend live_state with the new fields, all best-effort ---
-        current_innings_id = live_state.get("current_over_number") is not None and (
-            (effective_miniscore or {}).get("inningsid")
-        )
+        current_innings_id = _current_innings_id_for_intelligence(shaped, effective_miniscore)
         overs_completed_str = live_state.get("overs_completed_str")
         current_over_decimal = None
         if overs_completed_str is not None:
@@ -1301,6 +1483,18 @@ def _attach_intelligence(shaped: dict, carousel_entry: dict | None, miniscore: d
             if balls_since_new is not None:
                 live_state["balls_since_new_batter"] = balls_since_new
 
+            # Chase math for situation/pressure detectors.
+            target = (effective_miniscore or {}).get("target") or (shaped.get("liveScore") or {}).get("target")
+            if not target and current_innings_id == 2:
+                inn1_runs, _ = _parse_runs_wickets((shaped.get("innings1") or {}).get("score"))
+                if inn1_runs is not None:
+                    target = inn1_runs + 1
+            if target and current_innings_id == 2:
+                live_state["target"] = target
+                rrr = (shaped.get("liveScore") or {}).get("rrr")
+                if rrr:
+                    live_state["required_run_rate"] = rrr
+
         if current_innings_id == 1 and match_id and current_over_decimal is not None \
                 and "current_score" in live_state:
             full_innings_balls = (
@@ -1314,7 +1508,11 @@ def _attach_intelligence(shaped: dict, carousel_entry: dict | None, miniscore: d
 
         if current_innings_id == 2 and match_id:
             live_state["is_second_innings"] = True
-            target = (effective_miniscore or {}).get("target")
+            target = live_state.get("target") or (effective_miniscore or {}).get("target")
+            if not target:
+                inn1_runs, _ = _parse_runs_wickets((shaped.get("innings1") or {}).get("score"))
+                if inn1_runs is not None:
+                    target = inn1_runs + 1
             if target:
                 live_state["target"] = target
                 total_overs = 50 if match_format.upper() in ("ODI", "ODM") else 20
@@ -1337,10 +1535,18 @@ def _attach_intelligence(shaped: dict, carousel_entry: dict | None, miniscore: d
         result = get_match_insights(live_state)
         if used_fallback:
             result.setdefault("meta", {})["score_source"] = "commentary_fallback"
+
+        engine_insights = result.get("insights") or []
+        merged = _merge_tactical_insights(engine_insights, fallback)
+        result["insights"] = merged
+        result.setdefault("meta", {})["fallback_used"] = len(merged) > len(engine_insights)
         shaped["intelligence"] = result
     except Exception as e:
         log.error("Intelligence Engine failed for this match: %s", e)
-        shaped["intelligence"] = {"insights": [], "meta": {"available": True, "error": str(e)}}
+        shaped["intelligence"] = {
+            "insights": fallback,
+            "meta": {"available": True, "error": str(e), "fallback_used": bool(fallback)},
+        }
 
 
 def _is_cricbuzz_match_id(match_id: str) -> bool:
@@ -1785,6 +1991,43 @@ def _match_has_active_viewer(match_id: str) -> bool:
 INCOMPLETE_RETRY_SECONDS = 60
 
 
+def _rehydrate_intelligence_if_empty(match_id: str, entry: dict) -> dict:
+    """If a cached detail has batting/commentary but zero insights (pre-fallback
+    cache, or a carousel miss on the original refresh), rebuild intelligence
+    in-memory without spending RapidAPI quota."""
+    data = entry.get("data") or {}
+    insights = ((data.get("intelligence") or {}).get("insights")) or []
+    if insights:
+        return entry
+    has_signal = bool(
+        (data.get("innings1") or {}).get("batters")
+        or data.get("commentary")
+        or data.get("liveScore")
+        or data.get("innings1")
+    )
+    if not has_signal:
+        return entry
+
+    with _cache_lock:
+        carousel_entry = next(
+            (m for m in _cache["live_and_recent"] if str(m.get("id")) == str(match_id)),
+            None
+        )
+    shaped = dict(data)
+    _attach_intelligence(
+        shaped,
+        carousel_entry,
+        None,
+        match_id=str(match_id),
+        commentary=shaped.get("commentary") or [],
+    )
+    entry = {**entry, "data": shaped}
+    with _detail_cache_lock:
+        if match_id in _detail_cache:
+            _detail_cache[match_id]["data"] = shaped
+    return entry
+
+
 @app.route("/api/match-details/<match_id>", methods=["GET"])
 def get_match_details(match_id: str):
     _mark_match_viewed(match_id)  # NEW: records that someone is actually looking at this match right now
@@ -1815,6 +2058,9 @@ def get_match_details(match_id: str):
 
     if entry is None:
         return jsonify({"error": "Could not fetch match details"}), 502
+
+    entry = _rehydrate_intelligence_if_empty(match_id, entry)
+
     # NEW: expose lastRefreshed and whether the most recent scheduled refresh was
     # blocked by quota exhaustion, so staleness has a visible, diagnosable cause
     # instead of silently serving old data with no signal.
