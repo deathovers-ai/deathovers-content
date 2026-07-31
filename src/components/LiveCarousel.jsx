@@ -168,8 +168,29 @@ export default function LiveCarousel() {
   const ballTracker = activeData?.ballTracker || [];
 
   const liveScore = activeData?.liveScore || null;
-  const displayHomeScore = liveScore?.home || activeMatchMeta?.score?.home;
-  const displayAwayScore = liveScore?.away || activeMatchMeta?.score?.away;
+
+  // BUGFIX: for a COMPLETED match, Cricbuzz's miniscore (the source of
+  // liveScore) is correctly null - there's no "live" score for a finished
+  // game. Previously displayHomeScore/displayAwayScore fell back straight
+  // to activeMatchMeta?.score (the CAROUSEL entry), which can be stale or
+  // entirely missing if the match has since scrolled out of the live-
+  // matches list (confirmed real: match 169240's response included
+  // intelligence.meta.warnings: ["no carousel entry for this match"]).
+  // This produced a real, confirmed bug: team2's full innings data
+  // (innings2, batting/bowling cards) rendered correctly from activeData,
+  // but the compact scoreboard header showed team2 as "YET TO BAT" because
+  // displayAwayScore came up empty - a direct contradiction on screen
+  // ("Jersey Women won by 66 runs" next to "YET TO BAT").
+  //
+  // Fix: fall back to activeData.innings1/innings2 (which we KNOW is
+  // correct and complete for any match with a scorecard, live or
+  // completed) before ever touching the possibly-stale carousel entry.
+  const displayHomeScore = liveScore?.home
+    || (inn1 ? { score: inn1.score, info: inn1.overs } : null)
+    || activeMatchMeta?.score?.home;
+  const displayAwayScore = liveScore?.away
+    || (inn2 ? { score: inn2.score, info: inn2.overs } : null)
+    || activeMatchMeta?.score?.away;
 
   // NEW: intelligence insights from the Insight Engine (Epic 6), if present.
   const insights = activeData?.intelligence?.insights || [];
@@ -429,10 +450,20 @@ export default function LiveCarousel() {
                   </div>
                 )}
 
-                {activeData.toss && (
+                {/* BUGFIX: activeData.toss is now an OBJECT {winner, decision},
+                    not a plain string - the backend changed shape this sprint to
+                    support the Match Room's structured toss rendering. Rendering
+                    {activeData.toss} directly here crashed the page (React error
+                    #31, "Objects are not valid as a React child"), which is why
+                    clicking a match card was bouncing back to the homepage - an
+                    uncaught render error unmounts the whole tree. Now formats it
+                    into text, same as MatchInfoStrip.jsx already does correctly. */}
+                {activeData.toss && activeData.toss.winner && (
                   <div className="scoreboard-toss">
                     <span className="toss-kicker">TOSS</span>
-                    <span className="toss-line">{activeData.toss}</span>
+                    <span className="toss-line">
+                      {activeData.toss.winner} won the toss, elected to {activeData.toss.decision === 'bat' ? 'bat' : 'bowl'}
+                    </span>
                   </div>
                 )}
 
