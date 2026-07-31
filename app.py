@@ -2168,25 +2168,54 @@ def get_match_details(match_id: str):
 
     if should_refresh:
         if not _quota_has_budget():
-            # No cached detail and no budget left. Never expose quota/API internals
-            # (provider messages, call counts) to customers on a live scoreboard.
+            # Never 503 a live sports scoreboard for quota. Serve the carousel
+            # header (live + completed totals) so customers still see a board.
             if entry is None:
                 snap = _quota_snapshot()
                 log.warning(
-                    "Match detail cold-miss blocked for %s — quota exhausted (provider=%s)",
+                    "Match detail cold-miss blocked for %s — serving carousel scoreboard (provider=%s)",
                     match_id,
                     bool(snap.get("providerExhausted")),
                 )
-                return jsonify({
-                    "error": "Live scorecard temporarily unavailable. Please try again shortly.",
-                    "quotaExhausted": True,
-                }), 503
+                with _cache_lock:
+                    carousel_entry = next(
+                        (m for m in _cache["live_and_recent"] if str(m.get("id")) == str(match_id)),
+                        None,
+                    )
+                if carousel_entry:
+                    shaped = _shape_details_from_carousel(carousel_entry, permanent=False)
+                    # Product surface: scores only — no availability/API copy.
+                    shaped.pop("detailNote", None)
+                    _attach_intelligence(shaped, carousel_entry, None, match_id=match_id, commentary=[])
+                    return jsonify({
+                        **shaped,
+                        "lastRefreshed": datetime.now(timezone.utc).isoformat(),
+                        "refreshBlocked": True,
+                        "detailIncomplete": True,
+                    })
+                # No carousel row either — still avoid quota/API language.
+                return jsonify({"error": "Could not fetch match details"}), 502
         else:
             _refresh_match_detail(match_id)
             with _detail_cache_lock:
                 entry = _detail_cache.get(match_id)
 
     if entry is None:
+        # Last resort: carousel header so live/completed boards still render.
+        with _cache_lock:
+            carousel_entry = next(
+                (m for m in _cache["live_and_recent"] if str(m.get("id")) == str(match_id)),
+                None,
+            )
+        if carousel_entry:
+            shaped = _shape_details_from_carousel(carousel_entry, permanent=False)
+            shaped.pop("detailNote", None)
+            _attach_intelligence(shaped, carousel_entry, None, match_id=match_id, commentary=[])
+            return jsonify({
+                **shaped,
+                "lastRefreshed": datetime.now(timezone.utc).isoformat(),
+                "detailIncomplete": True,
+            })
         return jsonify({"error": "Could not fetch match details"}), 502
 
     entry = _rehydrate_intelligence_if_empty(match_id, entry)
