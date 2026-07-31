@@ -370,32 +370,70 @@ def _backfill_full_commentary(cricbuzz_match_id: str, innings_id: int, first_pag
 
 
 def _fetch_cricbuzz_scorecard(cricbuzz_match_id: str) -> dict | None:
-    return _cricbuzz_get(f"/mcenter/v1/{cricbuzz_match_id}/scard")
+    """Prefer /scard; fall back to /hscard when the primary endpoint returns
+    nothing usable (confirmed gap for some completed matches where /comm is
+    empty and /scard intermittently returns an empty body)."""
+    data = _cricbuzz_get(f"/mcenter/v1/{cricbuzz_match_id}/scard")
+    if _scorecard_innings_list(data):
+        return data
+    alt = _cricbuzz_get(f"/mcenter/v1/{cricbuzz_match_id}/hscard")
+    if _scorecard_innings_list(alt):
+        return alt
+    return data or alt
+
+
+def _scorecard_innings_list(scorecard_data: dict | None) -> list:
+    """Cricbuzz has shipped both `scorecard` and `scoreCard` keys; tolerate both."""
+    if not scorecard_data:
+        return []
+    return (
+        scorecard_data.get("scorecard")
+        or scorecard_data.get("scoreCard")
+        or scorecard_data.get("scorecardList")
+        or []
+    )
+
+
+def _innings_id_of(inn: dict) -> int | None:
+    raw = inn.get("inningsid", inn.get("inningsId", inn.get("innings_id")))
+    try:
+        return int(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _format_dismissal(batter: dict) -> str:
     """Builds a human-readable dismissal line, e.g. 'c Kohli b Bumrah', 'b Starc',
     'run out (Warner/Smith)', 'lbw b Cummins', or 'not out'."""
-    outdec = (batter.get("outdec") or "").strip()
-    if not outdec or outdec.lower() == "not out":
-        return "not out"
+    outdec = (batter.get("outdec") or batter.get("outDec") or "").strip()
+    if not outdec or outdec.lower() in ("not out", "batting"):
+        return "not out" if outdec.lower() != "batting" else "batting"
     return outdec
 
 
 def _shape_innings_from_cricbuzz(inn: dict) -> dict:
-    batting = inn.get("batsman", [])
-    bowling = inn.get("bowler", [])
+    batting = inn.get("batsman") or inn.get("batsmen") or []
+    bowling = inn.get("bowler") or inn.get("bowlers") or []
+    team = inn.get("batteamname") or inn.get("batTeamName") or inn.get("batteamnm") or ""
+    runs = inn.get("score", inn.get("runs"))
+    wickets = inn.get("wickets", inn.get("wicket"))
+    overs = inn.get("overs", inn.get("over"))
     return {
-        "team": inn.get("batteamname", ""),
-        "score": f"{inn.get('score', '')}/{inn.get('wickets', '')}" if inn.get("score") is not None else "",
-        "overs": str(inn.get("overs", "")),
+        "team": team,
+        "score": f"{runs}/{wickets}" if runs is not None else "",
+        "overs": str(overs if overs is not None else ""),
         "batters": [
             {
                 "name": b.get("name", "Unknown"),
-                "r": b.get("runs", 0),
-                "b": b.get("balls", 0),
-                "sr": str(b.get("strkrate", "")),
-                "dim": (b.get("outdec", "").lower() == "not out"),
+                "r": b.get("runs", b.get("r", 0)),
+                "b": b.get("balls", b.get("b", 0)),
+                "sr": str(b.get("strkrate", b.get("strikeRate", b.get("sr", "")))),
+                # Mute yet-to-bat rows; keep dismissed + current batters readable.
+                "dim": (
+                    int(b.get("balls", b.get("b", 0)) or 0) == 0
+                    and int(b.get("runs", b.get("r", 0)) or 0) == 0
+                    and (b.get("outdec") or b.get("outDec") or "").strip().lower() in ("", "not out")
+                ),
                 "dismissal": _format_dismissal(b),
             }
             for b in batting
@@ -403,10 +441,10 @@ def _shape_innings_from_cricbuzz(inn: dict) -> dict:
         "bowlers": [
             {
                 "name": bo.get("name", "Unknown"),
-                "o": str(bo.get("overs", "")),
-                "r": str(bo.get("runs", "")),
-                "w": str(bo.get("wickets", "")),
-                "eco": str(bo.get("economy", "")),
+                "o": str(bo.get("overs", bo.get("o", ""))),
+                "r": str(bo.get("runs", bo.get("r", ""))),
+                "w": str(bo.get("wickets", bo.get("w", ""))),
+                "eco": str(bo.get("economy", bo.get("eco", ""))),
             }
             for bo in bowling
         ],
@@ -661,11 +699,11 @@ def _latest_oversep_from_commentary(commentary_raw_entries: list[dict]) -> dict 
 
 
 def _shape_match_details_from_cricbuzz(scorecard_data: dict | None, commentary: list[dict], miniscore: dict | None, raw_comwrapper: list[dict] | None = None) -> dict:
-    scorecard_list = (scorecard_data or {}).get("scorecard", [])
+    scorecard_list = _scorecard_innings_list(scorecard_data)
 
     def _find_innings(innings_id: int) -> dict | None:
         for inn in scorecard_list:
-            if inn.get("inningsid") == innings_id:
+            if _innings_id_of(inn) == innings_id:
                 return inn
         return None
 
@@ -682,6 +720,14 @@ def _shape_match_details_from_cricbuzz(scorecard_data: dict | None, commentary: 
         if raw:
             shaped_inn = _shape_innings_from_cricbuzz(raw)
             shaped_inn["inningsId"] = innings_id
+            all_innings.append(shaped_inn)
+
+    # If inningsid fields were missing/odd, still surface whatever scorecard rows
+    # we got so completed matches don't render as a blank board.
+    if not all_innings and scorecard_list:
+        for idx, raw in enumerate(scorecard_list, start=1):
+            shaped_inn = _shape_innings_from_cricbuzz(raw)
+            shaped_inn["inningsId"] = _innings_id_of(raw) or idx
             all_innings.append(shaped_inn)
 
     # NEW: commentary-derived ground truth for "what's the current over/score
@@ -762,6 +808,25 @@ def _shape_match_details_from_cricbuzz(scorecard_data: dict | None, commentary: 
             "customStatus": miniscore.get("custstatus", ""),
         }
         toss_line = miniscore.get("lastwkt", "")
+
+    # When miniscore is missing (common on completed matches and intermittent
+    # live gaps), still build a header score from the scorecard innings so the
+    # match page isn't blank above a fully populated batting card.
+    if live_score is None and all_innings:
+        def _fmt_from_inn(inn: dict | None) -> dict:
+            if not inn or not inn.get("score"):
+                return {"score": "yet to bat", "info": ""}
+            return {"score": inn.get("score", "0/0"), "info": str(inn.get("overs") or "")}
+
+        live_score = {
+            "home": _fmt_from_inn(all_innings[0] if len(all_innings) >= 1 else None),
+            "away": _fmt_from_inn(all_innings[1] if len(all_innings) >= 2 else None),
+            "target": 0,
+            "crr": 0,
+            "rrr": 0,
+            "lastWicket": "",
+            "customStatus": "",
+        }
 
     ball_tracker = _extract_ball_tracker(miniscore)
 
@@ -1278,6 +1343,73 @@ def _attach_intelligence(shaped: dict, carousel_entry: dict | None, miniscore: d
         shaped["intelligence"] = {"insights": [], "meta": {"available": True, "error": str(e)}}
 
 
+def _is_cricbuzz_match_id(match_id: str) -> bool:
+    """CricketData fill matches use UUIDs; Cricbuzz IDs are numeric."""
+    return str(match_id).isdigit()
+
+
+def _detail_is_incomplete(shaped: dict | None) -> bool:
+    """True when a refresh produced no real batting card or commentary —
+    those should be retried on the next view instead of cached cold for 30 min."""
+    if not shaped:
+        return True
+    inn1 = shaped.get("innings1") or {}
+    has_batters = bool(inn1.get("batters"))
+    has_commentary = bool(shaped.get("commentary"))
+    return not has_batters and not has_commentary
+
+
+def _shape_details_from_carousel(carousel_entry: dict | None) -> dict:
+    """Minimal detail payload for CricketData-only (non-Cricbuzz) matches so the
+    match page still shows the carousel scoreline instead of a blank board."""
+    score = (carousel_entry or {}).get("score") or {}
+    teams = (carousel_entry or {}).get("teams") or []
+    home = score.get("home")
+    away = score.get("away")
+    innings = []
+    if home and len(teams) >= 1:
+        innings.append({
+            "inningsId": 1,
+            "team": teams[0],
+            "score": home.get("score") or "",
+            "overs": str(home.get("info") or ""),
+            "batters": [],
+            "bowlers": [],
+        })
+    if away and len(teams) >= 2:
+        innings.append({
+            "inningsId": 2,
+            "team": teams[1],
+            "score": away.get("score") or "",
+            "overs": str(away.get("info") or ""),
+            "batters": [],
+            "bowlers": [],
+        })
+    live_score = {
+        "home": home or {"score": "yet to bat", "info": ""},
+        "away": away or {"score": "yet to bat", "info": ""},
+        "target": 0,
+        "crr": 0,
+        "rrr": 0,
+        "lastWicket": "",
+        "customStatus": (carousel_entry or {}).get("chaseNote") or "",
+    }
+    return {
+        "toss": None,
+        "venue": (carousel_entry or {}).get("venue") or "",
+        "recentBalls": [],
+        "commentary": [],
+        "currentBowler": "",
+        "innings": innings,
+        "innings1": innings[0] if len(innings) >= 1 else None,
+        "innings2": innings[1] if len(innings) >= 2 else None,
+        "liveScore": live_score,
+        "ballTracker": [],
+        "detailSource": "carousel_only",
+        "detailNote": "Full ball-by-ball scorecard is not available for this match source yet.",
+    }
+
+
 def _refresh_match_detail(match_id: str) -> None:
     cricbuzz_match_id = str(match_id)
     if not cricbuzz_match_id:
@@ -1292,6 +1424,21 @@ def _refresh_match_detail(match_id: str) -> None:
             (m for m in _cache["live_and_recent"] if str(m.get("id")) == str(match_id)),
             None
         )
+
+    # CricketData UUID matches have no Cricbuzz scorecard/commentary endpoints.
+    # Serve a carousel-backed stub instead of burning quota on guaranteed 404s.
+    if not _is_cricbuzz_match_id(cricbuzz_match_id):
+        shaped = _shape_details_from_carousel(carousel_entry)
+        _attach_intelligence(shaped, carousel_entry, None, match_id=match_id, commentary=[])
+        with _detail_cache_lock:
+            _detail_cache[match_id] = {
+                "data": shaped,
+                "last_refreshed": datetime.now(timezone.utc).isoformat(),
+                "cricbuzz_match_id": None,
+                "backfilled_innings": set(),
+                "incomplete": True,
+            }
+        return
 
     with _detail_cache_lock:
         already_backfilled = (match_id in _detail_cache) and _detail_cache[match_id].get("backfilled_innings", set())
@@ -1319,27 +1466,38 @@ def _refresh_match_detail(match_id: str) -> None:
     # miniscore (works for 2-innings limited-overs and up to 4-innings Tests alike)
     # and fetch that one specifically, since that's where live commentary is
     # actually happening right now.
+    current_innings_id = 1
     if miniscore:
         innings_scores = (miniscore.get("inningsscores") or {}).get("inningsscore", [])
         reported_innings_ids = [s.get("inningsid") for s in innings_scores if s.get("inningsid")]
         current_innings_id = max(reported_innings_ids) if reported_innings_ids else 1
+    else:
+        # Completed / miniscore-missing matches still need innings-2 commentary.
+        # Infer from scorecard when possible; otherwise try innings 2 once.
+        sc_list = _scorecard_innings_list(scorecard_data)
+        sc_ids = [_innings_id_of(inn) for inn in sc_list]
+        sc_ids = [i for i in sc_ids if i]
+        if sc_ids:
+            current_innings_id = max(sc_ids)
+        elif (carousel_entry or {}).get("status") == "COMPLETED":
+            current_innings_id = 2
 
-        if current_innings_id > 1:
-            comm_result_current = _fetch_cricbuzz_commentary_and_miniscore(cricbuzz_match_id, innings_id=current_innings_id)
-            if current_innings_id not in backfilled_innings and comm_result_current["commentary"]:
-                comm_result_current["commentary"] = _backfill_full_commentary(
-                    cricbuzz_match_id, current_innings_id, comm_result_current
-                )
-                backfilled_innings.add(current_innings_id)
-            if comm_result_current["commentary"]:
-                # Combine with innings-1 commentary rather than discarding it — the
-                # merge step below dedupes/sorts by (innings, ballnbr) so entries
-                # from every innings coexist correctly instead of overwriting each other.
-                commentary = comm_result_current["commentary"] + commentary
-                miniscore = comm_result_current["miniscore"] or miniscore
-                # NEW: prefer the current (later) innings' raw entries for the
-                # mismatch-fix logic, since that's where live play is happening.
-                raw_comwrapper = comm_result_current.get("raw_comwrapper", []) or raw_comwrapper
+    if current_innings_id > 1:
+        comm_result_current = _fetch_cricbuzz_commentary_and_miniscore(cricbuzz_match_id, innings_id=current_innings_id)
+        if current_innings_id not in backfilled_innings and comm_result_current["commentary"]:
+            comm_result_current["commentary"] = _backfill_full_commentary(
+                cricbuzz_match_id, current_innings_id, comm_result_current
+            )
+            backfilled_innings.add(current_innings_id)
+        if comm_result_current["commentary"]:
+            # Combine with innings-1 commentary rather than discarding it — the
+            # merge step below dedupes/sorts by (innings, ballnbr) so entries
+            # from every innings coexist correctly instead of overwriting each other.
+            commentary = comm_result_current["commentary"] + commentary
+            miniscore = comm_result_current["miniscore"] or miniscore
+            # NEW: prefer the current (later) innings' raw entries for the
+            # mismatch-fix logic, since that's where live play is happening.
+            raw_comwrapper = comm_result_current.get("raw_comwrapper", []) or raw_comwrapper
 
     # Merge with whatever commentary we already have cached for this match instead
     # of replacing it outright, so scrolling back can reach the start of the innings.
@@ -1371,6 +1529,18 @@ def _refresh_match_detail(match_id: str) -> None:
         if fallback_toss:
             shaped["toss"] = fallback_toss
             _record_toss_if_new(match_id, fallback_toss)
+
+    # If scorecard/commentary both came back empty but the carousel already
+    # has a scoreline (common right after a flaky RapidAPI miss), keep the
+    # header populated so the match page isn't a blank board.
+    if _detail_is_incomplete(shaped) and carousel_entry:
+        fallback = _shape_details_from_carousel(carousel_entry)
+        shaped["liveScore"] = shaped.get("liveScore") or fallback["liveScore"]
+        shaped["innings"] = shaped.get("innings") or fallback["innings"]
+        shaped["innings1"] = shaped.get("innings1") or fallback["innings1"]
+        shaped["innings2"] = shaped.get("innings2") or fallback["innings2"]
+        shaped["detailNote"] = fallback.get("detailNote")
+        shaped["detailSource"] = "carousel_fallback"
 
     # Weather (Open-Meteo, free) - fetched once pregame + once per innings
     # change, using coordinates already present in the carousel entry's
@@ -1419,12 +1589,14 @@ def _refresh_match_detail(match_id: str) -> None:
     # docstring for what each optional field unlocks).
     _attach_intelligence(shaped, carousel_entry, miniscore, match_id=match_id, commentary=commentary)
 
+    incomplete = _detail_is_incomplete(shaped)
     with _detail_cache_lock:
         _detail_cache[match_id] = {
             "data": shaped,
             "last_refreshed": datetime.now(timezone.utc).isoformat(),
             "cricbuzz_match_id": cricbuzz_match_id,
             "backfilled_innings": backfilled_innings,
+            "incomplete": incomplete,
         }
 
 
@@ -1610,6 +1782,9 @@ def _match_has_active_viewer(match_id: str) -> bool:
     return last is not None and (time.time() - last) < VIEWER_ACTIVE_WINDOW_SECONDS
 
 
+INCOMPLETE_RETRY_SECONDS = 60
+
+
 @app.route("/api/match-details/<match_id>", methods=["GET"])
 def get_match_details(match_id: str):
     _mark_match_viewed(match_id)  # NEW: records that someone is actually looking at this match right now
@@ -1618,14 +1793,25 @@ def get_match_details(match_id: str):
     with _detail_cache_lock:
         entry = _detail_cache.get(match_id)
 
-    if entry is None:
+    should_refresh = entry is None
+    if entry is not None and entry.get("incomplete") and _is_cricbuzz_match_id(match_id):
+        try:
+            age = time.time() - datetime.fromisoformat(entry["last_refreshed"]).timestamp()
+        except Exception:
+            age = INCOMPLETE_RETRY_SECONDS
+        if age >= INCOMPLETE_RETRY_SECONDS:
+            should_refresh = True
+
+    if should_refresh:
         if not _quota_has_budget():
             # No cached detail and no budget left — tell the frontend honestly
             # instead of silently failing or burning the last calls on a cold view.
-            return jsonify({"error": "Daily API quota exhausted. Try again after reset.", "quotaExhausted": True}), 503
-        _refresh_match_detail(match_id)
-        with _detail_cache_lock:
-            entry = _detail_cache.get(match_id)
+            if entry is None:
+                return jsonify({"error": "Daily API quota exhausted. Try again after reset.", "quotaExhausted": True}), 503
+        else:
+            _refresh_match_detail(match_id)
+            with _detail_cache_lock:
+                entry = _detail_cache.get(match_id)
 
     if entry is None:
         return jsonify({"error": "Could not fetch match details"}), 502
@@ -1637,6 +1823,7 @@ def get_match_details(match_id: str):
         "lastRefreshed": entry["last_refreshed"],
         "refreshBlocked": "last_blocked_at" in entry,
         "lastBlockedAt": entry.get("last_blocked_at"),
+        "detailIncomplete": bool(entry.get("incomplete")),
     })
 
 
