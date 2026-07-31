@@ -1352,16 +1352,49 @@ def _refresh_match_detail(match_id: str) -> None:
 
     # Toss result, if we've captured it for this match (see
     # _record_toss_if_new - captured once, while state=="Toss", from the
-    # carousel entry). None if the archive never saw a "Toss" state poll
-    # for this match (e.g. app started watching mid-match) - frontend
-    # should treat a missing/None toss the same as "not shown", not an error.
+    # carousel entry). Falls back to parsing the SCORECARD endpoint's own
+    # top-level "status" field, which - confirmed via a real live
+    # scorecard response, match 155349 at over 29 - keeps the toss
+    # announcement text ("Nepal opt to bowl") even well after toss,
+    # unlike the live-matches feed's matchInfo.status which gets
+    # overwritten by live-play text. This recovers toss for matches the
+    # app started watching AFTER the "Toss" state had already passed
+    # (the one real gap in the archive-only approach) - at zero extra
+    # API cost, since scorecard_data is already being fetched every
+    # refresh for the batting/bowling card.
     shaped["toss"] = _get_archived_toss(match_id)
+    if shaped["toss"] is None and scorecard_data and carousel_entry:
+        scorecard_status = scorecard_data.get("status")
+        team1_name = carousel_entry["teams"][0] if carousel_entry.get("teams") else ""
+        team2_name = carousel_entry["teams"][1] if len(carousel_entry.get("teams", [])) > 1 else ""
+        fallback_toss = _parse_toss_from_status(scorecard_status, team1_name, team2_name)
+        if fallback_toss:
+            shaped["toss"] = fallback_toss
+            _record_toss_if_new(match_id, fallback_toss)
 
     # Weather (Open-Meteo, free) - fetched once pregame + once per innings
     # change, using coordinates already present in the carousel entry's
     # venueInfo. Dew risk is computed alongside it since it needs the same
     # weather reading + the match's local start hour + current innings.
+    #
+    # BUGFIX: previously read current_innings_id directly off miniscore,
+    # which is None on the confirmed-real intermittent Cricbuzz failure
+    # mode (see ARCHITECTURE.md / _synthesize_miniscore_from_shaped_innings)
+    # - meaning weather silently never fetched on exactly the polls where
+    # the score itself was already correctly falling back to commentary-
+    # derived data. Now uses the same fallback: prefer miniscore's own
+    # inningsid when present, else derive it from whichever of
+    # shaped["innings1"/"innings2"] actually has live data (mirrors
+    # _synthesize_miniscore_from_shaped_innings's own "yet to bat" check).
     current_innings_id_for_weather = (miniscore or {}).get("inningsid")
+    if current_innings_id_for_weather is None:
+        inn2 = shaped.get("innings2")
+        inn1 = shaped.get("innings1")
+        if inn2 and inn2.get("score") and inn2["score"] != "yet to bat":
+            current_innings_id_for_weather = inn2.get("inningsId", 2)
+        elif inn1 and inn1.get("score") and inn1["score"] != "yet to bat":
+            current_innings_id_for_weather = inn1.get("inningsId", 1)
+
     weather = _refresh_weather_if_needed(match_id, carousel_entry, current_innings_id_for_weather)
     shaped["weather"] = weather
 
