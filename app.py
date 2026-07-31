@@ -373,22 +373,6 @@ def _fetch_cricbuzz_scorecard(cricbuzz_match_id: str) -> dict | None:
     return _cricbuzz_get(f"/mcenter/v1/{cricbuzz_match_id}/scard")
 
 
-def _fetch_cricbuzz_match_info(cricbuzz_match_id: str) -> dict | None:
-    """
-    /mcenter/v1/{matchId} - a separate endpoint from the scorecard, with
-    its own dedicated "tossstatus" field (e.g. "Israel opt to bat") that
-    - confirmed via a real live call, match 168147 at Innings Break -
-    persists independently of the transient "status"/"state" fields that
-    get overwritten as the match progresses (those two only ever show
-    the CURRENT match state, e.g. "Innings Break", not the toss).
-    tossstatus appears to be Cricbuzz's actual durable toss field. Only
-    called when the toss archive is empty (see _refresh_match_detail) -
-    this is a genuine extra RapidAPI call, so it's not worth spending on
-    every poll once toss is already known for a match.
-    """
-    return _cricbuzz_get(f"/mcenter/v1/{cricbuzz_match_id}")
-
-
 def _format_dismissal(batter: dict) -> str:
     """Builds a human-readable dismissal line, e.g. 'c Kohli b Bumrah', 'b Starc',
     'run out (Warner/Smith)', 'lbw b Cummins', or 'not out'."""
@@ -465,27 +449,17 @@ def _extract_ball_tracker(miniscore: dict | None) -> list[dict]:
 
 def _parse_toss_from_status(status_text: "str | None", team1_name: str, team2_name: str) -> "dict | None":
     """
-    Parses a "<Team> opt(ed) to bat|bowl" announcement out of a Cricbuzz
-    status-style string. Two known real sources for this text:
-      - matchInfo.status, ONLY while matchInfo.state == "Toss" (confirmed
-        real, 25 Jul 2026) - overwritten with live-play text afterward.
-      - Match_Info endpoint's dedicated "tossstatus" field (confirmed
-        real, match 168147, 27 Jul 2026) - this one stays durable across
-        the whole match, unlike matchInfo.status/scorecard.status which
-        both get overwritten by whatever the CURRENT match state is
-        (e.g. "Innings Break-Israel opt to bat" - note the state prefix,
-        which is why this function requires an EXACT team-name match
-        below rather than accepting whatever text precedes "opt to").
+    Cricbuzz's matchInfo.status field carries the toss announcement as a
+    plain string ONLY while matchInfo.state == "Toss" - e.g. "Zimbabwe
+    opt to bowl", "France opt to bat" (confirmed via real live data, 25
+    Jul 2026). Once play starts, status is overwritten with a live-state
+    description instead (e.g. "Sri Lanka Women need 117 runs") and no
+    longer contains toss info - callers MUST capture this once while
+    state is "Toss" and persist it (see _toss_archive below), not
+    re-parse status on every poll.
 
-    BUGFIX: previously fell back to returning the raw regex-captured text
-    even when it didn't exactly match a known team name (e.g. parsing
-    "Innings Break-Israel opt to bat" as winner="Innings Break-Israel" -
-    a real, confirmed-wrong result caught in testing). Now correctly
-    refuses (returns None) in that case, matching this module's
-    refuse-don't-guess posture everywhere else - a garbled winner name
-    is worse than showing nothing.
-
-    Returns {"winner": str, "decision": "bat"|"bowl"} or None.
+    Returns {"winner": str, "decision": "bat"|"bowl"} or None if the
+    string doesn't match the toss-announcement pattern.
     """
     if not status_text:
         return None
@@ -497,10 +471,7 @@ def _parse_toss_from_status(status_text: "str | None", team1_name: str, team2_na
     for name in (team1_name, team2_name):
         if name and winner_raw.lower() == name.lower():
             return {"winner": name, "decision": decision}
-    # No exact match against either known team name - refuse rather than
-    # return a possibly-garbled winner string (e.g. a state-prefix like
-    # "Innings Break-Israel" instead of just "Israel").
-    return None
+    return {"winner": winner_raw, "decision": decision}
 
 
 # ---------------------------------------------------------------------------
@@ -1381,35 +1352,27 @@ def _refresh_match_detail(match_id: str) -> None:
 
     # Toss result, if we've captured it for this match (see
     # _record_toss_if_new - captured once, while state=="Toss", from the
-    # carousel entry).
-    #
-    # FALLBACK, CORRECTED: an earlier attempt fell back to the SCORECARD
-    # endpoint's top-level "status" field. That worked for one match
-    # tested mid-1st-innings (155349) but was DISPROVEN on a second real
-    # test (168147, at Innings Break) - scorecard.status is just as
-    # transient as the live-feed's status/state, both get overwritten by
-    # whatever the CURRENT match state is ("Innings Break" etc), not the
-    # toss. Replaced with a genuinely separate, confirmed-durable field:
-    # the /mcenter/v1/{matchId} (Match_Info) endpoint's own "tossstatus"
-    # field - confirmed via a real live call on match 168147 to read
-    # "Israel opt to bat" even at Innings Break, independent of that same
-    # response's state="Innings Break"/status="Innings Break-Israel opt
-    # to bat" fields. This IS an extra RapidAPI call (unlike the
-    # scorecard, which was already being fetched) - only spent once per
-    # match, when the archive is still empty, never on every poll.
+    # carousel entry). Falls back to parsing the SCORECARD endpoint's own
+    # top-level "status" field, which - confirmed via a real live
+    # scorecard response, match 155349 at over 29 - keeps the toss
+    # announcement text ("Nepal opt to bowl") even well after toss,
+    # unlike the live-matches feed's matchInfo.status which gets
+    # overwritten by live-play text. This recovers toss for matches the
+    # app started watching AFTER the "Toss" state had already passed
+    # (the one real gap in the archive-only approach) - at zero extra
+    # API cost, since scorecard_data is already being fetched every
+    # refresh for the batting/bowling card.
     shaped["toss"] = _get_archived_toss(match_id)
-    if shaped["toss"] is None and carousel_entry:
-        match_info_data = _fetch_cricbuzz_match_info(cricbuzz_match_id)
-        toss_status_text = (match_info_data or {}).get("tossstatus")
+    if shaped["toss"] is None and scorecard_data and carousel_entry:
+        scorecard_status = scorecard_data.get("status")
         team1_name = carousel_entry["teams"][0] if carousel_entry.get("teams") else ""
         team2_name = carousel_entry["teams"][1] if len(carousel_entry.get("teams", [])) > 1 else ""
-        fallback_toss = _parse_toss_from_status(toss_status_text, team1_name, team2_name)
+        fallback_toss = _parse_toss_from_status(scorecard_status, team1_name, team2_name)
         if fallback_toss:
             shaped["toss"] = fallback_toss
             _record_toss_if_new(match_id, fallback_toss)
 
     # Weather (Open-Meteo, free) - fetched once pregame + once per innings
-    # change, using coordinates already present in the carousel entry's
     # change, using coordinates already present in the carousel entry's
     # venueInfo. Dew risk is computed alongside it since it needs the same
     # weather reading + the match's local start hour + current innings.
