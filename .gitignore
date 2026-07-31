@@ -12,5 +12,6 @@ intelligence/output/manifest.json
 # stays local-only - regenerate locally when you want fresh data, then
 # re-commit just these three context files.
 node_modules/
+.pnpm-store/
 __pycache__/
 .env
