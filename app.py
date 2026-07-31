@@ -2168,16 +2168,18 @@ def get_match_details(match_id: str):
 
     if should_refresh:
         if not _quota_has_budget():
-            # No cached detail and no budget left — tell the frontend honestly
-            # instead of silently failing or burning the last calls on a cold view.
+            # No cached detail and no budget left. Never expose quota/API internals
+            # (provider messages, call counts) to customers on a live scoreboard.
             if entry is None:
                 snap = _quota_snapshot()
+                log.warning(
+                    "Match detail cold-miss blocked for %s — quota exhausted (provider=%s)",
+                    match_id,
+                    bool(snap.get("providerExhausted")),
+                )
                 return jsonify({
-                    "error": snap.get("providerMessage")
-                        or "Daily API quota exhausted. Try again after reset.",
+                    "error": "Live scorecard temporarily unavailable. Please try again shortly.",
                     "quotaExhausted": True,
-                    "providerExhausted": bool(snap.get("providerExhausted")),
-                    "quota": snap,
                 }), 503
         else:
             _refresh_match_detail(match_id)
