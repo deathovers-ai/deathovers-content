@@ -25,8 +25,11 @@ LIMITED_OVERS_CODES = {
     "MLC", "WSL", "WPL", "IPO", "MCT", "NPL", "MSL", "BWT", "FRB", "MDM",
 }
 
+# Cricsheet normally uses numeric IDs, but a small historical group uses
+# prefixed IDs (for example, ``wi_201707``).  IDs are opaque identifiers;
+# restricting them to digits silently drops valid matches before parsing.
 line_re = re.compile(
-    r"^(\d{4}-\d{2}-\d{2}) - (international|club) - (\S+) - (male|female) - (\d+) - (.+)$"
+    r"^(\d{4}-\d{2}-\d{2}) - (international|club) - (\S+) - (male|female) - (\S+) - (.+)$"
 )
 
 manifest = []

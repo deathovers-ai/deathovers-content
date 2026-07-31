@@ -11,6 +11,7 @@ and everything above it reads from output/events/, never from raw_data/.
 import json
 import os
 import time
+import argparse
 from cricsheet_parser import parse_match
 
 # intelligence/parser/batch_parse.py -> intelligence/
@@ -20,6 +21,11 @@ MANIFEST = os.path.join(BASE_DIR, "output", "manifest.json")
 EVENTS_DIR = os.path.join(BASE_DIR, "output", "events")
 
 os.makedirs(EVENTS_DIR, exist_ok=True)
+
+cli = argparse.ArgumentParser(description="Parse Cricsheet matches into DeathOvers event JSON.")
+cli.add_argument("--missing-only", action="store_true",
+                 help="Only parse manifest matches that do not already have an event file.")
+args = cli.parse_args()
 
 with open(MANIFEST) as f:
     manifest = json.load(f)
@@ -33,6 +39,9 @@ for i, m in enumerate(manifest, 1):
     match_id = m["match_id"]
     src = os.path.join(RAW_DIR, f"{match_id}.json")
     dst = os.path.join(EVENTS_DIR, f"{match_id}.json")
+
+    if args.missing_only and os.path.exists(dst):
+        continue
 
     if not os.path.exists(src):
         failed.append((match_id, "raw file missing"))

@@ -1,33 +1,910 @@
 {
-  "Koge Cricket Club": {
-    "display_name": "Koge Cricket Club",
+  "Moara Vlasiei Cricket Ground": {
+    "display_name": "Moara Vlasiei Cricket Ground, Ilfov County",
+    "formats": {
+      "T20": {
+        "matches_with_data": 80,
+        "avg_first_innings_score": 151.1,
+        "avg_first_innings_wickets": 7.1,
+        "avg_second_innings_score": 128.8,
+        "highest_total": 235,
+        "lowest_total": 41,
+        "highest_successful_chase": 195,
+        "lowest_score_defended": 108,
+        "toss_bat_first_pct": 50.0,
+        "win_pct_batting_first": 52.5,
+        "win_pct_bowling_first": 47.5,
+        "matches_with_result": 80,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 40.9,
+            "avg_run_rate": 6.81
+          },
+          "middle": {
+            "avg_runs": 58.3,
+            "avg_run_rate": 6.58
+          },
+          "death": {
+            "avg_runs": 34.4,
+            "avg_run_rate": 8.04
+          }
+        }
+      },
+      "IT20": {
+        "matches_with_data": 1,
+        "avg_first_innings_score": 150.0,
+        "avg_first_innings_wickets": 8.0,
+        "avg_second_innings_score": 153.0,
+        "highest_total": 153,
+        "lowest_total": 150,
+        "highest_successful_chase": 153,
+        "lowest_score_defended": null,
+        "toss_bat_first_pct": 0.0,
+        "win_pct_batting_first": 0.0,
+        "win_pct_bowling_first": 100.0,
+        "matches_with_result": 1,
+        "confidence": "low",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 20.0,
+            "avg_run_rate": 3.33
+          },
+          "middle": {
+            "avg_runs": 66.0,
+            "avg_run_rate": 7.33
+          },
+          "death": {
+            "avg_runs": 48.0,
+            "avg_run_rate": 9.6
+          }
+        }
+      }
+    }
+  },
+  "Namibia Cricket Ground": {
+    "display_name": "Namibia Cricket Ground, Windhoek",
+    "formats": {
+      "T20": {
+        "matches_with_data": 30,
+        "avg_first_innings_score": 131.9,
+        "avg_first_innings_wickets": 6.3,
+        "avg_second_innings_score": 119.6,
+        "highest_total": 230,
+        "lowest_total": 42,
+        "highest_successful_chase": 187,
+        "lowest_score_defended": 109,
+        "toss_bat_first_pct": 36.7,
+        "win_pct_batting_first": 33.3,
+        "win_pct_bowling_first": 66.7,
+        "matches_with_result": 30,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 35.8,
+            "avg_run_rate": 5.97
+          },
+          "middle": {
+            "avg_runs": 56.1,
+            "avg_run_rate": 6.27
+          },
+          "death": {
+            "avg_runs": 33.3,
+            "avg_run_rate": 7.74
+          }
+        }
+      },
+      "ODI": {
+        "matches_with_data": 5,
+        "avg_first_innings_score": 207.2,
+        "avg_first_innings_wickets": 8.2,
+        "avg_second_innings_score": 211.8,
+        "highest_total": 274,
+        "lowest_total": 151,
+        "highest_successful_chase": 274,
+        "lowest_score_defended": 163,
+        "toss_bat_first_pct": 20.0,
+        "win_pct_batting_first": 25.0,
+        "win_pct_bowling_first": 75.0,
+        "matches_with_result": 4,
+        "confidence": "medium",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 41.8,
+            "avg_run_rate": 4.18
+          },
+          "middle": {
+            "avg_runs": 111.4,
+            "avg_run_rate": 4.28
+          },
+          "death": {
+            "avg_runs": 45.4,
+            "avg_run_rate": 6.36
+          }
+        }
+      }
+    }
+  },
+  "St George's College Ground": {
+    "display_name": "St George's College Ground, Buenos Aires",
+    "formats": {
+      "T20": {
+        "matches_with_data": 10,
+        "avg_first_innings_score": 99.5,
+        "avg_first_innings_wickets": 7.4,
+        "avg_second_innings_score": 69.4,
+        "highest_total": 149,
+        "lowest_total": 41,
+        "highest_successful_chase": 86,
+        "lowest_score_defended": 89,
+        "toss_bat_first_pct": 40.0,
+        "win_pct_batting_first": 70.0,
+        "win_pct_bowling_first": 30.0,
+        "matches_with_result": 10,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 23.4,
+            "avg_run_rate": 3.9
+          },
+          "middle": {
+            "avg_runs": 44.7,
+            "avg_run_rate": 4.97
+          },
+          "death": {
+            "avg_runs": 22.9,
+            "avg_run_rate": 5.31
+          }
+        }
+      }
+    }
+  },
+  "Sportpark Maarschalkerweerd": {
+    "display_name": "Sportpark Maarschalkerweerd, Utrecht",
+    "formats": {
+      "ODI": {
+        "matches_with_data": 13,
+        "avg_first_innings_score": 205.2,
+        "avg_first_innings_wickets": 8.9,
+        "avg_second_innings_score": 180.8,
+        "highest_total": 380,
+        "lowest_total": 148,
+        "highest_successful_chase": 205,
+        "lowest_score_defended": 195,
+        "toss_bat_first_pct": 38.5,
+        "win_pct_batting_first": 46.2,
+        "win_pct_bowling_first": 53.8,
+        "matches_with_result": 13,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 34.0,
+            "avg_run_rate": 3.4
+          },
+          "middle": {
+            "avg_runs": 114.8,
+            "avg_run_rate": 3.87
+          },
+          "death": {
+            "avg_runs": 46.0,
+            "avg_run_rate": 5.54
+          }
+        }
+      },
+      "T20": {
+        "matches_with_data": 31,
+        "avg_first_innings_score": 118.1,
+        "avg_first_innings_wickets": 6.5,
+        "avg_second_innings_score": 93.2,
+        "highest_total": 217,
+        "lowest_total": 39,
+        "highest_successful_chase": 153,
+        "lowest_score_defended": 87,
+        "toss_bat_first_pct": 32.3,
+        "win_pct_batting_first": 44.8,
+        "win_pct_bowling_first": 55.2,
+        "matches_with_result": 29,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 32.2,
+            "avg_run_rate": 5.36
+          },
+          "middle": {
+            "avg_runs": 48.8,
+            "avg_run_rate": 5.54
+          },
+          "death": {
+            "avg_runs": 29.5,
+            "avg_run_rate": 6.89
+          }
+        }
+      },
+      "IT20": {
+        "matches_with_data": 4,
+        "avg_first_innings_score": 146.5,
+        "avg_first_innings_wickets": 6.8,
+        "avg_second_innings_score": 73.5,
+        "highest_total": 207,
+        "lowest_total": 25,
+        "highest_successful_chase": 25,
+        "lowest_score_defended": 114,
+        "toss_bat_first_pct": 25.0,
+        "win_pct_batting_first": 75.0,
+        "win_pct_bowling_first": 25.0,
+        "matches_with_result": 4,
+        "confidence": "low",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 41.5,
+            "avg_run_rate": 6.92
+          },
+          "middle": {
+            "avg_runs": 55.0,
+            "avg_run_rate": 6.11
+          },
+          "death": {
+            "avg_runs": 36.5,
+            "avg_run_rate": 7.3
+          }
+        }
+      }
+    }
+  },
+  "Mahinda Rajapaksa International Cricket Stadium": {
+    "display_name": "Mahinda Rajapaksa International Cricket Stadium, Sooriyawewa, Hambantota",
+    "formats": {
+      "ODI": {
+        "matches_with_data": 29,
+        "avg_first_innings_score": 241.7,
+        "avg_first_innings_wickets": 7.3,
+        "avg_second_innings_score": 193.5,
+        "highest_total": 368,
+        "lowest_total": 13,
+        "highest_successful_chase": 312,
+        "lowest_score_defended": 275,
+        "toss_bat_first_pct": 48.3,
+        "win_pct_batting_first": 38.5,
+        "win_pct_bowling_first": 61.5,
+        "matches_with_result": 26,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 44.3,
+            "avg_run_rate": 4.51
+          },
+          "middle": {
+            "avg_runs": 132.1,
+            "avg_run_rate": 4.89
+          },
+          "death": {
+            "avg_runs": 54.8,
+            "avg_run_rate": 7.88
+          }
+        }
+      },
+      "T20": {
+        "matches_with_data": 10,
+        "avg_first_innings_score": 127.9,
+        "avg_first_innings_wickets": 5.7,
+        "avg_second_innings_score": 109.9,
+        "highest_total": 182,
+        "lowest_total": 46,
+        "highest_successful_chase": 164,
+        "lowest_score_defended": 78,
+        "toss_bat_first_pct": 40.0,
+        "win_pct_batting_first": 50.0,
+        "win_pct_bowling_first": 50.0,
+        "matches_with_result": 10,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 33.5,
+            "avg_run_rate": 5.58
+          },
+          "middle": {
+            "avg_runs": 53.6,
+            "avg_run_rate": 6.54
+          },
+          "death": {
+            "avg_runs": 35.5,
+            "avg_run_rate": 8.8
+          }
+        }
+      }
+    }
+  },
+  "Harare Sports Club": {
+    "display_name": "Harare Sports Club",
+    "formats": {
+      "T20": {
+        "matches_with_data": 78,
+        "avg_first_innings_score": 156.6,
+        "avg_first_innings_wickets": 6.2,
+        "avg_second_innings_score": 133.1,
+        "highest_total": 259,
+        "lowest_total": 6,
+        "highest_successful_chase": 194,
+        "lowest_score_defended": 114,
+        "toss_bat_first_pct": 30.8,
+        "win_pct_batting_first": 56.0,
+        "win_pct_bowling_first": 44.0,
+        "matches_with_result": 75,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 42.0,
+            "avg_run_rate": 7.0
+          },
+          "middle": {
+            "avg_runs": 65.8,
+            "avg_run_rate": 7.44
+          },
+          "death": {
+            "avg_runs": 42.3,
+            "avg_run_rate": 8.95
+          }
+        }
+      },
+      "ODI": {
+        "matches_with_data": 127,
+        "avg_first_innings_score": 234.0,
+        "avg_first_innings_wickets": 8.1,
+        "avg_second_innings_score": 202.8,
+        "highest_total": 408,
+        "lowest_total": 55,
+        "highest_successful_chase": 328,
+        "lowest_score_defended": 141,
+        "toss_bat_first_pct": 18.9,
+        "win_pct_batting_first": 44.4,
+        "win_pct_bowling_first": 55.6,
+        "matches_with_result": 124,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 36.3,
+            "avg_run_rate": 3.63
+          },
+          "middle": {
+            "avg_runs": 130.7,
+            "avg_run_rate": 4.46
+          },
+          "death": {
+            "avg_runs": 56.1,
+            "avg_run_rate": 6.87
+          }
+        }
+      },
+      "ODM": {
+        "matches_with_data": 6,
+        "avg_first_innings_score": 240.2,
+        "avg_first_innings_wickets": 7.5,
+        "avg_second_innings_score": 164.7,
+        "highest_total": 309,
+        "lowest_total": 77,
+        "highest_successful_chase": 177,
+        "lowest_score_defended": 247,
+        "toss_bat_first_pct": 33.3,
+        "win_pct_batting_first": 66.7,
+        "win_pct_bowling_first": 33.3,
+        "matches_with_result": 6,
+        "confidence": "medium",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 49.0,
+            "avg_run_rate": 4.9
+          },
+          "middle": {
+            "avg_runs": 124.7,
+            "avg_run_rate": 4.15
+          },
+          "death": {
+            "avg_runs": 51.2,
+            "avg_run_rate": 5.63
+          }
+        }
+      }
+    }
+  },
+  "Estonian National Cricket and Rugby Field": {
+    "display_name": "Estonian National Cricket and Rugby Field",
     "formats": {
       "T20": {
         "matches_with_data": 12,
-        "avg_first_innings_score": 130.2,
-        "avg_first_innings_wickets": 7.8,
-        "avg_second_innings_score": 115.6,
-        "highest_total": 201,
-        "lowest_total": 50,
-        "highest_successful_chase": 181,
-        "lowest_score_defended": 93,
-        "toss_bat_first_pct": 33.3,
-        "win_pct_batting_first": 41.7,
-        "win_pct_bowling_first": 58.3,
+        "avg_first_innings_score": 116.6,
+        "avg_first_innings_wickets": 8.2,
+        "avg_second_innings_score": 97.0,
+        "highest_total": 235,
+        "lowest_total": 38,
+        "highest_successful_chase": 142,
+        "lowest_score_defended": 153,
+        "toss_bat_first_pct": 75.0,
+        "win_pct_batting_first": 33.3,
+        "win_pct_bowling_first": 66.7,
         "matches_with_result": 12,
         "confidence": "high",
         "phase_breakdown": {
           "powerplay": {
-            "avg_runs": 38.3,
-            "avg_run_rate": 6.39
+            "avg_runs": 27.3,
+            "avg_run_rate": 4.57
           },
           "middle": {
-            "avg_runs": 50.7,
-            "avg_run_rate": 5.63
+            "avg_runs": 43.9,
+            "avg_run_rate": 4.88
           },
           "death": {
-            "avg_runs": 30.2,
-            "avg_run_rate": 6.46
+            "avg_runs": 16.5,
+            "avg_run_rate": 3.8
+          }
+        }
+      }
+    }
+  },
+  "High Performance Oval": {
+    "display_name": "High Performance Oval, Windhoek",
+    "formats": {
+      "T20": {
+        "matches_with_data": 23,
+        "avg_first_innings_score": 123.7,
+        "avg_first_innings_wickets": 6.0,
+        "avg_second_innings_score": 107.0,
+        "highest_total": 228,
+        "lowest_total": 12,
+        "highest_successful_chase": 140,
+        "lowest_score_defended": 95,
+        "toss_bat_first_pct": 60.9,
+        "win_pct_batting_first": 63.6,
+        "win_pct_bowling_first": 36.4,
+        "matches_with_result": 22,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 31.4,
+            "avg_run_rate": 5.23
+          },
+          "middle": {
+            "avg_runs": 49.0,
+            "avg_run_rate": 5.45
+          },
+          "death": {
+            "avg_runs": 35.4,
+            "avg_run_rate": 7.17
+          }
+        }
+      }
+    }
+  },
+  "Kensington Oval": {
+    "display_name": "Kensington Oval, Bridgetown, Barbados",
+    "formats": {
+      "ODI": {
+        "matches_with_data": 35,
+        "avg_first_innings_score": 219.0,
+        "avg_first_innings_wickets": 8.6,
+        "avg_second_innings_score": 191.1,
+        "highest_total": 364,
+        "lowest_total": 8,
+        "highest_successful_chase": 364,
+        "lowest_score_defended": 201,
+        "toss_bat_first_pct": 31.4,
+        "win_pct_batting_first": 35.3,
+        "win_pct_bowling_first": 64.7,
+        "matches_with_result": 34,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 38.1,
+            "avg_run_rate": 3.91
+          },
+          "middle": {
+            "avg_runs": 125.3,
+            "avg_run_rate": 4.44
+          },
+          "death": {
+            "avg_runs": 44.0,
+            "avg_run_rate": 6.47
+          }
+        }
+      },
+      "T20": {
+        "matches_with_data": 41,
+        "avg_first_innings_score": 145.0,
+        "avg_first_innings_wickets": 7.0,
+        "avg_second_innings_score": 134.3,
+        "highest_total": 224,
+        "lowest_total": 10,
+        "highest_successful_chase": 183,
+        "lowest_score_defended": 106,
+        "toss_bat_first_pct": 48.8,
+        "win_pct_batting_first": 57.9,
+        "win_pct_bowling_first": 42.1,
+        "matches_with_result": 38,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 42.2,
+            "avg_run_rate": 7.03
+          },
+          "middle": {
+            "avg_runs": 56.6,
+            "avg_run_rate": 6.56
+          },
+          "death": {
+            "avg_runs": 39.1,
+            "avg_run_rate": 8.74
+          }
+        }
+      }
+    }
+  },
+  "Queens Sports Club": {
+    "display_name": "Queens Sports Club, Bulawayo",
+    "formats": {
+      "T20": {
+        "matches_with_data": 28,
+        "avg_first_innings_score": 155.3,
+        "avg_first_innings_wickets": 6.6,
+        "avg_second_innings_score": 130.6,
+        "highest_total": 236,
+        "lowest_total": 57,
+        "highest_successful_chase": 170,
+        "lowest_score_defended": 102,
+        "toss_bat_first_pct": 64.3,
+        "win_pct_batting_first": 71.4,
+        "win_pct_bowling_first": 28.6,
+        "matches_with_result": 28,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 45.8,
+            "avg_run_rate": 7.62
+          },
+          "middle": {
+            "avg_runs": 61.2,
+            "avg_run_rate": 6.87
+          },
+          "death": {
+            "avg_runs": 42.4,
+            "avg_run_rate": 8.93
+          }
+        }
+      },
+      "ODI": {
+        "matches_with_data": 59,
+        "avg_first_innings_score": 233.3,
+        "avg_first_innings_wickets": 8.0,
+        "avg_second_innings_score": 198.7,
+        "highest_total": 399,
+        "lowest_total": 55,
+        "highest_successful_chase": 329,
+        "lowest_score_defended": 203,
+        "toss_bat_first_pct": 40.7,
+        "win_pct_batting_first": 49.1,
+        "win_pct_bowling_first": 50.9,
+        "matches_with_result": 55,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 40.8,
+            "avg_run_rate": 4.08
+          },
+          "middle": {
+            "avg_runs": 126.2,
+            "avg_run_rate": 4.52
+          },
+          "death": {
+            "avg_runs": 56.0,
+            "avg_run_rate": 7.67
+          }
+        }
+      },
+      "ODM": {
+        "matches_with_data": 2,
+        "avg_first_innings_score": 264.5,
+        "avg_first_innings_wickets": 8.0,
+        "avg_second_innings_score": 208.5,
+        "highest_total": 380,
+        "lowest_total": 149,
+        "highest_successful_chase": 153,
+        "lowest_score_defended": 380,
+        "toss_bat_first_pct": 100.0,
+        "win_pct_batting_first": 50.0,
+        "win_pct_bowling_first": 50.0,
+        "matches_with_result": 2,
+        "confidence": "low",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 60.5,
+            "avg_run_rate": 6.05
+          },
+          "middle": {
+            "avg_runs": 132.5,
+            "avg_run_rate": 4.42
+          },
+          "death": {
+            "avg_runs": 61.0,
+            "avg_run_rate": 6.91
+          }
+        }
+      }
+    }
+  },
+  "Lord's": {
+    "display_name": "Lord's, London",
+    "formats": {
+      "ODI": {
+        "matches_with_data": 45,
+        "avg_first_innings_score": 249.5,
+        "avg_first_innings_wickets": 8.0,
+        "avg_second_innings_score": 215.4,
+        "highest_total": 387,
+        "lowest_total": 15,
+        "highest_successful_chase": 286,
+        "lowest_score_defended": 169,
+        "toss_bat_first_pct": 40.0,
+        "win_pct_batting_first": 64.3,
+        "win_pct_bowling_first": 35.7,
+        "matches_with_result": 42,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 40.7,
+            "avg_run_rate": 4.07
+          },
+          "middle": {
+            "avg_runs": 139.3,
+            "avg_run_rate": 4.77
+          },
+          "death": {
+            "avg_runs": 59.0,
+            "avg_run_rate": 7.19
+          }
+        }
+      },
+      "T20": {
+        "matches_with_data": 16,
+        "avg_first_innings_score": 156.8,
+        "avg_first_innings_wickets": 5.9,
+        "avg_second_innings_score": 137.9,
+        "highest_total": 199,
+        "lowest_total": 93,
+        "highest_successful_chase": 172,
+        "lowest_score_defended": 128,
+        "toss_bat_first_pct": 43.8,
+        "win_pct_batting_first": 53.3,
+        "win_pct_bowling_first": 46.7,
+        "matches_with_result": 15,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 41.7,
+            "avg_run_rate": 6.95
+          },
+          "middle": {
+            "avg_runs": 63.4,
+            "avg_run_rate": 7.04
+          },
+          "death": {
+            "avg_runs": 46.1,
+            "avg_run_rate": 9.63
+          }
+        }
+      }
+    }
+  },
+  "Providence Stadium": {
+    "display_name": "Providence Stadium, Guyana",
+    "formats": {
+      "ODI": {
+        "matches_with_data": 28,
+        "avg_first_innings_score": 211.9,
+        "avg_first_innings_wickets": 8.0,
+        "avg_second_innings_score": 191.7,
+        "highest_total": 309,
+        "lowest_total": 54,
+        "highest_successful_chase": 309,
+        "lowest_score_defended": 189,
+        "toss_bat_first_pct": 42.9,
+        "win_pct_batting_first": 48.1,
+        "win_pct_bowling_first": 51.9,
+        "matches_with_result": 27,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 37.6,
+            "avg_run_rate": 3.76
+          },
+          "middle": {
+            "avg_runs": 117.0,
+            "avg_run_rate": 4.15
+          },
+          "death": {
+            "avg_runs": 47.3,
+            "avg_run_rate": 6.74
+          }
+        }
+      },
+      "T20": {
+        "matches_with_data": 31,
+        "avg_first_innings_score": 128.4,
+        "avg_first_innings_wickets": 6.4,
+        "avg_second_innings_score": 96.8,
+        "highest_total": 194,
+        "lowest_total": 14,
+        "highest_successful_chase": 169,
+        "lowest_score_defended": 50,
+        "toss_bat_first_pct": 54.8,
+        "win_pct_batting_first": 53.6,
+        "win_pct_bowling_first": 46.4,
+        "matches_with_result": 28,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 35.4,
+            "avg_run_rate": 6.15
+          },
+          "middle": {
+            "avg_runs": 51.5,
+            "avg_run_rate": 6.27
+          },
+          "death": {
+            "avg_runs": 35.8,
+            "avg_run_rate": 8.26
+          }
+        }
+      }
+    }
+  },
+  "Sophia Gardens": {
+    "display_name": "Sophia Gardens, Cardiff",
+    "formats": {
+      "ODI": {
+        "matches_with_data": 27,
+        "avg_first_innings_score": 232.7,
+        "avg_first_innings_wickets": 7.7,
+        "avg_second_innings_score": 217.8,
+        "highest_total": 386,
+        "lowest_total": 6,
+        "highest_successful_chase": 312,
+        "lowest_score_defended": 169,
+        "toss_bat_first_pct": 14.8,
+        "win_pct_batting_first": 30.4,
+        "win_pct_bowling_first": 69.6,
+        "matches_with_result": 23,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 45.8,
+            "avg_run_rate": 4.78
+          },
+          "middle": {
+            "avg_runs": 131.3,
+            "avg_run_rate": 5.06
+          },
+          "death": {
+            "avg_runs": 47.6,
+            "avg_run_rate": 7.21
+          }
+        }
+      },
+      "T20": {
+        "matches_with_data": 12,
+        "avg_first_innings_score": 145.6,
+        "avg_first_innings_wickets": 6.3,
+        "avg_second_innings_score": 135.9,
+        "highest_total": 207,
+        "lowest_total": 54,
+        "highest_successful_chase": 194,
+        "lowest_score_defended": 97,
+        "toss_bat_first_pct": 33.3,
+        "win_pct_batting_first": 33.3,
+        "win_pct_bowling_first": 66.7,
+        "matches_with_result": 12,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 40.1,
+            "avg_run_rate": 6.68
+          },
+          "middle": {
+            "avg_runs": 63.6,
+            "avg_run_rate": 7.57
+          },
+          "death": {
+            "avg_runs": 37.7,
+            "avg_run_rate": 8.42
+          }
+        }
+      }
+    }
+  },
+  "Bready Cricket Club": {
+    "display_name": "Bready Cricket Club, Magheramason, Bready",
+    "formats": {
+      "ODI": {
+        "matches_with_data": 4,
+        "avg_first_innings_score": 255.2,
+        "avg_first_innings_wickets": 9.0,
+        "avg_second_innings_score": 240.8,
+        "highest_total": 270,
+        "lowest_total": 193,
+        "highest_successful_chase": 270,
+        "lowest_score_defended": 257,
+        "toss_bat_first_pct": 0.0,
+        "win_pct_batting_first": 25.0,
+        "win_pct_bowling_first": 75.0,
+        "matches_with_result": 4,
+        "confidence": "low",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 37.5,
+            "avg_run_rate": 3.75
+          },
+          "middle": {
+            "avg_runs": 147.8,
+            "avg_run_rate": 4.92
+          },
+          "death": {
+            "avg_runs": 55.2,
+            "avg_run_rate": 5.67
+          }
+        }
+      },
+      "T20": {
+        "matches_with_data": 13,
+        "avg_first_innings_score": 136.6,
+        "avg_first_innings_wickets": 5.6,
+        "avg_second_innings_score": 114.3,
+        "highest_total": 256,
+        "lowest_total": 28,
+        "highest_successful_chase": 167,
+        "lowest_score_defended": 54,
+        "toss_bat_first_pct": 38.5,
+        "win_pct_batting_first": 72.7,
+        "win_pct_bowling_first": 27.3,
+        "matches_with_result": 11,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 38.2,
+            "avg_run_rate": 6.36
+          },
+          "middle": {
+            "avg_runs": 59.8,
+            "avg_run_rate": 7.63
+          },
+          "death": {
+            "avg_runs": 30.6,
+            "avg_run_rate": 8.84
+          }
+        }
+      },
+      "IT20": {
+        "matches_with_data": 3,
+        "avg_first_innings_score": 128.3,
+        "avg_first_innings_wickets": 8.3,
+        "avg_second_innings_score": 121.0,
+        "highest_total": 154,
+        "lowest_total": 87,
+        "highest_successful_chase": 154,
+        "lowest_score_defended": 145,
+        "toss_bat_first_pct": 0.0,
+        "win_pct_batting_first": 33.3,
+        "win_pct_bowling_first": 66.7,
+        "matches_with_result": 3,
+        "confidence": "low",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 41.3,
+            "avg_run_rate": 6.89
+          },
+          "middle": {
+            "avg_runs": 56.0,
+            "avg_run_rate": 6.22
+          },
+          "death": {
+            "avg_runs": 26.7,
+            "avg_run_rate": 6.4
           }
         }
       }
@@ -37,31 +914,128 @@
     "display_name": "Svanholm Park, Brondby",
     "formats": {
       "T20": {
-        "matches_with_data": 19,
-        "avg_first_innings_score": 146.8,
-        "avg_first_innings_wickets": 7.5,
-        "avg_second_innings_score": 117.5,
+        "matches_with_data": 24,
+        "avg_first_innings_score": 145.6,
+        "avg_first_innings_wickets": 7.4,
+        "avg_second_innings_score": 113.9,
         "highest_total": 203,
-        "lowest_total": 33,
+        "lowest_total": 30,
         "highest_successful_chase": 192,
-        "lowest_score_defended": 164,
-        "toss_bat_first_pct": 36.8,
-        "win_pct_batting_first": 36.8,
-        "win_pct_bowling_first": 63.2,
-        "matches_with_result": 19,
+        "lowest_score_defended": 162,
+        "toss_bat_first_pct": 45.8,
+        "win_pct_batting_first": 41.7,
+        "win_pct_bowling_first": 58.3,
+        "matches_with_result": 24,
         "confidence": "high",
         "phase_breakdown": {
           "powerplay": {
-            "avg_runs": 40.8,
-            "avg_run_rate": 6.8
+            "avg_runs": 39.7,
+            "avg_run_rate": 6.62
           },
           "middle": {
             "avg_runs": 59.5,
-            "avg_run_rate": 6.61
+            "avg_run_rate": 6.62
           },
           "death": {
+            "avg_runs": 39.5,
+            "avg_run_rate": 7.98
+          }
+        }
+      }
+    }
+  },
+  "Koge Cricket Club": {
+    "display_name": "Koge Cricket Club",
+    "formats": {
+      "T20": {
+        "matches_with_data": 15,
+        "avg_first_innings_score": 136.5,
+        "avg_first_innings_wickets": 7.3,
+        "avg_second_innings_score": 123.7,
+        "highest_total": 201,
+        "lowest_total": 50,
+        "highest_successful_chase": 181,
+        "lowest_score_defended": 93,
+        "toss_bat_first_pct": 40.0,
+        "win_pct_batting_first": 40.0,
+        "win_pct_bowling_first": 60.0,
+        "matches_with_result": 15,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
             "avg_runs": 39.7,
-            "avg_run_rate": 8.02
+            "avg_run_rate": 6.62
+          },
+          "middle": {
+            "avg_runs": 54.3,
+            "avg_run_rate": 6.04
+          },
+          "death": {
+            "avg_runs": 32.8,
+            "avg_run_rate": 6.93
+          }
+        }
+      }
+    }
+  },
+  "Edgbaston": {
+    "display_name": "Edgbaston, Birmingham",
+    "formats": {
+      "ODI": {
+        "matches_with_data": 34,
+        "avg_first_innings_score": 251.8,
+        "avg_first_innings_wickets": 8.0,
+        "avg_second_innings_score": 194.2,
+        "highest_total": 408,
+        "lowest_total": 37,
+        "highest_successful_chase": 332,
+        "lowest_score_defended": 129,
+        "toss_bat_first_pct": 38.2,
+        "win_pct_batting_first": 44.8,
+        "win_pct_bowling_first": 55.2,
+        "matches_with_result": 29,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 45.5,
+            "avg_run_rate": 4.55
+          },
+          "middle": {
+            "avg_runs": 137.4,
+            "avg_run_rate": 4.91
+          },
+          "death": {
+            "avg_runs": 59.1,
+            "avg_run_rate": 7.27
+          }
+        }
+      },
+      "T20": {
+        "matches_with_data": 32,
+        "avg_first_innings_score": 147.9,
+        "avg_first_innings_wickets": 6.7,
+        "avg_second_innings_score": 126.5,
+        "highest_total": 221,
+        "lowest_total": 46,
+        "highest_successful_chase": 168,
+        "lowest_score_defended": 118,
+        "toss_bat_first_pct": 50.0,
+        "win_pct_batting_first": 62.5,
+        "win_pct_bowling_first": 37.5,
+        "matches_with_result": 32,
+        "confidence": "high",
+        "phase_breakdown": {
+          "powerplay": {
+            "avg_runs": 39.0,
+            "avg_run_rate": 6.51
+          },
+          "middle": {
+            "avg_runs": 61.4,
+            "avg_run_rate": 6.92
+          },
+          "death": {
+            "avg_runs": 41.0,
+            "avg_run_rate": 8.74
           }
         }
       }
@@ -159,253 +1133,6 @@
           "death": {
             "avg_runs": 61.8,
             "avg_run_rate": 7.79
-          }
-        }
-      }
-    }
-  },
-  "Providence Stadium": {
-    "display_name": "Providence Stadium, Guyana",
-    "formats": {
-      "ODI": {
-        "matches_with_data": 26,
-        "avg_first_innings_score": 217.5,
-        "avg_first_innings_wickets": 7.9,
-        "avg_second_innings_score": 195.8,
-        "highest_total": 309,
-        "lowest_total": 54,
-        "highest_successful_chase": 309,
-        "lowest_score_defended": 189,
-        "toss_bat_first_pct": 46.2,
-        "win_pct_batting_first": 52.0,
-        "win_pct_bowling_first": 48.0,
-        "matches_with_result": 25,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 36.8,
-            "avg_run_rate": 3.68
-          },
-          "middle": {
-            "avg_runs": 119.4,
-            "avg_run_rate": 4.22
-          },
-          "death": {
-            "avg_runs": 51.0,
-            "avg_run_rate": 6.74
-          }
-        }
-      },
-      "T20": {
-        "matches_with_data": 31,
-        "avg_first_innings_score": 128.4,
-        "avg_first_innings_wickets": 6.4,
-        "avg_second_innings_score": 96.8,
-        "highest_total": 194,
-        "lowest_total": 14,
-        "highest_successful_chase": 169,
-        "lowest_score_defended": 50,
-        "toss_bat_first_pct": 54.8,
-        "win_pct_batting_first": 53.6,
-        "win_pct_bowling_first": 46.4,
-        "matches_with_result": 28,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 35.4,
-            "avg_run_rate": 6.15
-          },
-          "middle": {
-            "avg_runs": 51.5,
-            "avg_run_rate": 6.27
-          },
-          "death": {
-            "avg_runs": 35.8,
-            "avg_run_rate": 8.26
-          }
-        }
-      }
-    }
-  },
-  "Harare Sports Club": {
-    "display_name": "Harare Sports Club",
-    "formats": {
-      "ODI": {
-        "matches_with_data": 127,
-        "avg_first_innings_score": 234.0,
-        "avg_first_innings_wickets": 8.1,
-        "avg_second_innings_score": 202.8,
-        "highest_total": 408,
-        "lowest_total": 55,
-        "highest_successful_chase": 328,
-        "lowest_score_defended": 141,
-        "toss_bat_first_pct": 18.9,
-        "win_pct_batting_first": 44.4,
-        "win_pct_bowling_first": 55.6,
-        "matches_with_result": 124,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 36.3,
-            "avg_run_rate": 3.63
-          },
-          "middle": {
-            "avg_runs": 130.7,
-            "avg_run_rate": 4.46
-          },
-          "death": {
-            "avg_runs": 56.1,
-            "avg_run_rate": 6.87
-          }
-        }
-      },
-      "T20": {
-        "matches_with_data": 75,
-        "avg_first_innings_score": 155.7,
-        "avg_first_innings_wickets": 6.3,
-        "avg_second_innings_score": 132.9,
-        "highest_total": 259,
-        "lowest_total": 6,
-        "highest_successful_chase": 194,
-        "lowest_score_defended": 114,
-        "toss_bat_first_pct": 30.7,
-        "win_pct_batting_first": 55.6,
-        "win_pct_bowling_first": 44.4,
-        "matches_with_result": 72,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 42.0,
-            "avg_run_rate": 7.0
-          },
-          "middle": {
-            "avg_runs": 65.3,
-            "avg_run_rate": 7.4
-          },
-          "death": {
-            "avg_runs": 42.0,
-            "avg_run_rate": 8.91
-          }
-        }
-      },
-      "ODM": {
-        "matches_with_data": 6,
-        "avg_first_innings_score": 240.2,
-        "avg_first_innings_wickets": 7.5,
-        "avg_second_innings_score": 164.7,
-        "highest_total": 309,
-        "lowest_total": 77,
-        "highest_successful_chase": 177,
-        "lowest_score_defended": 247,
-        "toss_bat_first_pct": 33.3,
-        "win_pct_batting_first": 66.7,
-        "win_pct_bowling_first": 33.3,
-        "matches_with_result": 6,
-        "confidence": "medium",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 49.0,
-            "avg_run_rate": 4.9
-          },
-          "middle": {
-            "avg_runs": 124.7,
-            "avg_run_rate": 4.15
-          },
-          "death": {
-            "avg_runs": 51.2,
-            "avg_run_rate": 5.63
-          }
-        }
-      }
-    }
-  },
-  "Bready Cricket Club": {
-    "display_name": "Bready Cricket Club, Magheramason, Bready",
-    "formats": {
-      "ODI": {
-        "matches_with_data": 2,
-        "avg_first_innings_score": 261.5,
-        "avg_first_innings_wickets": 9.5,
-        "avg_second_innings_score": 264.0,
-        "highest_total": 270,
-        "lowest_total": 254,
-        "highest_successful_chase": 270,
-        "lowest_score_defended": null,
-        "toss_bat_first_pct": 0.0,
-        "win_pct_batting_first": 0.0,
-        "win_pct_bowling_first": 100.0,
-        "matches_with_result": 2,
-        "confidence": "low",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 39.0,
-            "avg_run_rate": 3.9
-          },
-          "middle": {
-            "avg_runs": 154.0,
-            "avg_run_rate": 5.13
-          },
-          "death": {
-            "avg_runs": 57.0,
-            "avg_run_rate": 6.0
-          }
-        }
-      },
-      "T20": {
-        "matches_with_data": 13,
-        "avg_first_innings_score": 136.6,
-        "avg_first_innings_wickets": 5.6,
-        "avg_second_innings_score": 114.3,
-        "highest_total": 256,
-        "lowest_total": 28,
-        "highest_successful_chase": 167,
-        "lowest_score_defended": 54,
-        "toss_bat_first_pct": 38.5,
-        "win_pct_batting_first": 72.7,
-        "win_pct_bowling_first": 27.3,
-        "matches_with_result": 11,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 38.2,
-            "avg_run_rate": 6.36
-          },
-          "middle": {
-            "avg_runs": 59.8,
-            "avg_run_rate": 7.63
-          },
-          "death": {
-            "avg_runs": 30.6,
-            "avg_run_rate": 8.84
-          }
-        }
-      },
-      "IT20": {
-        "matches_with_data": 3,
-        "avg_first_innings_score": 128.3,
-        "avg_first_innings_wickets": 8.3,
-        "avg_second_innings_score": 121.0,
-        "highest_total": 154,
-        "lowest_total": 87,
-        "highest_successful_chase": 154,
-        "lowest_score_defended": 145,
-        "toss_bat_first_pct": 0.0,
-        "win_pct_batting_first": 33.3,
-        "win_pct_bowling_first": 66.7,
-        "matches_with_result": 3,
-        "confidence": "low",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 41.3,
-            "avg_run_rate": 6.89
-          },
-          "middle": {
-            "avg_runs": 56.0,
-            "avg_run_rate": 6.22
-          },
-          "death": {
-            "avg_runs": 26.7,
-            "avg_run_rate": 6.4
           }
         }
       }
@@ -561,69 +1288,6 @@
           "death": {
             "avg_runs": 65.0,
             "avg_run_rate": 8.31
-          }
-        }
-      }
-    }
-  },
-  "Lord's": {
-    "display_name": "Lord's, London",
-    "formats": {
-      "T20": {
-        "matches_with_data": 16,
-        "avg_first_innings_score": 156.8,
-        "avg_first_innings_wickets": 5.9,
-        "avg_second_innings_score": 137.9,
-        "highest_total": 199,
-        "lowest_total": 93,
-        "highest_successful_chase": 172,
-        "lowest_score_defended": 128,
-        "toss_bat_first_pct": 43.8,
-        "win_pct_batting_first": 53.3,
-        "win_pct_bowling_first": 46.7,
-        "matches_with_result": 15,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 41.7,
-            "avg_run_rate": 6.95
-          },
-          "middle": {
-            "avg_runs": 63.4,
-            "avg_run_rate": 7.04
-          },
-          "death": {
-            "avg_runs": 46.1,
-            "avg_run_rate": 9.63
-          }
-        }
-      },
-      "ODI": {
-        "matches_with_data": 44,
-        "avg_first_innings_score": 246.4,
-        "avg_first_innings_wickets": 8.1,
-        "avg_second_innings_score": 212.2,
-        "highest_total": 330,
-        "lowest_total": 15,
-        "highest_successful_chase": 286,
-        "lowest_score_defended": 169,
-        "toss_bat_first_pct": 38.6,
-        "win_pct_batting_first": 63.4,
-        "win_pct_bowling_first": 36.6,
-        "matches_with_result": 41,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 40.5,
-            "avg_run_rate": 4.05
-          },
-          "middle": {
-            "avg_runs": 137.9,
-            "avg_run_rate": 4.73
-          },
-          "death": {
-            "avg_runs": 57.7,
-            "avg_run_rate": 7.06
           }
         }
       }
@@ -1216,69 +1880,6 @@
       }
     }
   },
-  "Namibia Cricket Ground": {
-    "display_name": "Namibia Cricket Ground, Windhoek",
-    "formats": {
-      "T20": {
-        "matches_with_data": 23,
-        "avg_first_innings_score": 133.2,
-        "avg_first_innings_wickets": 6.9,
-        "avg_second_innings_score": 117.3,
-        "highest_total": 230,
-        "lowest_total": 42,
-        "highest_successful_chase": 187,
-        "lowest_score_defended": 109,
-        "toss_bat_first_pct": 47.8,
-        "win_pct_batting_first": 34.8,
-        "win_pct_bowling_first": 65.2,
-        "matches_with_result": 23,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 36.5,
-            "avg_run_rate": 6.09
-          },
-          "middle": {
-            "avg_runs": 57.9,
-            "avg_run_rate": 6.49
-          },
-          "death": {
-            "avg_runs": 31.8,
-            "avg_run_rate": 7.51
-          }
-        }
-      },
-      "ODI": {
-        "matches_with_data": 5,
-        "avg_first_innings_score": 207.2,
-        "avg_first_innings_wickets": 8.2,
-        "avg_second_innings_score": 211.8,
-        "highest_total": 274,
-        "lowest_total": 151,
-        "highest_successful_chase": 274,
-        "lowest_score_defended": 163,
-        "toss_bat_first_pct": 20.0,
-        "win_pct_batting_first": 25.0,
-        "win_pct_bowling_first": 75.0,
-        "matches_with_result": 4,
-        "confidence": "medium",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 41.8,
-            "avg_run_rate": 4.18
-          },
-          "middle": {
-            "avg_runs": 111.4,
-            "avg_run_rate": 4.28
-          },
-          "death": {
-            "avg_runs": 45.4,
-            "avg_run_rate": 6.36
-          }
-        }
-      }
-    }
-  },
   "Headingley": {
     "display_name": "Headingley, Leeds",
     "formats": {
@@ -1337,69 +1938,6 @@
           "death": {
             "avg_runs": 58.9,
             "avg_run_rate": 7.61
-          }
-        }
-      }
-    }
-  },
-  "Moara Vlasiei Cricket Ground": {
-    "display_name": "Moara Vlasiei Cricket Ground, Ilfov County",
-    "formats": {
-      "T20": {
-        "matches_with_data": 67,
-        "avg_first_innings_score": 153.5,
-        "avg_first_innings_wickets": 7.1,
-        "avg_second_innings_score": 132.4,
-        "highest_total": 232,
-        "lowest_total": 41,
-        "highest_successful_chase": 195,
-        "lowest_score_defended": 108,
-        "toss_bat_first_pct": 47.8,
-        "win_pct_batting_first": 55.2,
-        "win_pct_bowling_first": 44.8,
-        "matches_with_result": 67,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 42.1,
-            "avg_run_rate": 7.01
-          },
-          "middle": {
-            "avg_runs": 58.9,
-            "avg_run_rate": 6.67
-          },
-          "death": {
-            "avg_runs": 33.4,
-            "avg_run_rate": 7.89
-          }
-        }
-      },
-      "IT20": {
-        "matches_with_data": 1,
-        "avg_first_innings_score": 150.0,
-        "avg_first_innings_wickets": 8.0,
-        "avg_second_innings_score": 153.0,
-        "highest_total": 153,
-        "lowest_total": 150,
-        "highest_successful_chase": 153,
-        "lowest_score_defended": null,
-        "toss_bat_first_pct": 0.0,
-        "win_pct_batting_first": 0.0,
-        "win_pct_bowling_first": 100.0,
-        "matches_with_result": 1,
-        "confidence": "low",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 20.0,
-            "avg_run_rate": 3.33
-          },
-          "middle": {
-            "avg_runs": 66.0,
-            "avg_run_rate": 7.33
-          },
-          "death": {
-            "avg_runs": 48.0,
-            "avg_run_rate": 9.6
           }
         }
       }
@@ -1565,69 +2103,6 @@
           "death": {
             "avg_runs": 25.2,
             "avg_run_rate": 5.67
-          }
-        }
-      }
-    }
-  },
-  "Edgbaston": {
-    "display_name": "Edgbaston, Birmingham",
-    "formats": {
-      "T20": {
-        "matches_with_data": 32,
-        "avg_first_innings_score": 147.9,
-        "avg_first_innings_wickets": 6.7,
-        "avg_second_innings_score": 126.5,
-        "highest_total": 221,
-        "lowest_total": 46,
-        "highest_successful_chase": 168,
-        "lowest_score_defended": 118,
-        "toss_bat_first_pct": 50.0,
-        "win_pct_batting_first": 62.5,
-        "win_pct_bowling_first": 37.5,
-        "matches_with_result": 32,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 39.0,
-            "avg_run_rate": 6.51
-          },
-          "middle": {
-            "avg_runs": 61.4,
-            "avg_run_rate": 6.92
-          },
-          "death": {
-            "avg_runs": 41.0,
-            "avg_run_rate": 8.74
-          }
-        }
-      },
-      "ODI": {
-        "matches_with_data": 33,
-        "avg_first_innings_score": 251.6,
-        "avg_first_innings_wickets": 7.9,
-        "avg_second_innings_score": 192.0,
-        "highest_total": 408,
-        "lowest_total": 37,
-        "highest_successful_chase": 332,
-        "lowest_score_defended": 129,
-        "toss_bat_first_pct": 36.4,
-        "win_pct_batting_first": 46.4,
-        "win_pct_bowling_first": 53.6,
-        "matches_with_result": 28,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 45.3,
-            "avg_run_rate": 4.53
-          },
-          "middle": {
-            "avg_runs": 137.0,
-            "avg_run_rate": 4.91
-          },
-          "death": {
-            "avg_runs": 59.2,
-            "avg_run_rate": 7.28
           }
         }
       }
@@ -3871,69 +4346,6 @@
           "death": {
             "avg_runs": 75.1,
             "avg_run_rate": 9.17
-          }
-        }
-      }
-    }
-  },
-  "Sophia Gardens": {
-    "display_name": "Sophia Gardens, Cardiff",
-    "formats": {
-      "ODI": {
-        "matches_with_data": 26,
-        "avg_first_innings_score": 232.7,
-        "avg_first_innings_wickets": 7.6,
-        "avg_second_innings_score": 217.0,
-        "highest_total": 386,
-        "lowest_total": 6,
-        "highest_successful_chase": 312,
-        "lowest_score_defended": 169,
-        "toss_bat_first_pct": 15.4,
-        "win_pct_batting_first": 31.8,
-        "win_pct_bowling_first": 68.2,
-        "matches_with_result": 22,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 45.3,
-            "avg_run_rate": 4.74
-          },
-          "middle": {
-            "avg_runs": 130.7,
-            "avg_run_rate": 5.07
-          },
-          "death": {
-            "avg_runs": 48.5,
-            "avg_run_rate": 7.25
-          }
-        }
-      },
-      "T20": {
-        "matches_with_data": 12,
-        "avg_first_innings_score": 145.6,
-        "avg_first_innings_wickets": 6.3,
-        "avg_second_innings_score": 135.9,
-        "highest_total": 207,
-        "lowest_total": 54,
-        "highest_successful_chase": 194,
-        "lowest_score_defended": 97,
-        "toss_bat_first_pct": 33.3,
-        "win_pct_batting_first": 33.3,
-        "win_pct_bowling_first": 66.7,
-        "matches_with_result": 12,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 40.1,
-            "avg_run_rate": 6.68
-          },
-          "middle": {
-            "avg_runs": 63.6,
-            "avg_run_rate": 7.57
-          },
-          "death": {
-            "avg_runs": 37.7,
-            "avg_run_rate": 8.42
           }
         }
       }
@@ -9347,98 +9759,6 @@
       }
     }
   },
-  "Queens Sports Club": {
-    "display_name": "Queens Sports Club, Bulawayo",
-    "formats": {
-      "T20": {
-        "matches_with_data": 25,
-        "avg_first_innings_score": 154.0,
-        "avg_first_innings_wickets": 6.6,
-        "avg_second_innings_score": 128.9,
-        "highest_total": 236,
-        "lowest_total": 57,
-        "highest_successful_chase": 170,
-        "lowest_score_defended": 102,
-        "toss_bat_first_pct": 68.0,
-        "win_pct_batting_first": 72.0,
-        "win_pct_bowling_first": 28.0,
-        "matches_with_result": 25,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 45.5,
-            "avg_run_rate": 7.57
-          },
-          "middle": {
-            "avg_runs": 60.6,
-            "avg_run_rate": 6.81
-          },
-          "death": {
-            "avg_runs": 41.8,
-            "avg_run_rate": 8.88
-          }
-        }
-      },
-      "ODI": {
-        "matches_with_data": 59,
-        "avg_first_innings_score": 233.3,
-        "avg_first_innings_wickets": 8.0,
-        "avg_second_innings_score": 198.7,
-        "highest_total": 399,
-        "lowest_total": 55,
-        "highest_successful_chase": 329,
-        "lowest_score_defended": 203,
-        "toss_bat_first_pct": 40.7,
-        "win_pct_batting_first": 49.1,
-        "win_pct_bowling_first": 50.9,
-        "matches_with_result": 55,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 40.8,
-            "avg_run_rate": 4.08
-          },
-          "middle": {
-            "avg_runs": 126.2,
-            "avg_run_rate": 4.52
-          },
-          "death": {
-            "avg_runs": 56.0,
-            "avg_run_rate": 7.67
-          }
-        }
-      },
-      "ODM": {
-        "matches_with_data": 2,
-        "avg_first_innings_score": 264.5,
-        "avg_first_innings_wickets": 8.0,
-        "avg_second_innings_score": 208.5,
-        "highest_total": 380,
-        "lowest_total": 149,
-        "highest_successful_chase": 153,
-        "lowest_score_defended": 380,
-        "toss_bat_first_pct": 100.0,
-        "win_pct_batting_first": 50.0,
-        "win_pct_bowling_first": 50.0,
-        "matches_with_result": 2,
-        "confidence": "low",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 60.5,
-            "avg_run_rate": 6.05
-          },
-          "middle": {
-            "avg_runs": 132.5,
-            "avg_run_rate": 4.42
-          },
-          "death": {
-            "avg_runs": 61.0,
-            "avg_run_rate": 6.91
-          }
-        }
-      }
-    }
-  },
   "Takashinga Sports Club": {
     "display_name": "Takashinga Sports Club, Highfield, Harare",
     "formats": {
@@ -10049,74 +10369,6 @@
           "death": {
             "avg_runs": 40.0,
             "avg_run_rate": 8.89
-          }
-        }
-      }
-    }
-  },
-  "Estonian National Cricket and Rugby Field": {
-    "display_name": "Estonian National Cricket and Rugby Field",
-    "formats": {
-      "T20": {
-        "matches_with_data": 10,
-        "avg_first_innings_score": 125.9,
-        "avg_first_innings_wickets": 8.1,
-        "avg_second_innings_score": 102.2,
-        "highest_total": 235,
-        "lowest_total": 38,
-        "highest_successful_chase": 142,
-        "lowest_score_defended": 153,
-        "toss_bat_first_pct": 70.0,
-        "win_pct_batting_first": 40.0,
-        "win_pct_bowling_first": 60.0,
-        "matches_with_result": 10,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 30.7,
-            "avg_run_rate": 5.13
-          },
-          "middle": {
-            "avg_runs": 49.4,
-            "avg_run_rate": 5.49
-          },
-          "death": {
-            "avg_runs": 18.7,
-            "avg_run_rate": 4.38
-          }
-        }
-      }
-    }
-  },
-  "High Performance Oval": {
-    "display_name": "High Performance Oval, Windhoek",
-    "formats": {
-      "T20": {
-        "matches_with_data": 16,
-        "avg_first_innings_score": 126.6,
-        "avg_first_innings_wickets": 6.0,
-        "avg_second_innings_score": 103.2,
-        "highest_total": 228,
-        "lowest_total": 74,
-        "highest_successful_chase": 140,
-        "lowest_score_defended": 95,
-        "toss_bat_first_pct": 68.8,
-        "win_pct_batting_first": 75.0,
-        "win_pct_bowling_first": 25.0,
-        "matches_with_result": 16,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 32.3,
-            "avg_run_rate": 5.39
-          },
-          "middle": {
-            "avg_runs": 50.7,
-            "avg_run_rate": 5.63
-          },
-          "death": {
-            "avg_runs": 36.4,
-            "avg_run_rate": 7.31
           }
         }
       }
@@ -11208,98 +11460,6 @@
       }
     }
   },
-  "Sportpark Maarschalkerweerd": {
-    "display_name": "Sportpark Maarschalkerweerd, Utrecht",
-    "formats": {
-      "T20": {
-        "matches_with_data": 31,
-        "avg_first_innings_score": 118.1,
-        "avg_first_innings_wickets": 6.5,
-        "avg_second_innings_score": 93.2,
-        "highest_total": 217,
-        "lowest_total": 39,
-        "highest_successful_chase": 153,
-        "lowest_score_defended": 87,
-        "toss_bat_first_pct": 32.3,
-        "win_pct_batting_first": 44.8,
-        "win_pct_bowling_first": 55.2,
-        "matches_with_result": 29,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 32.2,
-            "avg_run_rate": 5.36
-          },
-          "middle": {
-            "avg_runs": 48.8,
-            "avg_run_rate": 5.54
-          },
-          "death": {
-            "avg_runs": 29.5,
-            "avg_run_rate": 6.89
-          }
-        }
-      },
-      "ODI": {
-        "matches_with_data": 8,
-        "avg_first_innings_score": 208.2,
-        "avg_first_innings_wickets": 9.2,
-        "avg_second_innings_score": 183.1,
-        "highest_total": 380,
-        "lowest_total": 148,
-        "highest_successful_chase": 205,
-        "lowest_score_defended": 195,
-        "toss_bat_first_pct": 62.5,
-        "win_pct_batting_first": 37.5,
-        "win_pct_bowling_first": 62.5,
-        "matches_with_result": 8,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 36.0,
-            "avg_run_rate": 3.6
-          },
-          "middle": {
-            "avg_runs": 117.1,
-            "avg_run_rate": 3.98
-          },
-          "death": {
-            "avg_runs": 44.6,
-            "avg_run_rate": 5.37
-          }
-        }
-      },
-      "IT20": {
-        "matches_with_data": 4,
-        "avg_first_innings_score": 146.5,
-        "avg_first_innings_wickets": 6.8,
-        "avg_second_innings_score": 73.5,
-        "highest_total": 207,
-        "lowest_total": 25,
-        "highest_successful_chase": 25,
-        "lowest_score_defended": 114,
-        "toss_bat_first_pct": 25.0,
-        "win_pct_batting_first": 75.0,
-        "win_pct_bowling_first": 25.0,
-        "matches_with_result": 4,
-        "confidence": "low",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 41.5,
-            "avg_run_rate": 6.92
-          },
-          "middle": {
-            "avg_runs": 55.0,
-            "avg_run_rate": 6.11
-          },
-          "death": {
-            "avg_runs": 36.5,
-            "avg_run_rate": 7.3
-          }
-        }
-      }
-    }
-  },
   "Forthill": {
     "display_name": "Forthill, Dundee",
     "formats": {
@@ -12347,40 +12507,6 @@
       }
     }
   },
-  "St George's College Ground": {
-    "display_name": "St George's College Ground, Buenos Aires",
-    "formats": {
-      "T20": {
-        "matches_with_data": 9,
-        "avg_first_innings_score": 102.3,
-        "avg_first_innings_wickets": 7.8,
-        "avg_second_innings_score": 68.8,
-        "highest_total": 149,
-        "lowest_total": 41,
-        "highest_successful_chase": 86,
-        "lowest_score_defended": 89,
-        "toss_bat_first_pct": 44.4,
-        "win_pct_batting_first": 77.8,
-        "win_pct_bowling_first": 22.2,
-        "matches_with_result": 9,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 25.4,
-            "avg_run_rate": 4.24
-          },
-          "middle": {
-            "avg_runs": 46.6,
-            "avg_run_rate": 5.17
-          },
-          "death": {
-            "avg_runs": 23.6,
-            "avg_run_rate": 5.55
-          }
-        }
-      }
-    }
-  },
   "Europa Sports Complex": {
     "display_name": "Europa Sports Complex",
     "formats": {
@@ -12803,69 +12929,6 @@
           "death": {
             "avg_runs": 10.0,
             "avg_run_rate": 2.0
-          }
-        }
-      }
-    }
-  },
-  "Kensington Oval": {
-    "display_name": "Kensington Oval, Bridgetown, Barbados",
-    "formats": {
-      "T20": {
-        "matches_with_data": 41,
-        "avg_first_innings_score": 145.0,
-        "avg_first_innings_wickets": 7.0,
-        "avg_second_innings_score": 134.3,
-        "highest_total": 224,
-        "lowest_total": 10,
-        "highest_successful_chase": 183,
-        "lowest_score_defended": 106,
-        "toss_bat_first_pct": 48.8,
-        "win_pct_batting_first": 57.9,
-        "win_pct_bowling_first": 42.1,
-        "matches_with_result": 38,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 42.2,
-            "avg_run_rate": 7.03
-          },
-          "middle": {
-            "avg_runs": 56.6,
-            "avg_run_rate": 6.56
-          },
-          "death": {
-            "avg_runs": 39.1,
-            "avg_run_rate": 8.74
-          }
-        }
-      },
-      "ODI": {
-        "matches_with_data": 33,
-        "avg_first_innings_score": 218.4,
-        "avg_first_innings_wickets": 8.5,
-        "avg_second_innings_score": 188.8,
-        "highest_total": 364,
-        "lowest_total": 8,
-        "highest_successful_chase": 364,
-        "lowest_score_defended": 201,
-        "toss_bat_first_pct": 33.3,
-        "win_pct_batting_first": 37.5,
-        "win_pct_bowling_first": 62.5,
-        "matches_with_result": 32,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 37.9,
-            "avg_run_rate": 3.9
-          },
-          "middle": {
-            "avg_runs": 124.5,
-            "avg_run_rate": 4.42
-          },
-          "death": {
-            "avg_runs": 44.2,
-            "avg_run_rate": 6.52
           }
         }
       }
@@ -13574,69 +13637,6 @@
           "death": {
             "avg_runs": 22.0,
             "avg_run_rate": 5.28
-          }
-        }
-      }
-    }
-  },
-  "Mahinda Rajapaksa International Cricket Stadium": {
-    "display_name": "Mahinda Rajapaksa International Cricket Stadium, Sooriyawewa, Hambantota",
-    "formats": {
-      "T20": {
-        "matches_with_data": 10,
-        "avg_first_innings_score": 127.9,
-        "avg_first_innings_wickets": 5.7,
-        "avg_second_innings_score": 109.9,
-        "highest_total": 182,
-        "lowest_total": 46,
-        "highest_successful_chase": 164,
-        "lowest_score_defended": 78,
-        "toss_bat_first_pct": 40.0,
-        "win_pct_batting_first": 50.0,
-        "win_pct_bowling_first": 50.0,
-        "matches_with_result": 10,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 33.5,
-            "avg_run_rate": 5.58
-          },
-          "middle": {
-            "avg_runs": 53.6,
-            "avg_run_rate": 6.54
-          },
-          "death": {
-            "avg_runs": 35.5,
-            "avg_run_rate": 8.8
-          }
-        }
-      },
-      "ODI": {
-        "matches_with_data": 26,
-        "avg_first_innings_score": 243.8,
-        "avg_first_innings_wickets": 7.2,
-        "avg_second_innings_score": 189.5,
-        "highest_total": 368,
-        "lowest_total": 13,
-        "highest_successful_chase": 312,
-        "lowest_score_defended": 275,
-        "toss_bat_first_pct": 50.0,
-        "win_pct_batting_first": 43.5,
-        "win_pct_bowling_first": 56.5,
-        "matches_with_result": 23,
-        "confidence": "high",
-        "phase_breakdown": {
-          "powerplay": {
-            "avg_runs": 44.0,
-            "avg_run_rate": 4.49
-          },
-          "middle": {
-            "avg_runs": 132.5,
-            "avg_run_rate": 4.97
-          },
-          "death": {
-            "avg_runs": 56.8,
-            "avg_run_rate": 8.12
           }
         }
       }
