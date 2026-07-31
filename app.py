@@ -1565,13 +1565,78 @@ def _detail_is_incomplete(shaped: dict | None) -> bool:
     return not has_batters and not has_commentary
 
 
-def _shape_details_from_carousel(carousel_entry: dict | None) -> dict:
-    """Minimal detail payload for CricketData-only (non-Cricbuzz) matches so the
-    match page still shows the carousel scoreline instead of a blank board."""
+def _innings_has_card(inn: dict | None) -> bool:
+    return bool(inn and ((inn.get("batters") or inn.get("bowlers"))))
+
+
+def _preserve_prior_scorecard(shaped: dict, prior_data: dict | None) -> dict:
+    """Never let a flaky empty RapidAPI poll wipe a previously-good batting card.
+
+    Confirmed regression: a live match had full batters/commentary, then one empty
+    /scard+/comm cycle replaced it with carousel stubs and blanked the board.
+    """
+    if not prior_data:
+        return shaped
+
+    prior_innings = prior_data.get("innings") or []
+    if not shaped.get("innings") and prior_innings:
+        shaped["innings"] = prior_innings
+    if not _innings_has_card(shaped.get("innings1")) and _innings_has_card(prior_data.get("innings1")):
+        shaped["innings1"] = prior_data.get("innings1")
+    if not _innings_has_card(shaped.get("innings2")) and _innings_has_card(prior_data.get("innings2")):
+        shaped["innings2"] = prior_data.get("innings2")
+
+    # Rebuild innings list aliases if we restored 1/2 but list was empty.
+    if not shaped.get("innings") and (shaped.get("innings1") or shaped.get("innings2")):
+        shaped["innings"] = [i for i in (shaped.get("innings1"), shaped.get("innings2")) if i]
+
+    if not shaped.get("ballTracker") and prior_data.get("ballTracker"):
+        shaped["ballTracker"] = prior_data.get("ballTracker")
+    if not shaped.get("liveScore") and prior_data.get("liveScore"):
+        shaped["liveScore"] = prior_data.get("liveScore")
+    if not shaped.get("toss") and prior_data.get("toss"):
+        shaped["toss"] = prior_data.get("toss")
+    return shaped
+
+
+def _shape_details_from_carousel(carousel_entry: dict | None, *, permanent: bool = True) -> dict:
+    """Header-only fallback from the live carousel when full scorecard isn't available.
+
+    For CricketData UUID matches (`permanent=True`) this is the best we can do.
+    For flaky Cricbuzz polls (`permanent=False`) we only fill liveScore — we do
+    NOT invent empty innings shells, which previously rendered as broken
+    "batting card not loaded" columns on the match page.
+    """
     score = (carousel_entry or {}).get("score") or {}
     teams = (carousel_entry or {}).get("teams") or []
     home = score.get("home")
     away = score.get("away")
+    live_score = {
+        "home": home or {"score": "yet to bat", "info": ""},
+        "away": away or {"score": "yet to bat", "info": ""},
+        "target": 0,
+        "crr": 0,
+        "rrr": 0,
+        "lastWicket": "",
+        "customStatus": (carousel_entry or {}).get("chaseNote") or "",
+    }
+
+    if not permanent:
+        return {
+            "toss": None,
+            "venue": (carousel_entry or {}).get("venue") or "",
+            "recentBalls": [],
+            "commentary": [],
+            "currentBowler": "",
+            "innings": [],
+            "innings1": None,
+            "innings2": None,
+            "liveScore": live_score,
+            "ballTracker": [],
+            "detailSource": "carousel_fallback",
+            "detailNote": "Full scorecard is refreshing — showing live totals for now.",
+        }
+
     innings = []
     if home and len(teams) >= 1:
         innings.append({
@@ -1591,15 +1656,6 @@ def _shape_details_from_carousel(carousel_entry: dict | None) -> dict:
             "batters": [],
             "bowlers": [],
         })
-    live_score = {
-        "home": home or {"score": "yet to bat", "info": ""},
-        "away": away or {"score": "yet to bat", "info": ""},
-        "target": 0,
-        "crr": 0,
-        "rrr": 0,
-        "lastWicket": "",
-        "customStatus": (carousel_entry or {}).get("chaseNote") or "",
-    }
     return {
         "toss": None,
         "venue": (carousel_entry or {}).get("venue") or "",
@@ -1634,7 +1690,7 @@ def _refresh_match_detail(match_id: str) -> None:
     # CricketData UUID matches have no Cricbuzz scorecard/commentary endpoints.
     # Serve a carousel-backed stub instead of burning quota on guaranteed 404s.
     if not _is_cricbuzz_match_id(cricbuzz_match_id):
-        shaped = _shape_details_from_carousel(carousel_entry)
+        shaped = _shape_details_from_carousel(carousel_entry, permanent=True)
         _attach_intelligence(shaped, carousel_entry, None, match_id=match_id, commentary=[])
         with _detail_cache_lock:
             _detail_cache[match_id] = {
@@ -1709,10 +1765,12 @@ def _refresh_match_detail(match_id: str) -> None:
     # of replacing it outright, so scrolling back can reach the start of the innings.
     with _detail_cache_lock:
         prior_entry = _detail_cache.get(match_id)
-    prior_commentary = (prior_entry or {}).get("data", {}).get("commentary", []) if prior_entry else []
+    prior_data = (prior_entry or {}).get("data") if prior_entry else None
+    prior_commentary = (prior_data or {}).get("commentary", []) if prior_data else []
     commentary = _merge_commentary(prior_commentary, commentary)
 
     shaped = _shape_match_details_from_cricbuzz(scorecard_data, commentary, miniscore, raw_comwrapper)
+    shaped = _preserve_prior_scorecard(shaped, prior_data)
 
     # Toss result, if we've captured it for this match (see
     # _record_toss_if_new - captured once, while state=="Toss", from the
@@ -1726,7 +1784,7 @@ def _refresh_match_detail(match_id: str) -> None:
     # (the one real gap in the archive-only approach) - at zero extra
     # API cost, since scorecard_data is already being fetched every
     # refresh for the batting/bowling card.
-    shaped["toss"] = _get_archived_toss(match_id)
+    shaped["toss"] = _get_archived_toss(match_id) or shaped.get("toss")
     if shaped["toss"] is None and scorecard_data and carousel_entry:
         scorecard_status = scorecard_data.get("status")
         team1_name = carousel_entry["teams"][0] if carousel_entry.get("teams") else ""
@@ -1736,17 +1794,27 @@ def _refresh_match_detail(match_id: str) -> None:
             shaped["toss"] = fallback_toss
             _record_toss_if_new(match_id, fallback_toss)
 
-    # If scorecard/commentary both came back empty but the carousel already
-    # has a scoreline (common right after a flaky RapidAPI miss), keep the
-    # header populated so the match page isn't a blank board.
+    # If this poll still has no batting card/commentary, keep the HEADER scores
+    # from the carousel — but do NOT invent empty innings columns. That was the
+    # Match Room regression: live Cricbuzz matches rendered two blank
+    # "batting card not loaded" panels plus a permanent-sounding note.
     if _detail_is_incomplete(shaped) and carousel_entry:
-        fallback = _shape_details_from_carousel(carousel_entry)
-        shaped["liveScore"] = shaped.get("liveScore") or fallback["liveScore"]
-        shaped["innings"] = shaped.get("innings") or fallback["innings"]
-        shaped["innings1"] = shaped.get("innings1") or fallback["innings1"]
-        shaped["innings2"] = shaped.get("innings2") or fallback["innings2"]
-        shaped["detailNote"] = fallback.get("detailNote")
+        fallback = _shape_details_from_carousel(carousel_entry, permanent=False)
+        if not shaped.get("liveScore"):
+            shaped["liveScore"] = fallback["liveScore"]
+        else:
+            shaped["liveScore"] = {
+                **shaped["liveScore"],
+                "home": (fallback["liveScore"].get("home") or shaped["liveScore"].get("home")),
+                "away": (fallback["liveScore"].get("away") or shaped["liveScore"].get("away")),
+                "customStatus": fallback["liveScore"].get("customStatus")
+                    or shaped["liveScore"].get("customStatus"),
+            }
         shaped["detailSource"] = "carousel_fallback"
+        shaped["detailNote"] = fallback.get("detailNote")
+    else:
+        shaped.pop("detailNote", None)
+        shaped.pop("detailSource", None)
 
     # Weather (Open-Meteo, free) - fetched once pregame + once per innings
     # change, using coordinates already present in the carousel entry's
