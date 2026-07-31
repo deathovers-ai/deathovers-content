@@ -17,7 +17,9 @@ export default function InsightPanel({ insights }) {
           <span className="insight-deck-label">MATCH ROOM</span>
           <span className="insight-deck-sub">Venue &amp; in-play context, not a live score</span>
         </div>
-        <div className="insight-empty">No tactical reads yet for this match.</div>
+        <div className="insight-empty">
+          No tactical reads yet. Venue-linked insights appear once this ground is in our database; scoreline snapshots populate as soon as the scorecard loads.
+        </div>
         <style>{panelStyles}</style>
       </div>
     );

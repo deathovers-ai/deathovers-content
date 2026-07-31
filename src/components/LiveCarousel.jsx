@@ -444,11 +444,31 @@ export default function LiveCarousel() {
                   </div>
                 )}
 
-                {insights.length > 0 && (
-                  <a href={`/match-room?id=${activeMatchId}`} className="match-room-link">
-                    TACTICAL READS AVAILABLE → MATCH ROOM
-                  </a>
-                )}
+                <div className="tactical-reads">
+                  <div className="tactical-reads-head">
+                    <span className="tactical-reads-label">TACTICAL READS</span>
+                    <a href={`/match-room?id=${activeMatchId}`} className="match-room-link-inline">
+                      OPEN MATCH ROOM →
+                    </a>
+                  </div>
+                  {insights.length > 0 ? (
+                    <div className="tactical-reads-list">
+                      {insights.slice(0, 3).map((insight, i) => (
+                        <div key={i} className="tactical-read-row">
+                          <span className="tactical-read-type">{(insight.type || 'read').replace(/_/g, ' ')}</span>
+                          <span className="tactical-read-headline">{insight.headline || 'Tactical note available'}</span>
+                        </div>
+                      ))}
+                      {insights.length > 3 && (
+                        <div className="tactical-read-more">+{insights.length - 3} more in Match Room</div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="tactical-reads-empty">
+                      Match Room is open — venue context will appear as soon as this ground is in our tactical database.
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* INNINGS DETAIL + LIVE COMMENTARY */}
@@ -740,6 +760,44 @@ export default function LiveCarousel() {
           transition: color 0.2s;
         }
         .match-room-link:hover { color: #fff; }
+
+        .tactical-reads {
+          margin-top: 14px;
+          padding-top: 14px;
+          border-top: 1px solid rgba(240,242,245,0.06);
+        }
+        .tactical-reads-head {
+          display: flex; justify-content: space-between; align-items: center;
+          gap: 12px; margin-bottom: 10px;
+        }
+        .tactical-reads-label {
+          font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
+          letter-spacing: 0.08em; color: var(--bail-amber);
+        }
+        .match-room-link-inline {
+          font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
+          letter-spacing: 0.04em; color: rgba(240,242,245,0.7); text-decoration: none;
+        }
+        .match-room-link-inline:hover { color: #fff; }
+        .tactical-reads-list { display: flex; flex-direction: column; gap: 8px; }
+        .tactical-read-row {
+          display: flex; flex-direction: column; gap: 2px;
+          padding: 8px 10px; border-radius: 4px;
+          background: rgba(245,166,35,0.05); border: 1px solid rgba(245,166,35,0.15);
+        }
+        .tactical-read-type {
+          font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.06em;
+          color: rgba(245,166,35,0.75); text-transform: uppercase;
+        }
+        .tactical-read-headline {
+          font-family: 'Inter', sans-serif; font-size: 13px; color: rgba(240,242,245,0.9); line-height: 1.35;
+        }
+        .tactical-read-more {
+          font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(240,242,245,0.4);
+        }
+        .tactical-reads-empty {
+          font-family: 'Inter', sans-serif; font-size: 12px; color: rgba(240,242,245,0.4); line-height: 1.45;
+        }
         .toss-kicker { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.35); letter-spacing: 0.06em; flex-shrink: 0; }
         .toss-line { font-size: 12px; color: rgba(240,242,245,0.65); font-weight: 500; }
 
