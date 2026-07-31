@@ -1587,9 +1587,13 @@ def get_match_details(match_id: str):
 
     if entry is None:
         if not _quota_has_budget():
-            # No cached detail and no budget left — tell the frontend honestly
-            # instead of silently failing or burning the last calls on a cold view.
-            return jsonify({"error": "Daily API quota exhausted. Try again after reset.", "quotaExhausted": True}), 503
+            # No cached detail and no budget left. Never expose quota/API internals
+            # to customers on a live scoreboard — keep the public error generic.
+            log.warning("Match detail cold-miss blocked for %s — daily quota exhausted", match_id)
+            return jsonify({
+                "error": "Live scorecard temporarily unavailable. Please try again shortly.",
+                "quotaExhausted": True,
+            }), 503
         _refresh_match_detail(match_id)
         with _detail_cache_lock:
             entry = _detail_cache.get(match_id)
