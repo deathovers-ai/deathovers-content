@@ -692,7 +692,8 @@ class InsightEngine:
     def second_innings_comparison(self, venue_key, match_type, current_score, current_wickets,
                                    current_over_decimal, target, balls_remaining,
                                    first_innings_score_at_same_over, phase_name,
-                                   current_phase_runs, current_phase_balls):
+                                   current_phase_runs, current_phase_balls,
+                                   first_innings_phase_runs=None):
         """
         first_innings_score_at_same_over: caller supplies the 1st
         innings' score at the same over mark (from that innings' own
@@ -732,6 +733,21 @@ class InsightEngine:
                     diff_pct = round(((current_phase_rate - venue_phase_rate) / venue_phase_rate) * 100, 1)
                     pointers.append({"label": f"Venue {phase_name.capitalize()} Avg Rate", "value": venue_phase_rate})
                     pointers.append({"label": "vs Venue Avg", "value": round(current_phase_rate - venue_phase_rate, 2), "pct": diff_pct})
+
+            # Successful-chase-only checkpoint. D/L and other adjusted matches
+            # are excluded when chase_phase_context.py creates this dataset.
+            chase = fmt.get("chase_phase_breakdown") or {}
+            chase_phase = (chase.get("phases") or {}).get(phase_name)
+            if chase_phase and chase_phase.get("run_pct_of_target") is not None:
+                base_target = round(target * chase_phase["run_pct_of_target"] / 100)
+                adjusted_target = base_target
+                if phase_data and first_innings_phase_runs is not None and phase_data.get("avg_runs", 0) > 0:
+                    first_deviation = (first_innings_phase_runs - phase_data["avg_runs"]) / phase_data["avg_runs"]
+                    adjusted_target = max(0, round(base_target * (1 + first_deviation)))
+                    pointers.append({"label": "1st Innings Phase", "value": first_innings_phase_runs, "unit": " runs", "pct": round(first_deviation * 100, 1)})
+                pointers.append({"label": f"Historical {phase_name.capitalize()} Target", "value": base_target, "unit": " runs"})
+                pointers.append({"label": "Target-Adjusted Phase Goal", "value": adjusted_target, "unit": " runs"})
+                pointers.append({"label": "Successful Chase Sample", "value": chase.get("successful_chase_sample_size")})
 
         if balls_remaining and balls_remaining > 0:
             runs_needed = target - current_score

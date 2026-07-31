@@ -237,6 +237,7 @@ def get_match_insights(live_state):
             phase_name=phase,
             current_phase_runs=live_state.get("current_phase_runs", 0),
             current_phase_balls=live_state.get("current_phase_balls", 0),
+            first_innings_phase_runs=live_state.get("first_innings_phase_runs"),
         )
         if second_inn:
             insights.append(second_inn)

@@ -29,7 +29,6 @@ from context_repository import (
     phase_set_for_format,
 )
 from metrics_engine import current_run_rate
-from replay_engine import ReplayEngine
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EVENTS_DIR = os.path.join(BASE_DIR, "output", "events")
@@ -160,12 +159,10 @@ def collect_successful_chase_phases():
         total_overs = format_total_overs(match_type)
         phases = phase_set_for_format(total_overs)
 
-        try:
-            engine = ReplayEngine(match_id)
-            innings_data = _phase_bucket_innings(engine.all_events, phases)
-        except Exception:
-            skipped_other += 1
-            continue
+        # ``data`` has just been read above. Re-opening the same event file
+        # through ReplayEngine doubles disk I/O across the corpus and does not
+        # add any replay behaviour needed for phase bucketing.
+        innings_data = _phase_bucket_innings(data["events"], phases)
 
         first = innings_data.get(1)
         second = innings_data.get(2)
