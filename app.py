@@ -100,9 +100,10 @@ NO_LIVE_BACKOFF_SECONDS = int(os.environ.get("NO_LIVE_BACKOFF_SECONDS", 1800))  
 SITE_IDLE_BACKOFF_SECONDS = int(os.environ.get("SITE_IDLE_BACKOFF_SECONDS", 3600))
 REQUEST_TIMEOUT_SECONDS = 10
 
-# RapidAPI free-tier daily cap for cricbuzz-cricket2. Set a few calls below your
-# actual plan limit as a safety margin. Override via env var if your plan differs.
-RAPIDAPI_DAILY_CALL_CAP = int(os.environ.get("RAPIDAPI_DAILY_CALL_CAP", 450))
+# RapidAPI BASIC daily cap for cricbuzz-cricket2 is often ~100, NOT 450.
+# Keep a safety margin below the real plan limit. Override via env, e.g.
+# RAPIDAPI_DAILY_CALL_CAP=90 if your RapidAPI dashboard shows 100/day.
+RAPIDAPI_DAILY_CALL_CAP = int(os.environ.get("RAPIDAPI_DAILY_CALL_CAP", 90))
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -124,14 +125,18 @@ _detail_cache: dict[str, dict] = {}
 # ---------------------------------------------------------------------------
 # Global RapidAPI quota tracker
 # ---------------------------------------------------------------------------
-# Every single call to _cricbuzz_get is counted here, regardless of caller.
-# This is the one source of truth for "how many RapidAPI calls have we made today".
+# Local call counts reset whenever Render restarts, but RapidAPI's real daily
+# quota does NOT. So we also trip a provider-side breaker when RapidAPI returns
+# "exceeded the DAILY quota" and refuse further calls until the UTC day rolls.
 
 _quota_lock = threading.Lock()
 _quota = {
     "calls_today": 0,
     "day_started": datetime.now(timezone.utc).date().isoformat(),
     "blocked_calls": 0,
+    "provider_exhausted": False,
+    "provider_message": None,
+    "provider_exhausted_at": None,
 }
 
 
@@ -141,11 +146,16 @@ def _quota_reset_if_new_day() -> None:
         _quota["day_started"] = today
         _quota["calls_today"] = 0
         _quota["blocked_calls"] = 0
+        _quota["provider_exhausted"] = False
+        _quota["provider_message"] = None
+        _quota["provider_exhausted_at"] = None
 
 
 def _quota_has_budget() -> bool:
     with _quota_lock:
         _quota_reset_if_new_day()
+        if _quota["provider_exhausted"]:
+            return False
         return _quota["calls_today"] < RAPIDAPI_DAILY_CALL_CAP
 
 
@@ -161,16 +171,42 @@ def _quota_note_blocked() -> None:
         _quota["blocked_calls"] += 1
 
 
+def _quota_trip_provider(message: str) -> None:
+    """RapidAPI told us the real daily quota is gone — stop all further calls today."""
+    with _quota_lock:
+        _quota_reset_if_new_day()
+        _quota["provider_exhausted"] = True
+        _quota["provider_message"] = (message or "")[:300]
+        _quota["provider_exhausted_at"] = datetime.now(timezone.utc).isoformat()
+        # Treat remaining local budget as spent so /api/quota-status is honest.
+        _quota["calls_today"] = max(_quota["calls_today"], RAPIDAPI_DAILY_CALL_CAP)
+
+
 def _quota_snapshot() -> dict:
     with _quota_lock:
         _quota_reset_if_new_day()
+        remaining = 0 if _quota["provider_exhausted"] else max(0, RAPIDAPI_DAILY_CALL_CAP - _quota["calls_today"])
         return {
             "callsToday": _quota["calls_today"],
             "dailyCap": RAPIDAPI_DAILY_CALL_CAP,
-            "remaining": max(0, RAPIDAPI_DAILY_CALL_CAP - _quota["calls_today"]),
+            "remaining": remaining,
             "blockedCalls": _quota["blocked_calls"],
             "dayStarted": _quota["day_started"],
+            "providerExhausted": _quota["provider_exhausted"],
+            "providerMessage": _quota["provider_message"],
+            "providerExhaustedAt": _quota["provider_exhausted_at"],
         }
+
+
+def _is_rapidapi_quota_error(status_code: int | None, body_text: str) -> bool:
+    text = (body_text or "").lower()
+    if "exceeded the daily quota" in text or "exceeded the monthly quota" in text:
+        return True
+    if "quota" in text and ("exceed" in text or "limit" in text):
+        return True
+    if status_code in (429, 403) and "quota" in text:
+        return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -199,7 +235,9 @@ def _cricbuzz_get(path: str, params: dict | None = None) -> dict | None:
         return None
     if not _quota_has_budget():
         _quota_note_blocked()
-        log.warning("RapidAPI daily quota exhausted (%s calls) — blocking call to %s", RAPIDAPI_DAILY_CALL_CAP, path)
+        snap = _quota_snapshot()
+        reason = "provider exhausted" if snap.get("providerExhausted") else f"local cap {RAPIDAPI_DAILY_CALL_CAP}"
+        log.warning("RapidAPI budget blocked (%s) — skipping call to %s", reason, path)
         return None
 
     url = f"{CRICBUZZ_BASE}{path}"
@@ -207,9 +245,24 @@ def _cricbuzz_get(path: str, params: dict | None = None) -> dict | None:
     try:
         resp = requests.get(url, headers=headers, params=params or {}, timeout=REQUEST_TIMEOUT_SECONDS)
         _quota_consume()  # count the call whether it succeeds or fails — it still hit RapidAPI
+        body_text = ""
+        try:
+            body_text = resp.text or ""
+        except Exception:
+            body_text = ""
+
+        if _is_rapidapi_quota_error(resp.status_code, body_text):
+            _quota_trip_provider(body_text.strip() or f"HTTP {resp.status_code} quota error")
+            log.error("RapidAPI provider quota exhausted — tripping breaker. body=%s", body_text[:200])
+            return None
+
         resp.raise_for_status()
         return resp.json()
     except Exception as e:
+        # Some RapidAPI error bodies still land here after raise_for_status.
+        msg = str(e)
+        if _is_rapidapi_quota_error(None, msg):
+            _quota_trip_provider(msg)
         log.error("Cricbuzz request failed (%s): %s", path, e)
         return None
 
@@ -2118,7 +2171,14 @@ def get_match_details(match_id: str):
             # No cached detail and no budget left — tell the frontend honestly
             # instead of silently failing or burning the last calls on a cold view.
             if entry is None:
-                return jsonify({"error": "Daily API quota exhausted. Try again after reset.", "quotaExhausted": True}), 503
+                snap = _quota_snapshot()
+                return jsonify({
+                    "error": snap.get("providerMessage")
+                        or "Daily API quota exhausted. Try again after reset.",
+                    "quotaExhausted": True,
+                    "providerExhausted": bool(snap.get("providerExhausted")),
+                    "quota": snap,
+                }), 503
         else:
             _refresh_match_detail(match_id)
             with _detail_cache_lock:
@@ -2129,15 +2189,17 @@ def get_match_details(match_id: str):
 
     entry = _rehydrate_intelligence_if_empty(match_id, entry)
 
+    snap = _quota_snapshot()
     # NEW: expose lastRefreshed and whether the most recent scheduled refresh was
     # blocked by quota exhaustion, so staleness has a visible, diagnosable cause
     # instead of silently serving old data with no signal.
     return jsonify({
         **entry["data"],
         "lastRefreshed": entry["last_refreshed"],
-        "refreshBlocked": "last_blocked_at" in entry,
-        "lastBlockedAt": entry.get("last_blocked_at"),
+        "refreshBlocked": "last_blocked_at" in entry or bool(snap.get("providerExhausted")),
+        "lastBlockedAt": entry.get("last_blocked_at") or snap.get("providerExhaustedAt"),
         "detailIncomplete": bool(entry.get("incomplete")),
+        "quotaExhausted": bool(snap.get("providerExhausted") or snap.get("remaining", 1) <= 0),
     })
 
 
