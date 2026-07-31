@@ -1,5 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 
+// Never show provider/quota internals on a customer-facing live scoreboard.
+const CUSTOMER_SAFE_DETAIL_ERROR =
+  "Live scorecard temporarily unavailable. Please try again shortly.";
+
+function toCustomerSafeDetailError(payload) {
+  if (payload?.quotaExhausted) return CUSTOMER_SAFE_DETAIL_ERROR;
+  const raw = String(payload?.error || "").toLowerCase();
+  if (
+    raw.includes("quota") ||
+    raw.includes("api") ||
+    raw.includes("rapidapi") ||
+    raw.includes("rate limit")
+  ) {
+    return CUSTOMER_SAFE_DETAIL_ERROR;
+  }
+  return payload?.error || "Could not load match details.";
+}
+
 export default function LiveCarousel() {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -9,7 +27,7 @@ export default function LiveCarousel() {
   const [activeMatchId, setActiveMatchId] = useState(null);
   const [matchDetails, setMatchDetails] = useState({});
   const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState(null); // NEW: surfaces quota-exhausted / fetch errors
+  const [detailError, setDetailError] = useState(null); // customer-safe load failure only — never quota/API internals
 
   // Reference for manual scrolling
   const scrollRef = useRef(null);
@@ -70,11 +88,11 @@ export default function LiveCarousel() {
       const res = await fetch(`https://deathovers-ai-engine.onrender.com/api/match-details/${matchId}`);
       const data = await res.json();
       if (!res.ok) {
-        // NEW: backend now returns a structured error (e.g. quotaExhausted) instead
-        // of just failing silently — surface it instead of showing a blank page.
+        // Surface a retryable state instead of a blank page, but never leak
+        // quota/API consumption language to customers on a live scoreboard.
         // Only surface as a blocking error if this was the initial load — a failed
         // background poll shouldn't wipe out a match page someone's already reading.
-        if (showLoading) setDetailError(data.error || "Could not load match details.");
+        if (showLoading) setDetailError(toCustomerSafeDetailError(data));
       } else {
         setMatchDetails(prev => ({ ...prev, [matchId]: data }));
       }
