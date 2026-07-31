@@ -162,8 +162,8 @@ export default function LiveCarousel() {
     return ageMs > 5 * 60 * 1000; // older than 5 minutes while match is live
   })();
 
-  const inn1 = activeData?.innings1 || null;
-  const inn2 = activeData?.innings2 || null;
+  const inn1 = activeData?.innings1 || activeData?.innings?.[0] || null;
+  const inn2 = activeData?.innings2 || activeData?.innings?.[1] || null;
   const hasCommentary = (activeData?.commentary?.length || 0) > 0;
   const ballTracker = activeData?.ballTracker || [];
 
@@ -256,8 +256,8 @@ export default function LiveCarousel() {
                       <span className="team-code-text">{homeTeam}</span>
                     </span>
                     <span className="team-score">
-                      {match.score?.home?.score || '-'}
-                      <span className="overs-sub"> ({match.score?.home?.info || ''})</span>
+                      <span className="score-main">{match.score?.home?.score || '-'}</span>
+                      {match.score?.home?.info ? <span className="overs-sub">({match.score.home.info})</span> : null}
                     </span>
                   </div>
 
@@ -268,7 +268,8 @@ export default function LiveCarousel() {
                         <span className="team-code-text">{awayTeam}</span>
                       </span>
                       <span className="team-score">
-                        {match.score.away.score}<span className="overs-sub"> ({match.score.away.info || ''})</span>
+                        <span className="score-main">{match.score.away.score}</span>
+                        {match.score.away.info ? <span className="overs-sub">({match.score.away.info})</span> : null}
                       </span>
                     </div>
                   )}
@@ -336,8 +337,8 @@ export default function LiveCarousel() {
                       </span>
                     </div>
                     <div className="sb-team-score">
-                      {displayHomeScore?.score || '0/0'}
-                      <span className="sb-overs">({displayHomeScore?.info || '0.0'})</span>
+                      <span className="score-main">{displayHomeScore?.score || inn1?.score || '0/0'}</span>
+                      <span className="sb-overs">({displayHomeScore?.info || inn1?.overs || '0.0'})</span>
                     </div>
                   </div>
 
@@ -352,14 +353,21 @@ export default function LiveCarousel() {
                       </span>
                     </div>
                     <div className="sb-team-score">
-                      {inn2 ? (
-                        <>{displayAwayScore?.score}<span className="sb-overs">({displayAwayScore?.info || '0.0'})</span></>
+                      {inn2 || displayAwayScore?.score ? (
+                        <>
+                          <span className="score-main">{displayAwayScore?.score || inn2?.score || '0/0'}</span>
+                          <span className="sb-overs">({displayAwayScore?.info || inn2?.overs || '0.0'})</span>
+                        </>
                       ) : (
                         <span className="sb-pending">YET TO BAT</span>
                       )}
                     </div>
                   </div>
                 </div>
+
+                {activeData.detailNote && (
+                  <div className="detail-note">{activeData.detailNote}</div>
+                )}
 
                 {/* ENDPOINTS: TARGET, CRR, RRR */}
                 {liveScore && (
@@ -455,6 +463,13 @@ export default function LiveCarousel() {
               >
                 {inn1 && <InningsPanel innings={inn1} accent="amber" label="1ST INNINGS" />}
                 {inn2 && <InningsPanel innings={inn2} accent="red" label="2ND INNINGS" />}
+                {!inn1 && !inn2 && (
+                  <div className="innings-col">
+                    <div className="stat-empty">
+                      Full scorecard is still loading for this match. Header scores above are from the live feed.
+                    </div>
+                  </div>
+                )}
 
                 {/* COMMENTARY PANE (Now vertically scrollable) */}
                 <div className="mp-commentary-rail">
@@ -478,7 +493,11 @@ export default function LiveCarousel() {
                     </div>
                   ) : (
                     <div className="commentary-waiting">
-                      <div className="commentary-waiting-text">Ball-by-ball commentary not available for this match yet.</div>
+                      <div className="commentary-waiting-text">
+                        {activeMatchMeta.status === 'COMPLETED'
+                          ? 'Ball-by-ball commentary is not available for this completed match.'
+                          : 'Ball-by-ball commentary not available for this match yet.'}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -586,22 +605,32 @@ export default function LiveCarousel() {
         .status-live { color: var(--blood-red); }
         .status-done { color: rgba(240,242,245,0.35); }
 
-        .team-line { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 9px; gap: 8px; }
+        .team-line { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 9px; gap: 10px; }
         .team-line-pending { opacity: 0.55; }
         .team-code {
           display: inline-flex;
           align-items: center;
-          max-width: 140px;
-          font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 0.01em; color: var(--crease-white);
+          min-width: 0;
+          flex: 1 1 auto;
+          max-width: 58%;
+          font-family: 'Bebas Neue', sans-serif; font-size: 17px; letter-spacing: 0.01em; color: var(--crease-white);
         }
         .team-code-text {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
-        .team-score { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 700; color: var(--crease-white); flex-shrink: 0; white-space: nowrap; }
+        .team-score {
+          font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 700; color: var(--crease-white);
+          flex: 0 0 auto; max-width: 42%;
+          display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15;
+          white-space: nowrap;
+        }
         .pending-label { font-size: 11px; font-weight: 500; color: rgba(240,242,245,0.4); font-family: 'Inter', sans-serif; text-transform: uppercase; letter-spacing: 0.04em; }
-        .overs-sub { font-size: 11px; color: rgba(240,242,245,0.4); font-family: 'Inter', sans-serif; font-weight: 400; }
+        .overs-sub {
+          font-size: 10px; color: rgba(240,242,245,0.4); font-family: 'JetBrains Mono', monospace; font-weight: 500;
+          margin-left: 0; margin-top: 2px;
+        }
         .chase-line { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--bail-amber); margin-top: 6px; min-height: 14px; }
         .tap-hint { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.3); margin-top: 10px; text-align: center; letter-spacing: 0.05em; transition: color 0.2s; }
         .match-card:hover .tap-hint { color: var(--blood-red); }
@@ -650,9 +679,20 @@ export default function LiveCarousel() {
           display: inline-block;
           max-width: 100%;
         }
-        .sb-team-score { font-family: 'JetBrains Mono', monospace; font-size: 30px; font-weight: 700; color: var(--crease-white); line-height: 1.15; letter-spacing: -0.01em; }
-        .sb-overs { font-size: 13px; font-weight: 400; color: rgba(240,242,245,0.4); margin-left: 6px; }
+        .sb-team-score {
+          font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 700; color: var(--crease-white);
+          line-height: 1.15; letter-spacing: -0.01em;
+          display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 8px;
+          max-width: 100%;
+        }
+        .scoreboard-team-right .sb-team-score { justify-content: flex-end; }
+        .sb-team-score .score-main { min-width: 0; }
+        .sb-overs { font-size: 13px; font-weight: 400; color: rgba(240,242,245,0.4); margin-left: 0; white-space: nowrap; }
         .sb-pending { font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600; color: rgba(240,242,245,0.35); letter-spacing: 0.04em; }
+        .detail-note {
+          margin-top: 12px; font-family: 'Inter', sans-serif; font-size: 12px;
+          color: rgba(240,242,245,0.45); line-height: 1.45; text-align: center;
+        }
 
         .scoreboard-divider { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: rgba(240,242,245,0.25); font-weight: 700; text-align: center; }
 
@@ -741,12 +781,47 @@ export default function LiveCarousel() {
 
         .stat-kicker { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.35); margin-bottom: 6px; font-weight: 700; letter-spacing: 0.04em; }
 
-        .stat-table { width: 100%; font-size: 13.5px; border-collapse: collapse; margin-bottom: 14px; color: var(--crease-white); }
-        .stat-table th { font-family: 'JetBrains Mono', monospace; color: rgba(240,242,245,0.4); font-size: 11px; font-weight: 500; text-align: right; padding: 4px 0; border-bottom: 1px solid rgba(240,242,245,0.06); }
-        .stat-table th:first-child { text-align: left; }
-        .stat-table td { padding: 7px 0; text-align: right; border-bottom: 1px solid rgba(240,242,245,0.03); font-family: 'JetBrains Mono', monospace; }
-        .stat-table td:first-child { text-align: left; font-weight: 500; font-family: 'Inter', sans-serif; }
+        .stat-table {
+          width: 100%;
+          table-layout: fixed;
+          font-size: 12.5px;
+          border-collapse: separate;
+          border-spacing: 0;
+          margin-bottom: 14px;
+          color: var(--crease-white);
+        }
+        .stat-table th {
+          font-family: 'JetBrains Mono', monospace; color: rgba(240,242,245,0.4);
+          font-size: 10px; font-weight: 500; text-align: right;
+          padding: 4px 6px; border-bottom: 1px solid rgba(240,242,245,0.06);
+          white-space: nowrap;
+        }
+        .stat-table th:first-child,
+        .stat-table td:first-child { text-align: left; padding-left: 0; width: auto; }
+        .stat-table th.col-r, .stat-table td.col-r,
+        .stat-table th.col-b, .stat-table td.col-b,
+        .stat-table th.col-w, .stat-table td.col-w { width: 34px; }
+        .stat-table th.col-sr, .stat-table td.col-sr,
+        .stat-table th.col-eco, .stat-table td.col-eco { width: 54px; }
+        .stat-table th.col-o, .stat-table td.col-o { width: 40px; }
+        .stat-table td {
+          padding: 7px 6px; text-align: right;
+          border-bottom: 1px solid rgba(240,242,245,0.03);
+          font-family: 'JetBrains Mono', monospace;
+          white-space: nowrap;
+          vertical-align: top;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .stat-table td:first-child {
+          text-align: left; font-weight: 500; font-family: 'Inter', sans-serif;
+          white-space: normal; padding-right: 10px;
+        }
         .stat-table .dim td { color: rgba(240,242,245,0.4); font-weight: 400; }
+        .stat-empty {
+          font-family: 'Inter', sans-serif; font-size: 12px; color: rgba(240,242,245,0.35);
+          padding: 12px 0 4px; line-height: 1.45;
+        }
         .stat-more { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(240,242,245,0.3); text-align: center; padding-top: 2px; }
         .stat-more-btn {
           display: block; width: 100%; background: none; border: none; cursor: pointer;
@@ -805,8 +880,11 @@ export default function LiveCarousel() {
           .mp-body { grid-template-columns: 1fr !important; }
           .innings-col.border-left, .mp-commentary-rail { border-left: none; border-top: 1px solid rgba(240,242,245,0.08); }
           .scoreboard-grid { gap: 10px; }
-          .sb-team-score { font-size: 24px; }
-          .team-code { max-width: 100px; }
+          .sb-team-score { font-size: 22px; }
+          .team-code { max-width: 55%; }
+          .stat-table th.col-sr, .stat-table td.col-sr,
+          .stat-table th.col-eco, .stat-table td.col-eco { width: 48px; }
+          .innings-col { padding: 16px 14px; }
         }
       `}</style>
     </div>
@@ -829,6 +907,7 @@ function InningsPanel({ innings, accent, label }) {
   const [bowlersExpanded, setBowlersExpanded] = useState(false);
   const visibleBatters = battersExpanded ? batters : batters.slice(0, 5);
   const visibleBowlers = bowlersExpanded ? bowlers : bowlers.slice(0, 4);
+  const hasLines = batters.length > 0 || bowlers.length > 0;
 
   return (
     <div className="innings-col border-left">
@@ -836,22 +915,34 @@ function InningsPanel({ innings, accent, label }) {
         {label}: {innings.team || 'TBD'} . {innings.score || '0/0'} ({innings.overs || '0.0'})
       </div>
 
+      {!hasLines && (
+        <div className="stat-empty">Full batting/bowling card not loaded for this innings yet.</div>
+      )}
+
       {visibleBatters.length > 0 && (
         <>
           <div className="stat-kicker">BATTING</div>
           <table className="stat-table">
-            <thead><tr><th>BATTER</th><th>R</th><th>B</th><th>SR</th></tr></thead>
+            <thead>
+              <tr>
+                <th>BATTER</th>
+                <th className="col-r">R</th>
+                <th className="col-b">B</th>
+                <th className="col-sr">SR</th>
+              </tr>
+            </thead>
             <tbody>
               {visibleBatters.map((b, i) => (
                 <tr key={i} className={b.dim ? 'dim' : ''}>
                   <td>
                     <div className="batter-name-cell">
                       <span>{b.name}</span>
-                      {/* NEW: shows how the batter got out (e.g. "c Kohli b Bumrah"), or "not out" */}
                       {b.dismissal && <span className="batter-dismissal">{b.dismissal}</span>}
                     </div>
                   </td>
-                  <td>{b.r}</td><td>{b.b}</td><td>{b.sr}</td>
+                  <td className="col-r">{b.r}</td>
+                  <td className="col-b">{b.b}</td>
+                  <td className="col-sr">{b.sr}</td>
                 </tr>
               ))}
             </tbody>
@@ -872,13 +963,28 @@ function InningsPanel({ innings, accent, label }) {
         <>
           <div className="stat-kicker" style={{ marginTop: '16px' }}>BOWLING</div>
           <table className="stat-table">
-            <thead><tr><th>BOWLER</th><th>O</th><th>R</th><th>W</th><th>ECO</th></tr></thead>
+            <thead>
+              <tr>
+                <th>BOWLER</th>
+                <th className="col-o">O</th>
+                <th className="col-r">R</th>
+                <th className="col-w">W</th>
+                <th className="col-eco">ECO</th>
+              </tr>
+            </thead>
             <tbody>
               {visibleBowlers.map((bw, i) => (
                 <tr key={i}>
-                  <td>{bw.name}</td><td>{bw.o}</td><td>{bw.r}</td>
-                  <td style={bw.w && bw.w !== '0' ? { color: 'var(--blood-red)', fontWeight: 'bold' } : undefined}>{bw.w}</td>
-                  <td>{bw.eco}</td>
+                  <td>{bw.name}</td>
+                  <td className="col-o">{bw.o}</td>
+                  <td className="col-r">{bw.r}</td>
+                  <td
+                    className="col-w"
+                    style={bw.w && bw.w !== '0' ? { color: 'var(--blood-red)', fontWeight: 'bold' } : undefined}
+                  >
+                    {bw.w}
+                  </td>
+                  <td className="col-eco">{bw.eco}</td>
                 </tr>
               ))}
             </tbody>
