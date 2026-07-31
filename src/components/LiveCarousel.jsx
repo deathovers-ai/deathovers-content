@@ -162,8 +162,14 @@ export default function LiveCarousel() {
     return ageMs > 5 * 60 * 1000; // older than 5 minutes while match is live
   })();
 
-  const inn1 = activeData?.innings1 || activeData?.innings?.[0] || null;
-  const inn2 = activeData?.innings2 || activeData?.innings?.[1] || null;
+  const inn1Raw = activeData?.innings1 || activeData?.innings?.[0] || null;
+  const inn2Raw = activeData?.innings2 || activeData?.innings?.[1] || null;
+  const inningsHasCard = (inn) => Boolean(
+    inn && ((inn.batters && inn.batters.length) || (inn.bowlers && inn.bowlers.length))
+  );
+  // Ignore empty carousel stubs so we don't render broken blank columns.
+  const inn1 = inningsHasCard(inn1Raw) ? inn1Raw : null;
+  const inn2 = inningsHasCard(inn2Raw) ? inn2Raw : null;
   const hasCommentary = (activeData?.commentary?.length || 0) > 0;
   const ballTracker = activeData?.ballTracker || [];
 
@@ -366,7 +372,9 @@ export default function LiveCarousel() {
                 </div>
 
                 {activeData.detailNote && (
-                  <div className="detail-note">{activeData.detailNote}</div>
+                  <div className={`detail-note ${activeData.detailSource === 'carousel_fallback' ? 'detail-note-soft' : ''}`}>
+                    {activeData.detailNote}
+                  </div>
                 )}
 
                 {/* ENDPOINTS: TARGET, CRR, RRR */}
@@ -486,7 +494,9 @@ export default function LiveCarousel() {
                 {!inn1 && !inn2 && (
                   <div className="innings-col">
                     <div className="stat-empty">
-                      Full scorecard is still loading for this match. Header scores above are from the live feed.
+                      {activeData.detailSource === 'carousel_only'
+                        ? 'Full batting and bowling cards are not available for this match source.'
+                        : 'Pulling full batting and bowling cards… live totals above stay up to date.'}
                     </div>
                   </div>
                 )}
@@ -514,9 +524,11 @@ export default function LiveCarousel() {
                   ) : (
                     <div className="commentary-waiting">
                       <div className="commentary-waiting-text">
-                        {activeMatchMeta.status === 'COMPLETED'
-                          ? 'Ball-by-ball commentary is not available for this completed match.'
-                          : 'Ball-by-ball commentary not available for this match yet.'}
+                        {activeData.detailSource === 'carousel_only'
+                          ? 'Ball-by-ball commentary is not available for this match source.'
+                          : activeMatchMeta.status === 'COMPLETED'
+                            ? 'Ball-by-ball commentary is not available for this completed match.'
+                            : 'Pulling ball-by-ball commentary…'}
                       </div>
                     </div>
                   )}
@@ -712,6 +724,13 @@ export default function LiveCarousel() {
         .detail-note {
           margin-top: 12px; font-family: 'Inter', sans-serif; font-size: 12px;
           color: rgba(240,242,245,0.45); line-height: 1.45; text-align: center;
+        }
+        .detail-note-soft {
+          color: var(--bail-amber);
+          background: rgba(245,166,35,0.06);
+          border: 1px solid rgba(245,166,35,0.18);
+          border-radius: 4px;
+          padding: 8px 12px;
         }
 
         .scoreboard-divider { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: rgba(240,242,245,0.25); font-weight: 700; text-align: center; }
@@ -967,15 +986,14 @@ function InningsPanel({ innings, accent, label }) {
   const visibleBowlers = bowlersExpanded ? bowlers : bowlers.slice(0, 4);
   const hasLines = batters.length > 0 || bowlers.length > 0;
 
+  // Empty carousel stubs (team+score only) should not render as broken columns.
+  if (!hasLines) return null;
+
   return (
     <div className="innings-col border-left">
       <div className={`inn-heading accent-${accent}`}>
-        {label}: {innings.team || 'TBD'} . {innings.score || '0/0'} ({innings.overs || '0.0'})
+        {label}: {innings.team || 'TBD'} · {innings.score || '0/0'} ({innings.overs || '0.0'})
       </div>
-
-      {!hasLines && (
-        <div className="stat-empty">Full batting/bowling card not loaded for this innings yet.</div>
-      )}
 
       {visibleBatters.length > 0 && (
         <>
