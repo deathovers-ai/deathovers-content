@@ -43,7 +43,7 @@ export default function MatchRoom() {
     }
 
     fetchDetails();
-    const interval = window.setInterval(fetchDetails, 30000);
+    const interval = window.setInterval(fetchDetails, 60000);
     return () => { cancelled = true; window.clearInterval(interval); };
   }, [matchId]);
 

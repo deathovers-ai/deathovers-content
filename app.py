@@ -118,6 +118,11 @@ REQUEST_TIMEOUT_SECONDS = 10
 # Keep a safety margin below the real plan limit. Override via env, e.g.
 # RAPIDAPI_DAILY_CALL_CAP=90 if your RapidAPI dashboard shows 100/day.
 RAPIDAPI_DAILY_CALL_CAP = int(os.environ.get("RAPIDAPI_DAILY_CALL_CAP", 90))
+# Free-plan provider policy: one actively watched match is refreshed from a
+# single current-innings miniscore every five minutes. The detailed card is
+# useful, but it does not change ball by ball, so retain it for 15 minutes.
+LIVE_DETAIL_REFRESH_SECONDS = int(os.environ.get("LIVE_DETAIL_REFRESH_SECONDS", 300))
+SCORECARD_REFRESH_SECONDS = int(os.environ.get("SCORECARD_REFRESH_SECONDS", 900))
 
 _chase_engine = None
 _chase_policy = None
@@ -1823,23 +1828,45 @@ def _refresh_match_detail(match_id: str) -> None:
         return
 
     with _detail_cache_lock:
-        already_backfilled = (match_id in _detail_cache) and _detail_cache[match_id].get("backfilled_innings", set())
-        backfilled_innings = set(already_backfilled) if already_backfilled else set()
+        prior_entry = _detail_cache.get(match_id) or {}
+    prior_data = prior_entry.get("data") or {}
+    already_backfilled = prior_entry.get("backfilled_innings", set())
+    backfilled_innings = set(already_backfilled) if already_backfilled else set()
+    # After the first read, request only the known active innings. Cricbuzz's
+    # miniscore contains the innings summary required by the Chase Engine, so
+    # re-requesting innings one on every refresh is wasted provider budget.
+    preferred_innings_id = prior_entry.get("active_innings_id", 1)
+    if not isinstance(preferred_innings_id, int) or preferred_innings_id < 1:
+        preferred_innings_id = 1
 
-    comm_result = _fetch_cricbuzz_commentary_and_miniscore(cricbuzz_match_id, innings_id=1)
+    comm_result = _fetch_cricbuzz_commentary_and_miniscore(
+        cricbuzz_match_id, innings_id=preferred_innings_id
+    )
     # NEW: on the FIRST fetch for this match/innings only, paginate backward
     # through /comm using the tms cursor to backfill full innings history -
     # this is what fixes commentary only ever showing a recent chunk instead
     # of starting from ball 1. Subsequent refreshes skip this (rely on the
     # existing incremental _merge_commentary instead) so we don't re-spend
     # quota re-fetching history we already have cached.
-    if 1 not in backfilled_innings:
-        comm_result["commentary"] = _backfill_full_commentary(cricbuzz_match_id, 1, comm_result)
-        backfilled_innings.add(1)
+    if (carousel_entry or {}).get("status") != "LIVE" and preferred_innings_id not in backfilled_innings:
+        comm_result["commentary"] = _backfill_full_commentary(
+            cricbuzz_match_id, preferred_innings_id, comm_result
+        )
+        backfilled_innings.add(preferred_innings_id)
     commentary = comm_result["commentary"]
     miniscore = comm_result["miniscore"]
     raw_comwrapper = comm_result.get("raw_comwrapper", [])
-    scorecard_data = _fetch_cricbuzz_scorecard(cricbuzz_match_id)
+    scorecard_data = prior_entry.get("scorecard_data")
+    scorecard_refreshed = prior_entry.get("scorecard_refreshed")
+    scorecard_due = scorecard_data is None
+    if not scorecard_due and scorecard_refreshed:
+        try:
+            scorecard_due = time.time() - datetime.fromisoformat(scorecard_refreshed).timestamp() >= SCORECARD_REFRESH_SECONDS
+        except Exception:
+            scorecard_due = True
+    if scorecard_due:
+        scorecard_data = _fetch_cricbuzz_scorecard(cricbuzz_match_id)
+        scorecard_refreshed = datetime.now(timezone.utc).isoformat()
 
     # NEW: previously this only ever checked "does innings 2 exist?" and fetched it
     # if so — meaning a Test match's 3rd/4th innings commentary was never fetched at
@@ -1864,9 +1891,11 @@ def _refresh_match_detail(match_id: str) -> None:
         elif (carousel_entry or {}).get("status") == "COMPLETED":
             current_innings_id = 2
 
-    if current_innings_id > 1:
+    if current_innings_id != preferred_innings_id:
         comm_result_current = _fetch_cricbuzz_commentary_and_miniscore(cricbuzz_match_id, innings_id=current_innings_id)
-        if current_innings_id not in backfilled_innings and comm_result_current["commentary"]:
+        if ((carousel_entry or {}).get("status") != "LIVE"
+                and current_innings_id not in backfilled_innings
+                and comm_result_current["commentary"]):
             comm_result_current["commentary"] = _backfill_full_commentary(
                 cricbuzz_match_id, current_innings_id, comm_result_current
             )
@@ -1883,10 +1912,7 @@ def _refresh_match_detail(match_id: str) -> None:
 
     # Merge with whatever commentary we already have cached for this match instead
     # of replacing it outright, so scrolling back can reach the start of the innings.
-    with _detail_cache_lock:
-        prior_entry = _detail_cache.get(match_id)
-    prior_data = (prior_entry or {}).get("data") if prior_entry else None
-    prior_commentary = (prior_data or {}).get("commentary", []) if prior_data else []
+    prior_commentary = prior_data.get("commentary", [])
     commentary = _merge_commentary(prior_commentary, commentary)
 
     shaped = _shape_match_details_from_cricbuzz(scorecard_data, commentary, miniscore, raw_comwrapper)
@@ -1991,6 +2017,9 @@ def _refresh_match_detail(match_id: str) -> None:
             "last_refreshed": datetime.now(timezone.utc).isoformat(),
             "cricbuzz_match_id": cricbuzz_match_id,
             "backfilled_innings": backfilled_innings,
+            "active_innings_id": current_innings_id,
+            "scorecard_data": scorecard_data,
+            "scorecard_refreshed": scorecard_refreshed,
             "incomplete": incomplete,
         }
 
@@ -2019,8 +2048,8 @@ def _wicket_in_recent_ball_tracker(shaped_detail: dict | None) -> bool:
     return any(b.get("type") == "wicket" for b in tracker)
 
 
-HOT_INTERVAL_SECONDS = 60
-WARM_INTERVAL_SECONDS = 300
+HOT_INTERVAL_SECONDS = LIVE_DETAIL_REFRESH_SECONDS
+WARM_INTERVAL_SECONDS = LIVE_DETAIL_REFRESH_SECONDS
 COLD_INTERVAL_SECONDS = 1800
 
 
@@ -2168,6 +2197,10 @@ VIEWER_ACTIVE_WINDOW_SECONDS = 90
 
 def _mark_match_viewed(match_id: str) -> None:
     with _viewer_lock:
+        # The free provider budget supports one active Match Room. Selecting a
+        # new match intentionally stops background provider refreshes for all
+        # earlier selections; their cached response remains available.
+        _last_viewed.clear()
         _last_viewed[match_id] = time.time()
 
 

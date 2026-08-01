@@ -111,7 +111,7 @@ export default function TacticalSheetLive() {
     };
 
     loadSheet();
-    const interval = window.setInterval(loadSheet, 20000);
+    const interval = window.setInterval(loadSheet, 60000);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
