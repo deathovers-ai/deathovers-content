@@ -54,13 +54,27 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "int
 try:
     from app_integration import build_live_state
     from match_intelligence_api import get_match_insights, determine_phase
+    from chase_runtime import ChasePolicy
+    from compact_chase_engine import CompactChaseEngine
+    from context_repository import normalize_venue
+    from live_chase_bridge import build_live_chase_from_miniscore, update_first_innings_context
+    from live_match_context_cache import FirstInningsContextCache
     _INTELLIGENCE_AVAILABLE = True
+    _CHASE_BRIDGE_AVAILABLE = True
     log.info("Intelligence Engine loaded successfully.")
 except Exception as _intel_import_err:
     build_live_state = None
     get_match_insights = None
     determine_phase = None
     _INTELLIGENCE_AVAILABLE = False
+    build_live_chase_from_miniscore = None
+    update_first_innings_context = None
+    FirstInningsContextCache = None
+    ChasePolicy = None
+    load_engine_from_jsonl = None
+    CompactChaseEngine = None
+    normalize_venue = None
+    _CHASE_BRIDGE_AVAILABLE = False
     log.warning(
         "Intelligence Engine unavailable at startup (%s) - /api/match-details will "
         "omit the 'intelligence' key until this is resolved.", _intel_import_err
@@ -105,6 +119,16 @@ REQUEST_TIMEOUT_SECONDS = 10
 # RAPIDAPI_DAILY_CALL_CAP=90 if your RapidAPI dashboard shows 100/day.
 RAPIDAPI_DAILY_CALL_CAP = int(os.environ.get("RAPIDAPI_DAILY_CALL_CAP", 90))
 
+_chase_engine = None
+_chase_policy = None
+if _CHASE_BRIDGE_AVAILABLE:
+    try:
+        _chase_policy = ChasePolicy.from_environment()
+        _index_path = os.environ.get("CHASE_INDEX_PATH", os.path.join(os.path.dirname(__file__), "intelligence", "output", "compact_chase_index.json.gz"))
+        _chase_engine = CompactChaseEngine.load(_index_path)
+    except Exception as _chase_startup_error:
+        log.warning("Chase Engine unavailable at startup (%s)", _chase_startup_error)
+
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
@@ -121,6 +145,10 @@ _cache = {
 
 _detail_cache_lock = threading.Lock()
 _detail_cache: dict[str, dict] = {}
+
+# Match-scoped only: this holds the first innings until the associated chase
+# is finished or the 24-hour TTL expires. It is not historical storage.
+_first_innings_context_cache = FirstInningsContextCache() if _CHASE_BRIDGE_AVAILABLE else None
 
 # ---------------------------------------------------------------------------
 # Global RapidAPI quota tracker
@@ -1725,6 +1753,45 @@ def _shape_details_from_carousel(carousel_entry: dict | None, *, permanent: bool
     }
 
 
+def _attach_chase_state(shaped: dict, match_id: str, carousel_entry: dict | None, miniscore: dict | None) -> None:
+    """Expose verified live chase facts and retain only this match's innings one.
+
+    Historical comparison is intentionally not attempted here until the
+    generated snapshot dataset is available. This endpoint therefore never
+    emits a guessed recovery rate or verdict.
+    """
+    if not _CHASE_BRIDGE_AVAILABLE or not carousel_entry or not miniscore:
+        shaped["chase"] = {"status": "unavailable"}
+        return
+    try:
+        match_format = carousel_entry.get("matchFormat", "")
+        context = update_first_innings_context(
+            _first_innings_context_cache, match_id, match_format, miniscore
+        )
+        state = build_live_chase_from_miniscore(match_id, match_format, miniscore, context)
+        if not state:
+            shaped["chase"] = {"status": "not_a_live_second_innings"}
+        elif _chase_engine is None or _chase_policy is None:
+            shaped["chase"] = {"status": "awaiting_historical_cohort", "state": state,
+                               "first_innings": context.get("snapshot") if context else None}
+        else:
+            venue = normalize_venue(carousel_entry.get("venue", ""))
+            shaped["chase"] = {
+                **_chase_engine.evaluate(
+                    state,
+                    target_tolerance=_chase_policy.target_tolerance_for(state["format"]),
+                    wicket_tolerance=_chase_policy.wicket_tolerance,
+                    minimum_sample=_chase_policy.minimum_sample,
+                    venue_scopes=[venue, None],
+                ),
+                "state": state,
+                "first_innings": context.get("snapshot") if context else None,
+            }
+    except Exception as e:
+        log.warning("Chase state unavailable for match %s: %s", match_id, e)
+        shaped["chase"] = {"status": "unavailable", "reason": "invalid_live_score"}
+
+
 def _refresh_match_detail(match_id: str) -> None:
     cricbuzz_match_id = str(match_id)
     if not cricbuzz_match_id:
@@ -1915,6 +1982,7 @@ def _refresh_match_detail(match_id: str) -> None:
     # second_innings_comparison have what they need (see _attach_intelligence
     # docstring for what each optional field unlocks).
     _attach_intelligence(shaped, carousel_entry, miniscore, match_id=match_id, commentary=commentary)
+    _attach_chase_state(shaped, match_id, carousel_entry, miniscore)
 
     incomplete = _detail_is_incomplete(shaped)
     with _detail_cache_lock:

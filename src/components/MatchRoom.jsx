@@ -84,6 +84,7 @@ export default function MatchRoom() {
             dewRisk={data?.dewRisk}
             pregame={pregame}
           />
+          <ChasePanel chase={data?.chase} />
           <InsightPanel insights={timelineInsights} />
         </>
       )}
@@ -120,7 +121,20 @@ export default function MatchRoom() {
           padding: 40px 0;
         }
         .match-room-status.error { color: var(--blood-red); }
+        .chase-panel { margin: 16px 0; padding: 18px; border-left: 3px solid var(--bail-amber); background: rgba(245,166,35,.06); font: 11px 'JetBrains Mono', monospace; color: rgba(240,242,245,.65); }
+        .chase-panel span { display:block; color: var(--bail-amber); letter-spacing:.08em; }
+        .chase-panel strong { display:block; margin:7px 0; font: 26px 'Bebas Neue', sans-serif; color:#fff; }
+        .chase-panel p { margin:0 0 8px; font: 13px Inter, sans-serif; }
       `}</style>
     </div>
   );
+}
+
+function ChasePanel({ chase }) {
+  const state = chase?.state;
+  const cohort = chase?.cohort;
+  if (!state) return null;
+  if (chase.status !== 'qualified') return <div className="chase-panel">CHASE CONTEXT: AWAITING QUALIFIED HISTORICAL COHORT</div>;
+  const pace = cohort.pace_gap_runs >= 0 ? 'AHEAD OF HISTORICAL PACE' : 'BEHIND HISTORICAL PACE';
+  return <section className="chase-panel"><span>CHASE EVIDENCE</span><strong>{pace}</strong><p>{state.runs}/{state.wickets} · need {state.runs_required} from {state.legal_balls_remaining} balls · RRR {state.required_run_rate.toFixed(2)}</p><small>RECOVERY {Math.round(cohort.recovery_rate * 100)}% · {cohort.wins}/{cohort.sample_size} comparable chases · WICKET PAR {cohort.average_successful_wickets?.toFixed(1) || '—'}</small></section>;
 }

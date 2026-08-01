@@ -1,0 +1,10 @@
+---
+import Base from '../layouts/Base.astro';
+import Navbar from '../components/Navbar.astro';
+import MatchRoom from '../components/MatchRoom.jsx';
+---
+
+<Base title="Match Room — DeathOvers">
+  <Navbar />
+  <MatchRoom client:load />
+</Base>

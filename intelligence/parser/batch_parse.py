@@ -33,14 +33,17 @@ with open(MANIFEST) as f:
 print(f"Parsing {len(manifest)} matches...")
 
 start = time.time()
-ok, failed = 0, []
+ok, skipped, failed = 0, 0, []
 
 for i, m in enumerate(manifest, 1):
     match_id = m["match_id"]
     src = os.path.join(RAW_DIR, f"{match_id}.json")
     dst = os.path.join(EVENTS_DIR, f"{match_id}.json")
 
-    if args.missing_only and os.path.exists(dst):
+    # The full corpus takes longer than a single hosted job window. Preserve
+    # already-valid parser output so re-running this job safely resumes.
+    if (args.missing_only and os.path.exists(dst)) or (os.path.exists(dst) and os.path.getsize(dst) > 0):
+        skipped += 1
         continue
 
     if not os.path.exists(src):
@@ -67,6 +70,7 @@ for i, m in enumerate(manifest, 1):
 elapsed = time.time() - start
 print(f"\nDone in {elapsed:.0f}s")
 print(f"Parsed OK: {ok}")
+print(f"Already present: {skipped}")
 print(f"Failed: {len(failed)}")
 if failed:
     print("First 20 failures:")

@@ -73,7 +73,8 @@ def get_engine():
 
 CRICBUZZ_FORMAT_MAP = {
     "T20": "T20",
-    "T20I": "IT20",
+    # Keep the live key aligned with Cricsheet's parsed T20I match_type.
+    "T20I": "T20",
     "ODI": "ODI",
     "TEST": None,
 }

@@ -36,7 +36,9 @@ def get_engine():
 
 CRICBUZZ_FORMAT_MAP = {
     "T20": "T20",
-    "T20I": "IT20",
+    # Cricsheet's parsed match_type is T20 for the available T20I corpus;
+    # using IT20 here would create an empty historical cohort.
+    "T20I": "T20",
     "ODI": "ODI",
     "TEST": None,
     "IPL": "IPL",

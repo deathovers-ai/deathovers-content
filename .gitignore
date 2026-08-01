@@ -2,6 +2,9 @@ intelligence/raw_data/
 intelligence/output/events/
 intelligence/output/parse_failures.json
 intelligence/output/manifest.json
+intelligence/output/chase_snapshots.jsonl
+intelligence/output/batch_parse.log
+intelligence/output/batch_parse.err.log
 # NOTE: intelligence/output/context/venue_stats.json,
 # intelligence/output/context/player_stats.json, and
 # intelligence/output/context/player_aliases.json are INTENTIONALLY
@@ -15,3 +18,5 @@ node_modules/
 .pnpm-store/
 __pycache__/
 .env
+dist/
+.astro/
