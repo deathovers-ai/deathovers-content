@@ -1,6 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
 import ArticleCard from '../components/ArticleCard.astro';
+import TacticalSheetLive from '../components/TacticalSheetLive.jsx';
 import { getCollection } from 'astro:content';
 
 const posts = await getCollection('posts', ({ data }) => data.category === 'tactical-sheets' && !data.draft);
@@ -8,8 +9,20 @@ const sorted = posts.sort((a, b) => (b.data.date ?? 0) - (a.data.date ?? 0));
 ---
 <Base title="Tactical Sheets">
   <h1 class="display" style="font-size: 2rem; margin-top: 2rem;">Tactical Sheets</h1>
+  <TacticalSheetLive client:load />
+  <h2 class="published-heading">PUBLISHED ANALYSIS</h2>
   <section class="article-grid">
     {sorted.length === 0 && <p>No deep analysis yet.</p>}
     {sorted.map((post) => <ArticleCard post={post} />)}
   </section>
 </Base>
+
+<style>
+  .published-heading {
+    margin: 2.5rem 0 1rem;
+    color: rgba(240, 242, 245, 0.58);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+  }
+</style>
