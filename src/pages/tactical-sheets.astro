@@ -1,5 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
+import Navbar from '../components/Navbar.astro';
 import ArticleCard from '../components/ArticleCard.astro';
 import TacticalSheetLive from '../components/TacticalSheetLive.jsx';
 import { getCollection } from 'astro:content';
@@ -7,8 +8,8 @@ import { getCollection } from 'astro:content';
 const posts = await getCollection('posts', ({ data }) => data.category === 'tactical-sheets' && !data.draft);
 const sorted = posts.sort((a, b) => (b.data.date ?? 0) - (a.data.date ?? 0));
 ---
-<Base title="Tactical Sheets">
-  <h1 class="display" style="font-size: 2rem; margin-top: 2rem;">Tactical Sheets</h1>
+<Base title="Tactical Read — DeathOvers">
+  <Navbar />
   <TacticalSheetLive client:load />
   <h2 class="published-heading">PUBLISHED ANALYSIS</h2>
   <section class="article-grid">
