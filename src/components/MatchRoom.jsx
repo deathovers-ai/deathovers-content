@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 1 seconds
-Output:
 import React, { useEffect, useState } from 'react';
 import MatchInfoCard from './MatchInfoStrip.jsx';
 import InsightPanel from './InsightPanel.jsx';
