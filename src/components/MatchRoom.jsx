@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 1 seconds
+Output:
 import React, { useEffect, useState } from 'react';
 import MatchInfoCard from './MatchInfoStrip.jsx';
 import InsightPanel from './InsightPanel.jsx';
@@ -73,7 +76,7 @@ export default function MatchRoom() {
 
       {!loading && !error && (
         <div className="room-stack">
-          <ChasePanel chase={data?.chase} />
+          <ChasePanel chase={data?.chase} match={data} />
           <MatchInfoCard toss={data?.toss} weather={data?.weather} dewRisk={data?.dewRisk} pregame={pregame} />
           <InsightPanel insights={timelineInsights} />
         </div>
@@ -88,9 +91,30 @@ function StatusCard({ label, error = false }) {
   return <div className={`room-status ${error ? 'room-status-error' : ''}`}><span>{label}</span></div>;
 }
 
-function ChasePanel({ chase }) {
+function ChasePanel({ chase, match }) {
   const state = chase?.state;
-  if (!state) return null;
+  if (!state) {
+    const liveInnings = match?.innings?.[match?.innings?.length - 1];
+    return (
+      <section className="chase-card chase-card-standby room-enter">
+        <div className="chase-card-topline"><span className="engine-live-dot" /> CHASE ENGINE <span className="engine-refresh">MATCH WATCH ACTIVE</span></div>
+        <div className="chase-hero">
+          <div>
+            <p className="chase-kicker">LIVE DECISION DESK</p>
+            <h2>ENGINE ON STANDBY</h2>
+            <p className="chase-summary">The Match Room is following this innings. Historical chase comparison appears automatically once a valid second-innings chase is confirmed.</p>
+          </div>
+          <div className="recovery-orb recovery-orb-standby"><strong>LIVE</strong><span>WATCHING</span></div>
+        </div>
+        <div className="standby-grid">
+          <Metric label="Match phase" value={liveInnings?.phase || 'In play'} />
+          <Metric label="Current innings" value={liveInnings?.team || 'Live match'} />
+          <Metric label="Historical read" value="Waiting for chase" compact />
+          <Metric label="Refresh" value="60 seconds" />
+        </div>
+      </section>
+    );
+  }
 
   if (chase.status !== 'qualified') {
     const waiting = chase.status === 'awaiting_historical_cohort';
@@ -141,7 +165,7 @@ function ChasePanel({ chase }) {
         <div className="innings-context">
           <span>1ST INNINGS CONTEXT</span>
           <strong>{firstInnings.runs}/{firstInnings.wickets}</strong>
-          <small>Target {state.target} · held only for this match</small>
+          <small>Target {state.target} Â· held only for this match</small>
         </div>
       )}
     </section>
@@ -191,6 +215,8 @@ const styles = `
   .chase-card::after { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--bail-amber); }
   .chase-card-behind::after { background: var(--blood-red); }
   .chase-card-pending { background: linear-gradient(125deg, rgba(245,166,35,.08), #11141a 55%); }
+  .chase-card-standby { background: radial-gradient(circle at 92% 10%, rgba(92,168,255,.14), transparent 30%), linear-gradient(125deg, rgba(35,75,128,.22), #11141a 60%); }
+  .chase-card-standby::after { background: #65aaff; }
   .chase-card-pending h2 { margin: 11px 0 5px; font: 28px/1 'Bebas Neue', sans-serif; color: #fff; }
   .chase-card-pending p { margin: 0 0 16px; max-width: 620px; color: rgba(240,242,245,.55); font-size: 13px; line-height: 1.5; }
   .chase-card-topline { display: flex; align-items: center; gap: 7px; }
@@ -204,6 +230,8 @@ const styles = `
   .recovery-orb { flex: 0 0 86px; height: 86px; display: grid; place-content: center; text-align: center; border: 1px solid rgba(245,166,35,.42); border-radius: 50%; background: rgba(245,166,35,.06); box-shadow: inset 0 0 26px rgba(245,166,35,.08); }
   .chase-card-behind .recovery-orb { border-color: rgba(232,0,58,.5); background: rgba(232,0,58,.07); }
   .recovery-orb strong { font: 29px/1 'JetBrains Mono', monospace; color: #fff; letter-spacing: -.08em; }
+  .recovery-orb-standby { border-color: rgba(101,170,255,.5); background: rgba(63,129,209,.1); }
+  .recovery-orb-standby strong { font-size: 15px; letter-spacing: .06em; }
   .recovery-orb span { margin-top: 4px; font: 700 8px 'JetBrains Mono', monospace; letter-spacing: .08em; color: rgba(240,242,245,.48); }
   .score-strip { display: grid; grid-template-columns: .8fr 1.45fr .9fr; border: 1px solid rgba(240,242,245,.09); border-radius: 5px; background: rgba(0,0,0,.17); }
   .score-strip > div { min-width: 0; padding: 11px 13px; }
@@ -212,6 +240,7 @@ const styles = `
   .score-strip strong { display: block; margin-top: 5px; color: #fff; font: 700 18px/1.1 'JetBrains Mono', monospace; letter-spacing: -.04em; }
   .score-strip em { color: rgba(240,242,245,.47); font: 400 10px 'Inter', sans-serif; letter-spacing: 0; font-style: normal; }
   .chase-metrics { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 12px; border-top: 1px solid rgba(240,242,245,.07); }
+  .standby-grid { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 2px; border-top: 1px solid rgba(240,242,245,.07); }
   .chase-metric { min-width: 0; padding: 12px 12px 0 0; }
   .chase-metric + .chase-metric { padding-left: 12px; border-left: 1px solid rgba(240,242,245,.07); }
   .chase-metric strong { display: block; overflow: hidden; margin-top: 5px; color: #fff; font: 700 15px/1.2 'JetBrains Mono', monospace; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -.04em; }
@@ -221,6 +250,7 @@ const styles = `
   .innings-context > span { color: var(--bail-amber); } .innings-context strong { font: 700 12px 'JetBrains Mono', monospace; color: #fff; } .innings-context small { color: rgba(240,242,245,.38); font-size: 10px; }
   @keyframes room-rise { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes room-pulse { 50% { opacity: .38; transform: scale(.88); } }
-  @media (max-width: 680px) { .match-room { padding-top: 12px; } .room-title-row { align-items: start; flex-direction: column; gap: 10px; } .room-purpose { max-width: none; text-align: left; } .match-room-title { font-size: 35px; } .chase-card { padding: 17px 16px; } .chase-hero { align-items: flex-start; } .chase-hero h2 { font-size: 30px; } .recovery-orb { flex-basis: 74px; width: 74px; height: 74px; } .recovery-orb strong { font-size: 23px; } .score-strip { grid-template-columns: 1fr 1fr; } .score-strip > div:last-child { grid-column: 1 / -1; border-top: 1px solid rgba(240,242,245,.09); border-left: 0; } .chase-metrics { grid-template-columns: 1fr 1fr; } .chase-metric:nth-child(3) { border-left: 0; } .chase-metric:nth-child(n+3) { border-top: 1px solid rgba(240,242,245,.07); padding-top: 12px; } }
+  @media (max-width: 680px) { .match-room { padding-top: 12px; } .room-title-row { align-items: start; flex-direction: column; gap: 10px; } .room-purpose { max-width: none; text-align: left; } .match-room-title { font-size: 35px; } .chase-card { padding: 17px 16px; } .chase-hero { align-items: flex-start; } .chase-hero h2 { font-size: 30px; } .recovery-orb { flex-basis: 74px; width: 74px; height: 74px; } .recovery-orb strong { font-size: 23px; } .score-strip { grid-template-columns: 1fr 1fr; } .score-strip > div:last-child { grid-column: 1 / -1; border-top: 1px solid rgba(240,242,245,.09); border-left: 0; } .chase-metrics, .standby-grid { grid-template-columns: 1fr 1fr; } .chase-metric:nth-child(3) { border-left: 0; } .chase-metric:nth-child(n+3) { border-top: 1px solid rgba(240,242,245,.07); padding-top: 12px; } }
   @media (prefers-reduced-motion: reduce) { .room-enter, .engine-live-dot, .eyebrow i { animation: none; } .back-link { transition: none; } }
 `;
+
