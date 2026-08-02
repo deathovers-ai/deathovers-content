@@ -316,7 +316,12 @@ export default function LiveCarousel() {
       {/* ================= VIEW 2: FULL WIDTH MATCH PAGE ================= */}
       {activeMatchId && activeMatchMeta && activeData && (
         <div className="matchpage">
-          <button className="back-btn" onClick={closeMatch}>&larr; BACK TO LIVE MATCHES</button>
+          <div className="matchpage-actions">
+            <button className="back-btn" onClick={closeMatch}>&larr; BACK TO LIVE MATCHES</button>
+            <a className="tactical-read-link" href={`/tactical-sheets?id=${encodeURIComponent(activeMatchId)}`}>
+              TACTICAL READ <span>&rarr;</span>
+            </a>
+          </div>
 
           <>
               {/* GLANCE SCOREBOARD */}
@@ -648,8 +653,12 @@ export default function LiveCarousel() {
 
         /* MATCH PAGE TAKEOVER */
         .matchpage { padding: 0 24px 20px; animation: ballIn 0.3s ease-out; }
-        .back-btn { background: none; border: none; color: rgba(240,242,245,0.5); font-size: 11px; font-family: 'JetBrains Mono', monospace; margin-bottom: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 0; transition: color 0.2s; }
+        .matchpage-actions { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 14px; }
+        .back-btn { background: none; border: none; color: rgba(240,242,245,0.5); font-size: 11px; font-family: 'JetBrains Mono', monospace; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 0; transition: color 0.2s; }
         .back-btn:hover { color: var(--crease-white); }
+        .tactical-read-link { display: inline-flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid rgba(101,170,255,0.3); border-radius: 4px; background: rgba(57,112,191,0.1); color: #9ac5ff; font: 700 10px 'JetBrains Mono', monospace; letter-spacing: 0.07em; text-decoration: none; transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease; }
+        .tactical-read-link:hover { border-color: #65aaff; background: rgba(57,112,191,0.2); color: #fff; }
+        .tactical-read-link span { color: var(--bail-amber); font-size: 13px; }
 
         .scoreboard {
           background: var(--outfield);
