@@ -23,10 +23,13 @@ export default function TacticalSheetLive() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    setRequestedId(new URLSearchParams(window.location.search).get('id'));
+    const id = new URLSearchParams(window.location.search).get('id');
+    setRequestedId(id);
+    if (id) setSelectedId(id);
   }, []);
 
   const liveMatches = useMemo(() => matches.filter((match) => match.status === 'LIVE'), [matches]);
+  const availableMatches = liveMatches.length > 0 ? liveMatches : matches;
   const selectedMatch = matches.find((match) => String(match.id) === String(selectedId));
   const insightData = detail?.intelligence?.insights || [];
   const venueBrief = insightData.find((insight) => insight.type === 'venue_pregame_summary');
@@ -45,7 +48,7 @@ export default function TacticalSheetLive() {
         setSelectedId((current) => {
           if (requestedId) return requestedId;
           if (next.some((match) => String(match.id) === String(current))) return current;
-          return next.find((match) => match.status === 'LIVE')?.id || null;
+          return next.find((match) => match.status === 'LIVE')?.id || next[0]?.id || null;
         });
         setError(null);
       } catch (loadError) {
@@ -84,23 +87,24 @@ export default function TacticalSheetLive() {
     <section className="tactical-read" aria-label="Tactical Read">
       <header className="tactical-header">
         <div>
-          <p className="tactical-kicker"><i /> LIVE INTELLIGENCE</p>
+          <p className="tactical-kicker"><i /> {liveMatches.length > 0 ? 'LIVE INTELLIGENCE' : 'MATCH INTELLIGENCE'}</p>
           <h1>TACTICAL READ</h1>
           <p>Venue evidence, live match interpretation and innings-specific analysis.</p>
         </div>
-        <div className="tactical-status"><i /> {loadingDetail ? 'UPDATING' : 'LIVE DATA'}<small>60 second refresh</small></div>
+        <div className="tactical-status"><i /> {loadingDetail ? 'UPDATING' : liveMatches.length > 0 ? 'LIVE DATA' : 'MATCH DATA'}<small>60 second refresh</small></div>
       </header>
 
       {loadingMatches ? <StateCopy>Loading live fixtures.</StateCopy> : null}
-      {!loadingMatches && liveMatches.length > 0 ? (
-        <div className="match-rail" role="tablist" aria-label="Live matches">
-          {liveMatches.map((match) => {
+      {!loadingMatches && availableMatches.length > 0 ? (
+        <div className="match-rail" role="tablist" aria-label="Available matches">
+          {availableMatches.map((match) => {
             const selected = String(match.id) === String(selectedId);
-            return <button key={match.id} type="button" role="tab" aria-selected={selected} className={`match-tab ${selected ? 'selected' : ''}`} onClick={() => setSelectedId(match.id)}><span><i /> LIVE</span><strong>{matchName(match)}</strong><small>{match.venue || 'Venue unavailable'}</small></button>;
+            const isLive = match.status === 'LIVE';
+            return <button key={match.id} type="button" role="tab" aria-selected={selected} className={`match-tab ${selected ? 'selected' : ''}`} onClick={() => setSelectedId(match.id)}><span><i /> {isLive ? 'LIVE' : 'RECENT'}</span><strong>{matchName(match)}</strong><small>{match.venue || 'Venue unavailable'}</small></button>;
           })}
         </div>
       ) : null}
-      {!loadingMatches && !selectedId ? <StateCopy>No live matches are available.</StateCopy> : null}
+      {!loadingMatches && !selectedId ? <StateCopy>No live or recent match data is currently available.</StateCopy> : null}
 
       {selectedId ? <>
         <section className="match-summary">
