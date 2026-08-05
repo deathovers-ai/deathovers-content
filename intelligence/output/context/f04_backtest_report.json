@@ -1,0 +1,68 @@
+{
+  "player_count": 8920,
+  "enriched_players": 7477,
+  "reliable_phase_players": 1879,
+  "reliable_venue_blocks": 4923,
+  "checks": [
+    {
+      "name": "kohli_present",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "career_preserved",
+      "ok": true,
+      "detail": 28134
+    },
+    {
+      "name": "has_form",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "has_phases",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "form_window_nesting",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "kohli_ipl_death_gt_powerplay",
+      "ok": true,
+      "detail": {
+        "death": 188.38,
+        "powerplay": 129.72
+      }
+    },
+    {
+      "name": "enriched_players_gt_1000",
+      "ok": true,
+      "detail": 7477
+    },
+    {
+      "name": "reliable_phase_players_gt_500",
+      "ok": true,
+      "detail": 1879
+    },
+    {
+      "name": "reliable_venue_blocks_gt_500",
+      "ok": true,
+      "detail": 4923
+    },
+    {
+      "name": "kohli_phase_mismatch_fires",
+      "ok": true,
+      "detail": "V Kohli 41.6% above their death rate (IPL)"
+    },
+    {
+      "name": "thin_venue_refused",
+      "ok": true,
+      "detail": null
+    }
+  ],
+  "failed": [],
+  "passed": true
+}

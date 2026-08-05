@@ -58,6 +58,8 @@ from validation_engine import (
     SIGNIFICANCE_THRESHOLD_PCT,
     DataConfidenceError,
     player_data_is_reliable,
+    player_phase_is_reliable,
+    player_venue_is_reliable,
     venue_data_is_reliable,
 )
 
@@ -381,6 +383,87 @@ class InsightEngine:
                 {"label": "Career Strike Rate", "value": career_sr},
                 {"label": "Difference", "value": round(current_sr - career_sr, 2), "pct": diff_pct},
             ],
+        }
+
+    def player_phase_mismatch(self, player_name, match_type, phase_name, current_runs, current_balls):
+        """
+        Live phase strike rate vs this player's historical SR in the same
+        phase/format. Requires MIN_PHASE_BALLS of history.
+        """
+        player_entry = self.player_stats.get(player_name)
+        if not player_entry or not player_data_is_reliable(player_entry):
+            return None
+        phase_block = ((player_entry.get("phases") or {}).get(match_type) or {}).get(phase_name)
+        if not player_phase_is_reliable(phase_block):
+            return None
+        if current_balls < 10:
+            return None
+
+        hist_sr = phase_block["strike_rate"]
+        if hist_sr <= 0:
+            return None
+        current_sr = round((current_runs / current_balls) * 100, 2)
+        diff_pct = round(((current_sr - hist_sr) / hist_sr) * 100, 1)
+        if abs(diff_pct) < SIGNIFICANCE_THRESHOLD_PCT:
+            return None
+
+        direction = "above" if diff_pct > 0 else "below"
+        return {
+            "type": "player_phase_mismatch",
+            "player": player_name,
+            "match_type": match_type,
+            "phase": phase_name,
+            "diff_pct": diff_pct,
+            "headline": f"{player_name} {abs(diff_pct)}% {direction} their {phase_name} rate ({match_type})",
+            "pointers": [
+                {"label": "Current Phase SR", "value": current_sr},
+                {"label": f"Career {phase_name.title()} SR", "value": hist_sr},
+                {"label": "Phase Sample", "value": phase_block["balls"], "unit": " balls"},
+                {"label": "Difference", "value": round(current_sr - hist_sr, 2), "pct": diff_pct},
+            ],
+        }
+
+    def venue_form_convergence(self, player_name, venue_key, current_runs, current_balls):
+        """
+        Live innings SR vs this player's SR at the same venue.
+        Requires MIN_VENUE_INNINGS of venue history.
+        """
+        player_entry = self.player_stats.get(player_name)
+        if not player_entry or not player_data_is_reliable(player_entry):
+            return None
+        venue_block = (player_entry.get("venues") or {}).get(venue_key)
+        if not player_venue_is_reliable(venue_block):
+            return None
+        if current_balls < 10:
+            return None
+
+        venue_sr = venue_block["batting"]["strike_rate"]
+        if venue_sr <= 0:
+            return None
+        current_sr = round((current_runs / current_balls) * 100, 2)
+        diff_pct = round(((current_sr - venue_sr) / venue_sr) * 100, 1)
+        if abs(diff_pct) < SIGNIFICANCE_THRESHOLD_PCT:
+            return None
+
+        form = (player_entry.get("form") or {}).get("last_10_innings") or {}
+        form_sr = form.get("strike_rate")
+        venue_name = (self.venue_stats.get(venue_key) or {}).get("display_name", venue_key)
+        direction = "above" if diff_pct > 0 else "below"
+        pointers = [
+            {"label": "Current SR", "value": current_sr},
+            {"label": "Venue SR", "value": venue_sr},
+            {"label": "Venue Innings", "value": venue_block["batting"]["innings"]},
+            {"label": "Difference", "value": round(current_sr - venue_sr, 2), "pct": diff_pct},
+        ]
+        if form_sr:
+            pointers.insert(2, {"label": "Last 10 SR", "value": form_sr})
+        return {
+            "type": "venue_form_convergence",
+            "player": player_name,
+            "venue": venue_name,
+            "diff_pct": diff_pct,
+            "headline": f"{player_name} {abs(diff_pct)}% {direction} their {venue_name} rate",
+            "pointers": pointers,
         }
 
     # ------------------------------------------------------------------
@@ -852,6 +935,22 @@ class InsightEngine:
             )
             if i:
                 insights.append(i)
+
+            if all(k in context for k in ("match_type", "phase_name")):
+                i = self.player_phase_mismatch(
+                    context["player_name"], context["match_type"], context["phase_name"],
+                    context["player_current_runs"], context["player_current_balls"],
+                )
+                if i:
+                    insights.append(i)
+
+            if "venue_key" in context:
+                i = self.venue_form_convergence(
+                    context["player_name"], context["venue_key"],
+                    context["player_current_runs"], context["player_current_balls"],
+                )
+                if i:
+                    insights.append(i)
 
         return insights
 

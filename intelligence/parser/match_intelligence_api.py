@@ -93,9 +93,13 @@ def get_match_insights(live_state):
 
     context = {}
 
-    if match_type and venue_key and venue_key in engine.venue_stats:
-        context.update({"venue_key": venue_key, "match_type": match_type})
+    if match_type:
+        context["match_type"] = match_type
 
+    if venue_key:
+        context["venue_key"] = venue_key
+
+    if match_type and venue_key and venue_key in engine.venue_stats:
         if all(k in live_state for k in ("current_score", "current_wickets", "overs_completed_str")):
             context.update({
                 "current_score": live_state["current_score"],
@@ -123,6 +127,12 @@ def get_match_insights(live_state):
                 live_state = dict(live_state)  # avoid mutating caller's dict
                 live_state.pop("current_phase_runs", None)
                 live_state.pop("current_phase_balls", None)
+    elif match_type and "current_over_number" in live_state:
+        context["phase_name"] = determine_phase(live_state["current_over_number"], match_type)
+
+    if live_state.get("current_phase_runs") is not None and live_state.get("current_phase_balls") is not None:
+        context["current_phase_runs"] = live_state["current_phase_runs"]
+        context["current_phase_balls"] = live_state["current_phase_balls"]
 
     if live_state.get("striker_name") and "striker_current_runs" in live_state \
             and "striker_current_balls" in live_state:
