@@ -9,9 +9,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from app import (  # noqa: E402
+    _extract_toss_from_commentary,
     _format_toss_line,
     _parse_toss_from_status,
-    _record_toss_if_new,
     _resolve_toss_for_match,
     _toss_archive,
 )
@@ -56,6 +56,35 @@ class TossParseTests(unittest.TestCase):
         )
         self.assertEqual(toss["winner"], "Nepal")
         self.assertEqual(_toss_archive["m1"]["decision"], "bowl")
+
+    def test_commentary_opt_line(self):
+        hit = _extract_toss_from_commentary(
+            [
+                {"text": "4 runs"},
+                {"text": "Toss - India have won the toss and have opted to bat"},
+                {"text": "0.1 Sharma to Kohli, no run"},
+            ],
+            "India",
+            "Australia",
+        )
+        self.assertEqual(hit["winner"], "India")
+        self.assertEqual(hit["decision"], "bat")
+        self.assertEqual(hit["source"], "commentary")
+
+    def test_resolve_prefers_commentary_when_status_is_live(self):
+        toss = _resolve_toss_for_match(
+            "m2",
+            carousel_entry={
+                "teams": ["England", "New Zealand"],
+                "chaseNote": "England need 40 runs",
+            },
+            commentary=[
+                {"text": "England won the toss and elected to field"},
+                {"text": "1.2 Boult to Root, FOUR"},
+            ],
+        )
+        self.assertEqual(toss["winner"], "England")
+        self.assertEqual(toss["decision"], "bowl")
 
 
 if __name__ == "__main__":

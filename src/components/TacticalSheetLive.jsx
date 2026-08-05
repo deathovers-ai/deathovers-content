@@ -121,7 +121,7 @@ export default function TacticalSheetLive() {
           {tabs.map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={activeTab === tab.id} className={activeTab === tab.id ? 'active' : ''} onClick={() => setActiveTab(tab.id)}>{tab.label}</button>)}
         </div>
         {error ? <StateCopy error>{error}</StateCopy> : null}
-        {!error && activeTab === 'venue' ? <VenueRecord brief={venueBrief} weather={detail?.weather} toss={detail?.toss} dewRisk={detail?.dewRisk} /> : null}
+        {!error && activeTab === 'venue' ? <VenueRecord brief={venueBrief} weather={detail?.weather} toss={detail?.tossLine || detail?.toss} dewRisk={detail?.dewRisk} /> : null}
         {!error && activeTab === 'read' ? <TacticalRead insights={tacticalInsights} /> : null}
         {!error && activeTab === 'innings' ? <InningsEngine detail={detail} insights={tacticalInsights} /> : null}
       </> : null}
@@ -132,8 +132,17 @@ export default function TacticalSheetLive() {
 
 function VenueRecord({ brief, toss, weather, dewRisk }) {
   const tossLine = formatToss(toss);
+  const historicalToss = brief?.toss_record
+    ? {
+        ...brief.toss_record,
+        pointers: [
+          ...(tossLine ? [{ label: 'This match', value: tossLine }] : []),
+          ...(brief.toss_record.pointers || []),
+        ],
+      }
+    : (tossLine ? { basis: 'this match', pointers: [{ label: 'This match', value: tossLine }] } : null);
   const records = [
-    ['Toss and decision', brief?.toss_record], ['Scoring record', brief?.score_record], ['Chase record', brief?.chase_record],
+    ['Toss and decision', historicalToss], ['Scoring record', brief?.score_record], ['Chase record', brief?.chase_record],
   ].filter(([, record]) => record);
   return <section className="tab-panel venue-panel" role="tabpanel">
     <PanelHead title="Venue record" note={brief?.sample_size ? `${brief.sample_size} historical matches` : 'Historical ground evidence'} />
