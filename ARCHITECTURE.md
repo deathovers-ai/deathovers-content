@@ -143,6 +143,16 @@ wickets, innings, economy, average), plus `earliest_match_date` and
 `latest_match_date` - the latter two fields exist specifically to power
 the data-confidence guard in the Insight Engine (see below).
 
+**F04 enrichment** (when rebuilt from events):
+- `form`: `last_10_innings`, `last_5_innings`, `last_2y` batting windows
+- `venues`: per-venue batting/bowling (only venues with ≥`MIN_VENUE_INNINGS`)
+- `phases`: per-format powerplay/middle/death batting SR (`reliable` when
+  ≥`MIN_PHASE_BALLS`)
+
+`--merge-existing` keeps committed career totals and refreshes enrichment
+from whatever event slice is on disk (used for T20/IPL backtests without
+wiping ODI career coverage).
+
 ## Player identity resolution (`registry_verification.py`)
 
 **Important design history, worth preserving**: an earlier attempt used
@@ -214,6 +224,8 @@ essentially complete.
 - `venue_score_insight` - live score vs. pace-adjusted venue baseline
 - `venue_phase_insight` - live phase run rate vs. venue's historical phase rate
 - `player_form_insight` - live strike rate vs. career strike rate (guarded by DATA_CONFIDENCE_CUTOFF)
+- `player_phase_mismatch` - live phase SR vs player phase history (F04; `MIN_PHASE_BALLS`)
+- `venue_form_convergence` - live SR vs player venue history (F04; `MIN_VENUE_INNINGS`)
 - `venue_pregame_insight` - toss / scoring / chase venue record
 - Situation detection (`situation_collapse`, `situation_wicket_pressure`,
   `situation_acceleration`, `situation_partnership`)
@@ -224,8 +236,7 @@ essentially complete.
 - AI narration layer (turns structured insight objects into flowing
   prose) - explicitly scoped to narrate ONLY pre-verified facts from the
   Insight Engine, never to generate new comparisons itself
-- Player form windows / venue / phase stats and bowler-batter matchups
-  (F04 / F06)
+- Player form windows / venue / phase stats - **done** (F04); matchups still F06
 - Win probability Monte Carlo (F05) — additive to Chase Engine, not a replacement
 
 ---

@@ -24,6 +24,10 @@ SIGNIFICANCE_THRESHOLD_PCT = 10.0
 # venue_stats.json builds).
 MIN_VENUE_MATCHES = 5
 
+# F04 player enrichment floors — refuse venue/phase player insights below these.
+MIN_VENUE_INNINGS = 5
+MIN_PHASE_BALLS = 100
+
 
 class DataConfidenceError(Exception):
     """Raised when an insight was about to be generated from unvalidated
@@ -56,3 +60,20 @@ def player_data_is_reliable(player_entry):
     if earliest is None:
         return False
     return earliest >= DATA_CONFIDENCE_CUTOFF
+
+
+def player_venue_is_reliable(venue_block: dict | None) -> bool:
+    """Enough batting innings at this venue for a player-level comparison."""
+    if not venue_block:
+        return False
+    batting = venue_block.get("batting") or {}
+    return batting.get("innings", 0) >= MIN_VENUE_INNINGS
+
+
+def player_phase_is_reliable(phase_block: dict | None) -> bool:
+    """Enough balls in this phase for a player phase comparison."""
+    if not phase_block:
+        return False
+    if "reliable" in phase_block:
+        return bool(phase_block["reliable"])
+    return phase_block.get("balls", 0) >= MIN_PHASE_BALLS
