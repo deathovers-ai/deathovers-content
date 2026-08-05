@@ -915,7 +915,9 @@ class InsightEngine:
     # ------------------------------------------------------------------
 
     def chase_projection_insight(self, venue_key, match_type, current_score, target,
-                                  current_over_decimal, balls_remaining):
+                                  current_over_decimal, balls_remaining,
+                                  run_rate_mult: float = 1.0,
+                                  weather_summary: str | None = None):
         """
         Returns None if not yet eligible (before the same halfway-point
         threshold as projection_insight - a chase projection this early
@@ -925,6 +927,9 @@ class InsightEngine:
         band if the current rate holds), not a single confident number -
         chases are inherently more volatile than a free innings since
         required rate itself changes every ball.
+
+        F09: optional run_rate_mult scales venue remaining-phase rates
+        (dew aid). Caller supplies mult from weather_service.compute_weather_adjustment.
         """
         min_over = self.PROJECTION_MIN_OVER.get(match_type)
         if min_over is None or current_over_decimal < min_over or balls_remaining is None or balls_remaining <= 0:
@@ -947,8 +952,9 @@ class InsightEngine:
 
         middle_overs_remaining = max(0.0, middle_end - current_over_decimal)
         death_overs_remaining = max(0.0, total_overs - max(current_over_decimal, death_start))
-        middle_rate = phases["middle"].get("avg_run_rate", 0)
-        death_rate = phases["death"].get("avg_run_rate", 0)
+        mult = float(run_rate_mult) if run_rate_mult and run_rate_mult > 0 else 1.0
+        middle_rate = phases["middle"].get("avg_run_rate", 0) * mult
+        death_rate = phases["death"].get("avg_run_rate", 0) * mult
         if middle_rate == 0 and death_rate == 0:
             return None
 
@@ -966,7 +972,9 @@ class InsightEngine:
         rr_gap = round(current_rr - required_rr, 2) if required_rr is not None else None
 
         # Combine: if current pace continues exactly, where do they land?
-        current_pace_projection = current_score + (current_rr * (balls_remaining / 6))
+        # Dew also slightly eases current-pace projection when mult > 1
+        # (same named ceiling as venue rates).
+        current_pace_projection = current_score + (current_rr * mult * (balls_remaining / 6))
 
         uncertainty_pct = 0.10
         low = round(min(venue_pace_projection, current_pace_projection) * (1 - uncertainty_pct))
@@ -981,18 +989,27 @@ class InsightEngine:
         else:
             status = "ON PACE"
 
+        headline = f"Chase {status.title()} \u2014 projected {low}\u2013{high} at current rate"
+        if weather_summary and mult != 1.0:
+            headline = f"Chase {status.title()} \u2014 projected {low}\u2013{high} (weather-adjusted)"
+
+        pointers = [
+            {"label": "Target", "value": target},
+            {"label": "Current Run Rate", "value": current_rr},
+            {"label": "Required Run Rate", "value": required_rr},
+            {"label": "Gap to Required Rate", "value": rr_gap, "unit": " rpo"},
+            {"label": "Projected Range (current pace)", "value": f"{low} \u2013 {high}"},
+        ]
+        if weather_summary and mult != 1.0:
+            pointers.append({"label": "Weather adj", "value": weather_summary})
+
         return {
             "type": "chase_projection",
             "match_type": match_type,
             "status": status,
-            "headline": f"Chase {status.title()} \u2014 projected {low}\u2013{high} at current rate",
-            "pointers": [
-                {"label": "Target", "value": target},
-                {"label": "Current Run Rate", "value": current_rr},
-                {"label": "Required Run Rate", "value": required_rr},
-                {"label": "Gap to Required Rate", "value": rr_gap, "unit": " rpo"},
-                {"label": "Projected Range (current pace)", "value": f"{low} \u2013 {high}"},
-            ],
+            "headline": headline,
+            "weather_adjusted": bool(weather_summary and mult != 1.0),
+            "pointers": pointers,
         }
 
     def generate_all(self, context):

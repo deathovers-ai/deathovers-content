@@ -227,6 +227,8 @@ def get_match_insights(live_state):
             target=live_state["target"],
             current_over_decimal=live_state["current_over_decimal"],
             balls_remaining=live_state["balls_remaining"],
+            run_rate_mult=float(live_state.get("weather_run_rate_mult") or 1.0),
+            weather_summary=live_state.get("weather_summary"),
         )
         if chase_projection:
             insights.append(chase_projection)

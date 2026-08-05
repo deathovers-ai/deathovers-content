@@ -346,9 +346,9 @@ actual final score 188. Within range, 2 runs from the projection midpoint.
    detection would need new aggregation work in context_repository.py
 6. Chase Engine - **built** (compact index + live bridge + Match Room /
    Tactical Read). Win probability (F05) - **built** beside Chase
-   (`win_probability.py` + Match Room WP orb/bar); weather not yet in WP (F09).
-7. Weather/dew - **partial**: fetched and shown in UI; not yet wired into
-   projections / win models.
+   (`win_probability.py` + Match Room WP orb/bar); weather nudges WP (F09).
+7. Weather/dew - **done for F09 nudge**: dew HIGH/MOD raises batting WP +
+   chase projection rates; rain marks uncertainty only (no DLS lib yet).
 8. Data freshness dashboard (F03) - **done**: `context_freshness.py` +
    `context_meta.json` sidecar; exposed as `intelligence.data_freshness`
    on match-details; chip on Match Room + Tactical Read.
