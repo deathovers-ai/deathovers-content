@@ -28,6 +28,9 @@ MIN_VENUE_MATCHES = 5
 MIN_VENUE_INNINGS = 5
 MIN_PHASE_BALLS = 100
 
+# F06 matchup floor — refuse bowler–batter insights below this legal-ball sample.
+MIN_MATCHUP_BALLS = 30
+
 
 class DataConfidenceError(Exception):
     """Raised when an insight was about to be generated from unvalidated
@@ -77,3 +80,12 @@ def player_phase_is_reliable(phase_block: dict | None) -> bool:
     if "reliable" in phase_block:
         return bool(phase_block["reliable"])
     return phase_block.get("balls", 0) >= MIN_PHASE_BALLS
+
+
+def matchup_is_reliable(matchup_block: dict | None) -> bool:
+    """Enough legal balls between this batter and bowler for a matchup card."""
+    if not matchup_block:
+        return False
+    if "reliable" in matchup_block:
+        return bool(matchup_block["reliable"])
+    return matchup_block.get("balls", 0) >= MIN_MATCHUP_BALLS

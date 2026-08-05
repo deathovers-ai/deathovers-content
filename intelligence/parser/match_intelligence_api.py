@@ -141,6 +141,8 @@ def get_match_insights(live_state):
             "player_current_runs": live_state["striker_current_runs"],
             "player_current_balls": live_state["striker_current_balls"],
         })
+        if live_state.get("bowler_name"):
+            context["bowler_name"] = live_state["bowler_name"]
 
     insights = engine.generate_all(context) if context else []
 

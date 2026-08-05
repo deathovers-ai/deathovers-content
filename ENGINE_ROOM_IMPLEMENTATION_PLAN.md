@@ -51,9 +51,9 @@ Legend: **HAVE** = production-usable · **PARTIAL** = code exists, incomplete vs
 | F01 | Phase constants consolidation | **NEED** | Still 3 copies |
 | F02 | `validation_engine.py` extraction | **NEED** | Guards still live inside `insight_engine.py` |
 | F03 | Data freshness dashboard | **NEED** | No `generated_at` on context JSONs; no UI badge |
-| F04 | Player form / venue / phase stats | **NEED** | Career aggregates only today |
+| F04 | Player form / venue / phase stats | **HAVE** | form / venues / phases + insights |
 | F05 | Win probability (Monte Carlo) | **NEED** | Chase cohort ≠ ball-by-ball WP |
-| F06 | Bowler–batter matchups | **NEED** | No matrix build / insight type |
+| F06 | Bowler–batter matchups | **HAVE** | `matchup_stats.json` + Match Room card |
 | F07 | Momentum Index (−1..+1 + percentiles) | **PARTIAL** | Momentum *situation* exists; no continuous index / slider / Cricsheet percentile baselines |
 | F08 | AI narration + hard contract | **NEED** | Insights are template/pointer structured; no LLM layer |
 | F09 | Weather-aware projections | **PARTIAL** | Weather/dew exist; no DLS lib; no WP/projection adjustment |
