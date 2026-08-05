@@ -82,6 +82,7 @@ normalized relational schema.
 | `intelligence/output/context/venue_stats.json` | **Yes** | Small (~400KB), needed at runtime |
 | `intelligence/output/context/player_stats.json` | **Yes** | ~3.8MB, needed at runtime |
 | `intelligence/output/context/player_aliases.json` | **Yes** | ~4KB, registry-confirmed merges |
+| `intelligence/output/context/context_meta.json` | **Yes** | Freshness sidecar (`generated_at`, `corpus_through`) |
 
 Render (production) only has what's in git - this is why the three
 context JSON files are deliberately NOT gitignored, unlike everything
@@ -322,4 +323,6 @@ actual final score 188. Within range, 2 runs from the projection midpoint.
    Tactical Read). Win probability (Monte Carlo) is still separate future work.
 7. Weather/dew - **partial**: fetched and shown in UI; not yet wired into
    projections / win models.
-8. Data freshness dashboard (F03) - not built yet.
+8. Data freshness dashboard (F03) - **done**: `context_freshness.py` +
+   `context_meta.json` sidecar; exposed as `intelligence.data_freshness`
+   on match-details; chip on Match Room + Tactical Read.

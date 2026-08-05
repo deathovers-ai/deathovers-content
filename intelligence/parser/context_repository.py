@@ -28,6 +28,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from replay_engine import ReplayEngine, MatchState
 from metrics_engine import current_run_rate
 from constants import phase_set_for_total_overs
+from context_freshness import write_context_meta
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EVENTS_DIR = os.path.join(BASE_DIR, "output", "events")
@@ -313,6 +314,7 @@ def build_venue_stats():
     limited_overs_matches = [m for m in manifest if m["competition_code"] in LIMITED_OVERS_FORMATS]
     print(f"Processing {len(limited_overs_matches)} limited-overs matches...")
 
+    corpus_through = None
     processed = 0
     for m in limited_overs_matches:
         match_id = m["match_id"]
@@ -322,6 +324,11 @@ def build_venue_stats():
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
         meta = data["meta"]
+        match_dates = meta.get("dates") or []
+        if match_dates:
+            match_date = match_dates[-1] if isinstance(match_dates, list) else None
+            if match_date and (corpus_through is None or match_date > corpus_through):
+                corpus_through = match_date
         raw_venue = meta.get("venue")
         if not raw_venue:
             continue
@@ -451,7 +458,9 @@ def build_venue_stats():
     with open(OUT_FILE, "w", encoding="utf-8") as f:
         json.dump(venue_stats, f, indent=2)
 
+    write_context_meta(corpus_through)
     print(f"Saved venue context for {len(venue_stats)} venues to {OUT_FILE}")
+    print(f"Context meta corpus_through={corpus_through}")
     return venue_stats
 
 

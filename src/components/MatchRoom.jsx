@@ -74,13 +74,32 @@ function DashboardHeader({ view }) {
   return (
     <header className="board-header board-enter">
       <div>
-        <p className="live-kicker"><i /> LIVE MATCH ROOM <span>â€¢</span> DECISION DESK</p>
+        <p className="live-kicker"><i /> LIVE MATCH ROOM <span>•</span> DECISION DESK</p>
         <h1>{view.teamOne} <em>vs</em> {view.teamTwo}</h1>
         <p className="board-subtitle">A single match workspace: score, conditions, venue evidence and chase decisions.</p>
       </div>
-      <div className="watch-status"><i /><span>WATCHING LIVE</span><small>refreshes every 60 sec</small></div>
+      <div className="header-status">
+        <div className="watch-status"><i /><span>WATCHING LIVE</span><small>refreshes every 60 sec</small></div>
+        <FreshnessChip freshness={view.freshness} />
+      </div>
     </header>
   );
+}
+
+function FreshnessChip({ freshness }) {
+  if (!freshness) return null;
+  if (!freshness.known) {
+    return <div className="freshness-chip unknown" title="Context build time not available"><span>DATA</span><strong>FRESHNESS UNKNOWN</strong></div>;
+  }
+  if (freshness.stale) {
+    return <div className="freshness-chip stale" title={`Built ${freshness.generated_at || 'unknown'}`}><span>REFRESH PENDING</span><strong>DATA THRU {formatFreshDate(freshness.corpus_through || freshness.generated_at)}</strong></div>;
+  }
+  return <div className="freshness-chip" title={`Built ${freshness.generated_at || 'unknown'}`}><span>DATA THRU</span><strong>{formatFreshDate(freshness.corpus_through || freshness.generated_at)}</strong></div>;
+}
+
+function formatFreshDate(value) {
+  if (!value) return '—';
+  return String(value).slice(0, 10);
 }
 
 function LiveMatchPanel({ view }) {
@@ -224,6 +243,7 @@ function buildView(data) {
     weatherText: data?.weather?.condition ? `${data.weather.condition}${data.weather.temp_c != null ? ` â€¢ ${Math.round(data.weather.temp_c)}Â°C` : ''}` : 'Weather pending',
     dewText: data?.dewRisk?.risk ? `${data.dewRisk.risk} risk` : 'No alert', dewRisk: data?.dewRisk,
     chase: data?.chase, timeline, venueRecords: sections, venueSample: pregame?.sample_size,
+    freshness: data?.intelligence?.data_freshness || null,
   };
 }
 
@@ -235,6 +255,7 @@ const styles = `
   .live-kicker,.panel-title span { margin:0 0 8px; color:#f5a623; font:700 10px 'JetBrains Mono',monospace; letter-spacing:.11em; } .live-kicker i,.watch-status i { display:inline-block; width:7px; height:7px; margin-right:8px; border-radius:50%; background:#64d89a; box-shadow:0 0 0 4px rgba(100,216,154,.11); animation:pulse 1.8s infinite; } .live-kicker span { color:rgba(240,242,245,.3); padding:0 5px; }
   .board-header h1 { margin:0; color:#fff; font:48px/.95 'Bebas Neue',sans-serif; letter-spacing:.03em; } .board-header h1 em { color:#e8003a; font-size:.55em; font-style:normal; vertical-align:middle; } .board-subtitle { max-width:560px; margin:10px 0 0; color:rgba(240,242,245,.52); font-size:13px; }
   .watch-status { display:grid; gap:4px; min-width:150px; text-align:right; color:#fff; font:700 10px 'JetBrains Mono',monospace; letter-spacing:.08em; } .watch-status i { margin:2px 0 0 auto; } .watch-status small { color:rgba(240,242,245,.4); font:400 9px 'JetBrains Mono',monospace; letter-spacing:0; }
+  .header-status { display:grid; gap:8px; justify-items:end; } .freshness-chip { display:grid; gap:2px; padding:6px 8px; border:1px solid rgba(240,242,245,.14); border-radius:4px; background:rgba(0,0,0,.2); text-align:right; } .freshness-chip span { color:rgba(240,242,245,.42); font:700 8px 'JetBrains Mono',monospace; letter-spacing:.08em; } .freshness-chip strong { color:rgba(240,242,245,.88); font:700 10px 'JetBrains Mono',monospace; letter-spacing:.02em; } .freshness-chip.stale { border-color:rgba(245,166,35,.4); background:rgba(245,166,35,.08); } .freshness-chip.stale span { color:#f5a623; } .freshness-chip.unknown { border-color:rgba(240,242,245,.1); }
   .dashboard-grid { display:grid; } .dashboard-grid-top { grid-template-columns:1.05fr .95fr; } .dashboard-grid-bottom { grid-template-columns:1fr 1fr; border-top:1px solid rgba(240,242,245,.08); }
   .panel { min-width:0; padding:25px 30px; } .dashboard-grid > .panel + .panel { border-left:1px solid rgba(240,242,245,.08); }
   .panel-title { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:20px; } .panel-title span { display:block; margin-bottom:6px; } .panel-title h2 { margin:0; color:#fff; font:25px/1 'Bebas Neue',sans-serif; letter-spacing:.035em; } .panel-title b { padding:5px 7px; border:1px solid rgba(240,242,245,.12); border-radius:3px; color:rgba(240,242,245,.55); font:700 9px 'JetBrains Mono',monospace; letter-spacing:.07em; white-space:nowrap; }
