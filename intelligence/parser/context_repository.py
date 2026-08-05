@@ -27,7 +27,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from replay_engine import ReplayEngine, MatchState
 from metrics_engine import current_run_rate
-from constants import PHASE_BOUNDARIES, phase_set_for_total_overs
+from constants import phase_set_for_total_overs
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EVENTS_DIR = os.path.join(BASE_DIR, "output", "events")
