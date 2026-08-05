@@ -82,6 +82,7 @@ normalized relational schema.
 | `intelligence/output/context/venue_stats.json` | **Yes** | Small (~400KB), needed at runtime |
 | `intelligence/output/context/player_stats.json` | **Yes** | ~3.8MB, needed at runtime |
 | `intelligence/output/context/player_aliases.json` | **Yes** | ~4KB, registry-confirmed merges |
+| `intelligence/output/context/context_meta.json` | **Yes** | Freshness sidecar (`generated_at`, `corpus_through`) |
 
 Render (production) only has what's in git - this is why the three
 context JSON files are deliberately NOT gitignored, unlike everything

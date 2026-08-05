@@ -6,14 +6,15 @@ intelligence/output/chase_snapshots.jsonl
 intelligence/output/batch_parse.log
 intelligence/output/batch_parse.err.log
 # NOTE: intelligence/output/context/venue_stats.json,
-# intelligence/output/context/player_stats.json, and
-# intelligence/output/context/player_aliases.json are INTENTIONALLY
-# NOT ignored - these three small files (under 4MB total) are what
-# app.py loads at runtime via the Insight Engine, and Render only
-# deploys what's committed to git. Everything else in output/ (the
-# 22,000+ per-match event files, the full manifest, raw Cricsheet data)
-# stays local-only - regenerate locally when you want fresh data, then
-# re-commit just these three context files.
+# intelligence/output/context/player_stats.json,
+# intelligence/output/context/player_aliases.json, and
+# intelligence/output/context/context_meta.json are INTENTIONALLY
+# NOT ignored - these small files are what app.py loads at runtime
+# via the Insight Engine, and Render only deploys what's committed
+# to git. Everything else in output/ (the 22,000+ per-match event
+# files, the full manifest, raw Cricsheet data) stays local-only -
+# regenerate locally when you want fresh data, then re-commit the
+# context files (including context_meta.json).
 node_modules/
 .pnpm-store/
 __pycache__/
