@@ -59,6 +59,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from context_repository import normalize_venue
+from constants import phase_bounds_list
 from insight_engine import InsightEngine
 
 _engine = None
@@ -144,11 +145,7 @@ def build_live_state(venue_name, match_format_str, is_ipl, miniscore):
         overs_now = current_innings.get("overs") or 0
         total_runs = current_innings.get("runs") or 0
         match_type_for_phase = "ODI" if match_format_str.upper() in ("ODI", "ODM") else "T20"
-        bounds = (
-            [("powerplay", 0, 10), ("middle", 10, 40), ("death", 40, 50)]
-            if match_type_for_phase == "ODI" else
-            [("powerplay", 0, 6), ("middle", 6, 15), ("death", 15, 20)]
-        )
+        bounds = phase_bounds_list(match_type_for_phase)
         current_phase = None
         for name, start, end in bounds:
             if start <= overs_now < end or (name == bounds[-1][0] and overs_now >= end):

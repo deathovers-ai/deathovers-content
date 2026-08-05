@@ -27,6 +27,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from replay_engine import ReplayEngine, MatchState
 from metrics_engine import current_run_rate
+from constants import phase_set_for_total_overs
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EVENTS_DIR = os.path.join(BASE_DIR, "output", "events")
@@ -37,13 +38,6 @@ OUT_FILE = os.path.join(CONTEXT_DIR, "venue_stats.json")
 # Formats we compute venue context for. Test excluded - no fixed overs,
 # powerplay/death-overs concepts don't apply the same way.
 LIMITED_OVERS_FORMATS = {"T20", "IT20", "IPL", "ODI", "ODM"}
-
-# Standard phase boundaries. T20: PP 1-6, middle 7-15, death 16-20.
-# ODI: PP 1-10, middle 11-40, death 41-50. Applied per-format below.
-PHASE_BOUNDARIES = {
-    "T20_LIKE": {"powerplay": (0, 6), "middle": (6, 15), "death": (15, 20)},
-    "ODI_LIKE": {"powerplay": (0, 10), "middle": (10, 40), "death": (40, 50)},
-}
 
 
 def normalize_venue(raw_name):
@@ -196,7 +190,7 @@ def build_venue_alias_map():
 
 
 def phase_set_for_format(total_overs):
-    return PHASE_BOUNDARIES["ODI_LIKE"] if total_overs > 20 else PHASE_BOUNDARIES["T20_LIKE"]
+    return phase_set_for_total_overs(total_overs)
 
 
 def compute_match_result_facts(meta, innings_facts):

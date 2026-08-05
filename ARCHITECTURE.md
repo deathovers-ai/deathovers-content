@@ -207,16 +207,19 @@ essentially complete.
 - `venue_score_insight` - live score vs. pace-adjusted venue baseline
 - `venue_phase_insight` - live phase run rate vs. venue's historical phase rate
 - `player_form_insight` - live strike rate vs. career strike rate (guarded by DATA_CONFIDENCE_CUTOFF)
+- `venue_pregame_insight` - toss / scoring / chase venue record
+- Situation detection (`situation_collapse`, `situation_wicket_pressure`,
+  `situation_acceleration`, `situation_partnership`)
+- `projection_insight` / `chase_projection_insight` / `second_innings_comparison`
 
 ## Insight types planned, not yet built
 
-- Collapse detection (N wickets in M overs) - format-relative threshold,
-  not venue-relative (see design discussion, Sprint 0 planning)
-- Partnership/recovery detection (50+ run partnerships, especially
-  following a detected collapse)
 - AI narration layer (turns structured insight objects into flowing
   prose) - explicitly scoped to narrate ONLY pre-verified facts from the
   Insight Engine, never to generate new comparisons itself
+- Player form windows / venue / phase stats and bowler-batter matchups
+  (F04 / F06)
+- Win probability Monte Carlo (F05) — additive to Chase Engine, not a replacement
 
 ---
 
@@ -272,19 +275,16 @@ Three-tier interval scheduling in `_background_loop`:
 
 ---
 
-# FORMAT/PHASE BOUNDARIES (kept in sync across 3 files - fragile, worth consolidating)
+# FORMAT/PHASE BOUNDARIES (single source: intelligence/parser/constants.py)
 
 T20-like: powerplay 0-6 overs, middle 6-15, death 15-20.
 ODI-like: powerplay 0-10, middle 10-40, death 40-50.
 
-Currently duplicated in `context_repository.py` (PHASE_BOUNDARIES),
-`match_intelligence_api.py` (determine_phase), and
-`insight_engine.py` (_projected_score_at_point's `bounds`). If these
-three definitions ever drift apart, venue context and live comparisons
-will silently disagree. **Improvement candidate**: extract to one shared
-constant, imported by all three - flagged here rather than fixed
-immediately, since CLAUDE.md prefers surgical changes over
-speculative refactors when nothing is currently broken.
+`PHASE_BOUNDARIES` and helpers live in `constants.py`. Consumers
+(`context_repository.py`, `match_intelligence_api.py`, `insight_engine.py`,
+`app_integration.py`, and `app.py` via `determine_phase`) import from there.
+Do not re-declare these overs in call sites — silent venue/live drift was
+the failure mode this consolidation removes.
 
 ---
 
@@ -305,10 +305,16 @@ actual final score 188. Within range, 2 runs from the projection midpoint.
 # KNOWN GAPS / FUTURE WORK
 
 1. AI narration layer - not built (see above)
-2. Collapse/partnership detection - not built (see above)
-3. Phase boundary constants duplicated across 3 files
+2. Collapse/partnership detection - **built** in `insight_engine.py`
+   (situation_collapse / acceleration / pressure / partnership); live
+   `recent_balls` / partnership derived in `app.py`
+3. Phase boundary constants - **done** (F01): single `constants.py`
 4. Evidence Layer / Validation Layer not formally separated from
    Insight Engine - works correctly today but doesn't structurally match
-   CLAUDE.md's stated pipeline diagram
+   CLAUDE.md's stated pipeline diagram (F02 candidate)
 5. Venue-relative (vs. format-relative) thresholds for future pattern
    detection would need new aggregation work in context_repository.py
+6. Chase Engine - **built** (compact index + live bridge + Match Room /
+   Tactical Read). Win probability (Monte Carlo) is still separate future work.
+7. Weather/dew - **partial**: fetched and shown in UI; not yet wired into
+   projections / win models.
