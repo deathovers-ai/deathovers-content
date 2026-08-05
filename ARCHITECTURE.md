@@ -242,6 +242,8 @@ essentially complete.
 - Situation detection (`situation_collapse`, `situation_wicket_pressure`,
   `situation_acceleration`, `situation_partnership`)
 - `projection_insight` / `chase_projection_insight` / `second_innings_comparison`
+- `win_probability` - Monte Carlo batting WP beside Chase Engine (F05; top-level
+  `shaped["win_probability"]`, not an insight feed item)
 
 ## Insight types planned, not yet built
 
@@ -249,7 +251,7 @@ essentially complete.
   prose) - explicitly scoped to narrate ONLY pre-verified facts from the
   Insight Engine, never to generate new comparisons itself
 - Player form windows / venue / phase / matchups / momentum index - **done** (F04 + F06 + F07)
-- Win probability Monte Carlo (F05) — additive to Chase Engine, not a replacement
+- Win probability Monte Carlo (F05) — **done** (additive to Chase Engine)
 
 ---
 
@@ -343,7 +345,8 @@ actual final score 188. Within range, 2 runs from the projection midpoint.
 5. Venue-relative (vs. format-relative) thresholds for future pattern
    detection would need new aggregation work in context_repository.py
 6. Chase Engine - **built** (compact index + live bridge + Match Room /
-   Tactical Read). Win probability (Monte Carlo) is still separate future work.
+   Tactical Read). Win probability (F05) - **built** beside Chase
+   (`win_probability.py` + Match Room WP orb/bar); weather not yet in WP (F09).
 7. Weather/dew - **partial**: fetched and shown in UI; not yet wired into
    projections / win models.
 8. Data freshness dashboard (F03) - **done**: `context_freshness.py` +

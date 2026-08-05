@@ -52,7 +52,7 @@ Legend: **HAVE** = production-usable · **PARTIAL** = code exists, incomplete vs
 | F02 | `validation_engine.py` extraction | **NEED** | Guards still live inside `insight_engine.py` |
 | F03 | Data freshness dashboard | **NEED** | No `generated_at` on context JSONs; no UI badge |
 | F04 | Player form / venue / phase stats | **HAVE** | form / venues / phases + insights |
-| F05 | Win probability (Monte Carlo) | **NEED** | Chase cohort ≠ ball-by-ball WP |
+| F05 | Win probability (Monte Carlo) | **HAVE** | phase dists + MC beside Chase; early uncertainty label |
 | F06 | Bowler–batter matchups | **HAVE** | `matchup_stats.json` + Match Room card |
 | F07 | Momentum Index (−1..+1 + percentiles) | **HAVE** | continuous index + phase baselines + slider |
 | F08 | AI narration + hard contract | **NEED** | Insights are template/pointer structured; no LLM layer |
@@ -262,7 +262,7 @@ Ship in dependency order. Prefer smallest vertical slices that hit Match Room + 
 ### Slice C — Live decision layer
 **F05 → F09 → thin F08**
 
-1. **F05** Monte Carlo WP using venue phase run + wicket distributions; sit **beside** Chase Engine recovery/pace (do not replace). Early-innings uncertainty label. Backtest offline on completed chases before UI.
+1. **F05** Monte Carlo WP using venue phase run + wicket distributions; sit **beside** Chase Engine recovery/pace (do not replace). Early-innings uncertainty label. Backtest offline on completed chases before UI. **DONE** (`win_probability.py`, Match Room WP orb + bar).
 2. **F09** Dew/humidity/rain adjustments into WP + chase projections; DLS via established library only; weather already in UI — extend badge copy when model adjusts.
 3. **F08** Narration only after B+C facts are rich: LLM receives structured insights only; number-extract validator; ≤3 retries; template fallback. Never skip validator.
 

@@ -1,0 +1,163 @@
+{
+  "schema": "f05-backtest-v1",
+  "compared": 100,
+  "mae": 0.1837,
+  "mae_ceiling": 0.28,
+  "easy_wp": 0.9925,
+  "hard_wp": 0.0,
+  "dists_file": "/workspace/intelligence/output/context/phase_distributions.json",
+  "index": "/workspace/intelligence/output/compact_chase_index.json.gz",
+  "sample_rows": [
+    {
+      "format": "T20",
+      "legal_balls": 18,
+      "target": 147,
+      "wickets": 0,
+      "cohort_n": 18,
+      "empirical": 0.7222,
+      "mc_wp": 0.5575,
+      "abs_err": 0.1647
+    },
+    {
+      "format": "T20",
+      "legal_balls": 58,
+      "target": 147,
+      "wickets": 3,
+      "cohort_n": 16,
+      "empirical": 0.375,
+      "mc_wp": 0.5275,
+      "abs_err": 0.1525
+    },
+    {
+      "format": "T20",
+      "legal_balls": 29,
+      "target": 139,
+      "wickets": 1,
+      "cohort_n": 20,
+      "empirical": 0.65,
+      "mc_wp": 0.705,
+      "abs_err": 0.055
+    },
+    {
+      "format": "T20",
+      "legal_balls": 23,
+      "target": 158,
+      "wickets": 0,
+      "cohort_n": 16,
+      "empirical": 0.5625,
+      "mc_wp": 0.3475,
+      "abs_err": 0.215
+    },
+    {
+      "format": "T20",
+      "legal_balls": 26,
+      "target": 161,
+      "wickets": 1,
+      "cohort_n": 17,
+      "empirical": 0.4118,
+      "mc_wp": 0.31,
+      "abs_err": 0.1018
+    },
+    {
+      "format": "T20",
+      "legal_balls": 55,
+      "target": 144,
+      "wickets": 3,
+      "cohort_n": 16,
+      "empirical": 0.625,
+      "mc_wp": 0.5675,
+      "abs_err": 0.0575
+    },
+    {
+      "format": "T20",
+      "legal_balls": 23,
+      "target": 167,
+      "wickets": 0,
+      "cohort_n": 17,
+      "empirical": 0.6471,
+      "mc_wp": 0.16,
+      "abs_err": 0.4871
+    },
+    {
+      "format": "T20",
+      "legal_balls": 19,
+      "target": 145,
+      "wickets": 1,
+      "cohort_n": 19,
+      "empirical": 0.4737,
+      "mc_wp": 0.6075,
+      "abs_err": 0.1338
+    },
+    {
+      "format": "T20",
+      "legal_balls": 60,
+      "target": 163,
+      "wickets": 2,
+      "cohort_n": 16,
+      "empirical": 0.5,
+      "mc_wp": 0.29,
+      "abs_err": 0.21
+    },
+    {
+      "format": "T20",
+      "legal_balls": 61,
+      "target": 163,
+      "wickets": 3,
+      "cohort_n": 20,
+      "empirical": 0.35,
+      "mc_wp": 0.27,
+      "abs_err": 0.08
+    },
+    {
+      "format": "T20",
+      "legal_balls": 36,
+      "target": 152,
+      "wickets": 1,
+      "cohort_n": 17,
+      "empirical": 0.4706,
+      "mc_wp": 0.5025,
+      "abs_err": 0.0319
+    },
+    {
+      "format": "T20",
+      "legal_balls": 19,
+      "target": 156,
+      "wickets": 1,
+      "cohort_n": 19,
+      "empirical": 0.2105,
+      "mc_wp": 0.33,
+      "abs_err": 0.1195
+    },
+    {
+      "format": "T20",
+      "legal_balls": 71,
+      "target": 147,
+      "wickets": 3,
+      "cohort_n": 16,
+      "empirical": 0.4375,
+      "mc_wp": 0.51,
+      "abs_err": 0.0725
+    },
+    {
+      "format": "T20",
+      "legal_balls": 20,
+      "target": 122,
+      "wickets": 1,
+      "cohort_n": 15,
+      "empirical": 0.5333,
+      "mc_wp": 0.9125,
+      "abs_err": 0.3792
+    },
+    {
+      "format": "T20",
+      "legal_balls": 23,
+      "target": 166,
+      "wickets": 1,
+      "cohort_n": 18,
+      "empirical": 0.5,
+      "mc_wp": 0.185,
+      "abs_err": 0.315
+    }
+  ],
+  "notes": "Calibration vs compact chase recovery_rate at matched format/venue/balls/target/wickets. Current runs proxied from ball fraction (events/snapshots absent in this env)."
+}

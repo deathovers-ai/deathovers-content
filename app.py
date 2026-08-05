@@ -60,6 +60,7 @@ try:
     from context_freshness import freshness_payload
     from live_chase_bridge import build_live_chase_from_miniscore, update_first_innings_context
     from live_match_context_cache import FirstInningsContextCache
+    from win_probability import build_win_probability_payload, load_phase_distributions
     _INTELLIGENCE_AVAILABLE = True
     _CHASE_BRIDGE_AVAILABLE = True
     log.info("Intelligence Engine loaded successfully.")
@@ -76,6 +77,8 @@ except Exception as _intel_import_err:
     load_engine_from_jsonl = None
     CompactChaseEngine = None
     normalize_venue = None
+    build_win_probability_payload = None
+    load_phase_distributions = None
     _CHASE_BRIDGE_AVAILABLE = False
     log.warning(
         "Intelligence Engine unavailable at startup (%s) - /api/match-details will "
@@ -128,6 +131,7 @@ SCORECARD_REFRESH_SECONDS = int(os.environ.get("SCORECARD_REFRESH_SECONDS", 900)
 
 _chase_engine = None
 _chase_policy = None
+_phase_distributions = None
 if _CHASE_BRIDGE_AVAILABLE:
     try:
         _chase_policy = ChasePolicy.from_environment()
@@ -135,6 +139,14 @@ if _CHASE_BRIDGE_AVAILABLE:
         _chase_engine = CompactChaseEngine.load(_index_path)
     except Exception as _chase_startup_error:
         log.warning("Chase Engine unavailable at startup (%s)", _chase_startup_error)
+    try:
+        if load_phase_distributions is not None:
+            _phase_distributions = load_phase_distributions()
+            if _phase_distributions is None:
+                log.warning("F05 phase distributions missing — win_probability omitted until built")
+    except Exception as _wp_startup_error:
+        log.warning("Win probability distributions unavailable at startup (%s)", _wp_startup_error)
+        _phase_distributions = None
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -1793,6 +1805,9 @@ def _attach_chase_state(shaped: dict, match_id: str, carousel_entry: dict | None
     Historical comparison is intentionally not attempted here until the
     generated snapshot dataset is available. This endpoint therefore never
     emits a guessed recovery rate or verdict.
+
+    F05 win_probability sits beside chase (shaped["win_probability"]) and never
+    overwrites cohort.recovery_rate.
     """
     if not _CHASE_BRIDGE_AVAILABLE or not carousel_entry or not miniscore:
         shaped["chase"] = {"status": "unavailable"}
@@ -1803,13 +1818,13 @@ def _attach_chase_state(shaped: dict, match_id: str, carousel_entry: dict | None
             _first_innings_context_cache, match_id, match_format, miniscore
         )
         state = build_live_chase_from_miniscore(match_id, match_format, miniscore, context)
+        venue = normalize_venue(carousel_entry.get("venue", "")) if normalize_venue else None
         if not state:
             shaped["chase"] = {"status": "not_a_live_second_innings"}
         elif _chase_engine is None or _chase_policy is None:
             shaped["chase"] = {"status": "awaiting_historical_cohort", "state": state,
                                "first_innings": context.get("snapshot") if context else None}
         else:
-            venue = normalize_venue(carousel_entry.get("venue", ""))
             shaped["chase"] = {
                 **_chase_engine.evaluate(
                     state,
@@ -1821,6 +1836,15 @@ def _attach_chase_state(shaped: dict, match_id: str, carousel_entry: dict | None
                 "state": state,
                 "first_innings": context.get("snapshot") if context else None,
             }
+        if state and _phase_distributions is not None and build_win_probability_payload is not None:
+            try:
+                wp = build_win_probability_payload(
+                    state, _phase_distributions, venue=venue
+                )
+                if wp:
+                    shaped["win_probability"] = wp
+            except Exception as wp_err:
+                log.warning("Win probability failed for match %s: %s", match_id, wp_err)
     except Exception as e:
         log.warning("Chase state unavailable for match %s: %s", match_id, e)
         shaped["chase"] = {"status": "unavailable", "reason": "invalid_live_score"}
