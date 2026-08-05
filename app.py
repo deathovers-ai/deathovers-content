@@ -57,6 +57,7 @@ try:
     from chase_runtime import ChasePolicy
     from compact_chase_engine import CompactChaseEngine
     from context_repository import normalize_venue
+    from context_freshness import freshness_payload
     from live_chase_bridge import build_live_chase_from_miniscore, update_first_innings_context
     from live_match_context_cache import FirstInningsContextCache
     _INTELLIGENCE_AVAILABLE = True
@@ -66,6 +67,7 @@ except Exception as _intel_import_err:
     build_live_state = None
     get_match_insights = None
     determine_phase = None
+    freshness_payload = None
     _INTELLIGENCE_AVAILABLE = False
     build_live_chase_from_miniscore = None
     update_first_innings_context = None
@@ -1470,6 +1472,33 @@ def _merge_tactical_insights(primary: list, fallback: list) -> list:
     return merged
 
 
+def _attach_data_freshness(intelligence: dict | None) -> dict:
+    """Ensure intelligence payload carries data_freshness for Match Room UI."""
+    if intelligence is None:
+        intelligence = {}
+    if freshness_payload is None:
+        intelligence.setdefault("data_freshness", {
+            "generated_at": None,
+            "corpus_through": None,
+            "stale": False,
+            "known": False,
+            "source": "unavailable",
+        })
+        return intelligence
+    try:
+        intelligence["data_freshness"] = freshness_payload()
+    except Exception as exc:
+        log.warning("data_freshness unavailable: %s", exc)
+        intelligence.setdefault("data_freshness", {
+            "generated_at": None,
+            "corpus_through": None,
+            "stale": False,
+            "known": False,
+            "source": "error",
+        })
+    return intelligence
+
+
 def _attach_intelligence(shaped: dict, carousel_entry: dict | None, miniscore: dict | None,
                           match_id: str = "", commentary: list | None = None) -> None:
     """
@@ -1503,23 +1532,23 @@ def _attach_intelligence(shaped: dict, carousel_entry: dict | None, miniscore: d
     fallback = _build_match_tactical_fallback(shaped, carousel_entry)
 
     if not _INTELLIGENCE_AVAILABLE:
-        shaped["intelligence"] = {
+        shaped["intelligence"] = _attach_data_freshness({
             "insights": fallback,
             "meta": {"available": False, "fallback_used": bool(fallback)},
-        }
+        })
         return
 
     if not carousel_entry:
         # Still attach fallback reads from the scorecard we do have, instead of
         # leaving Match Room completely empty on a multi-worker cache miss.
-        shaped["intelligence"] = {
+        shaped["intelligence"] = _attach_data_freshness({
             "insights": fallback,
             "meta": {
                 "available": True,
                 "warnings": ["no carousel entry for this match"],
                 "fallback_used": bool(fallback),
             },
-        }
+        })
         return
 
     try:
@@ -1626,13 +1655,13 @@ def _attach_intelligence(shaped: dict, carousel_entry: dict | None, miniscore: d
         merged = _merge_tactical_insights(engine_insights, fallback)
         result["insights"] = merged
         result.setdefault("meta", {})["fallback_used"] = len(merged) > len(engine_insights)
-        shaped["intelligence"] = result
+        shaped["intelligence"] = _attach_data_freshness(result)
     except Exception as e:
         log.error("Intelligence Engine failed for this match: %s", e)
-        shaped["intelligence"] = {
+        shaped["intelligence"] = _attach_data_freshness({
             "insights": fallback,
             "meta": {"available": True, "error": str(e), "fallback_used": bool(fallback)},
-        }
+        })
 
 
 def _is_cricbuzz_match_id(match_id: str) -> bool:

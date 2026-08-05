@@ -10,7 +10,11 @@ built on raw names as-is (safe default, no merging).
 """
 import json
 import os
+import sys
 from collections import defaultdict
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from context_freshness import write_context_meta, infer_corpus_through_from_players
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EVENTS_DIR = os.path.join(BASE_DIR, "output", "events")
@@ -133,7 +137,10 @@ def build_player_stats():
     os.makedirs(CONTEXT_DIR, exist_ok=True)
     with open(PLAYER_STATS_FILE, "w", encoding="utf-8") as f:
         json.dump(output, f, indent=2)
+    corpus_through = infer_corpus_through_from_players(output)
+    write_context_meta(corpus_through)
     print(f"Saved player stats for {len(output)} name-entries to {PLAYER_STATS_FILE}")
+    print(f"Context meta corpus_through={corpus_through}")
 
     return output
 

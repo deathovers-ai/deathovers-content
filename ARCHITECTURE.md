@@ -322,4 +322,6 @@ actual final score 188. Within range, 2 runs from the projection midpoint.
    Tactical Read). Win probability (Monte Carlo) is still separate future work.
 7. Weather/dew - **partial**: fetched and shown in UI; not yet wired into
    projections / win models.
-8. Data freshness dashboard (F03) - not built yet.
+8. Data freshness dashboard (F03) - **done**: `context_freshness.py` +
+   `context_meta.json` sidecar; exposed as `intelligence.data_freshness`
+   on match-details; chip on Match Room + Tactical Read.
