@@ -53,6 +53,7 @@ from datetime import date
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from constants import phase_bounds_list
+from matchup_context import format_dismissal_kinds, format_venues, format_years
 from validation_engine import (
     DATA_CONFIDENCE_CUTOFF,
     SIGNIFICANCE_THRESHOLD_PCT,
@@ -489,13 +490,24 @@ class InsightEngine:
         balls = block["balls"]
         dismissals = block["dismissals"]
         average = block.get("average")
+        kinds = block.get("dismissal_kinds") or {}
+        kind_label = format_dismissal_kinds(kinds)
+        years_label = format_years(block.get("years"))
+        venues_label = format_venues(block.get("venues"))
         pointers = [
             {"label": "Matchup SR", "value": sr},
             {"label": "Balls", "value": balls},
-            {"label": "Dismissals", "value": dismissals},
+            {
+                "label": "Dismissals",
+                "value": f"{dismissals} ({kind_label})" if kind_label else dismissals,
+            },
         ]
         if average is not None:
             pointers.append({"label": "Matchup Avg", "value": average})
+        if years_label:
+            pointers.append({"label": "Years", "value": years_label})
+        if venues_label:
+            pointers.append({"label": "Venues", "value": venues_label})
 
         # Optional edge vs batter career SR — only when career data is reliable
         # and the gap clears the significance floor.
@@ -529,6 +541,10 @@ class InsightEngine:
             "balls": balls,
             "strike_rate": sr,
             "dismissals": dismissals,
+            "dismissal_kinds": kinds,
+            "dismissal_breakdown": kind_label,
+            "years": block.get("years") or [],
+            "venues": block.get("venues") or {},
             "headline": headline,
             "pointers": pointers,
         }

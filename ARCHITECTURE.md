@@ -157,9 +157,11 @@ wiping ODI career coverage).
 
 Sparse batter→bowler matrix from T20/IPL/IT20 events. Only pairs with
 ≥`MIN_MATCHUP_BALLS` (30) legal batter-facing balls are written. Each
-cell: balls, runs, dismissals, strike_rate, average, `reliable`. Live
-Match Room shows a dedicated card when both striker and bowler are
-present and the pair clears the floor (`bowler_batter_matchup`).
+cell: balls, runs, dismissals, `dismissal_kinds` (e.g. lbw/caught),
+`venues` (balls by ground), `years`, strike_rate, average, `reliable`.
+Live Match Room shows a dedicated card when both striker and bowler are
+present and the pair clears the floor (`bowler_batter_matchup`), including
+dismissal breakdown, years, and top venues.
 
 ## Player identity resolution (`registry_verification.py`)
 

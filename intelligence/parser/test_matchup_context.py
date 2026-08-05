@@ -1,15 +1,20 @@
 """F06: matchup matrix guards + bowler_batter_matchup insight."""
 import unittest
 
+from matchup_context import format_dismissal_kinds, format_venues, format_years
 from validation_engine import MIN_MATCHUP_BALLS, matchup_is_reliable
 from insight_engine import InsightEngine
 
 
-def _pair(balls=40, runs=60, dismissals=2):
+def _pair(balls=40, runs=60, dismissals=2, kinds=None, venues=None, years=None):
+    kinds = kinds if kinds is not None else {"caught": 1, "lbw": 1}
     return {
         "balls": balls,
         "runs": runs,
         "dismissals": dismissals,
+        "dismissal_kinds": kinds,
+        "venues": venues or {"Wankhede Stadium": balls},
+        "years": years or [2017, 2023],
         "strike_rate": round((runs / balls) * 100, 2) if balls else 0.0,
         "average": round(runs / dismissals, 2) if dismissals else None,
         "reliable": balls >= MIN_MATCHUP_BALLS,
@@ -23,6 +28,12 @@ class MatchupUnitTests(unittest.TestCase):
         self.assertTrue(matchup_is_reliable(_pair(balls=30)))
         self.assertFalse(matchup_is_reliable(None))
 
+    def test_formatters(self):
+        self.assertEqual(format_dismissal_kinds({"lbw": 2, "caught": 2}), "2 caught + 2 lbw")
+        self.assertEqual(format_years([2017, 2021, 2022, 2023]), "2017, 2021, 2022, 2023")
+        self.assertEqual(format_years([2017, 2018, 2019]), "2017–2019")
+        self.assertIn("Wankhede", format_venues({"Wankhede Stadium": 18, "Brabourne Stadium": 5}))
+
     def test_matchup_insight_fires_and_refuses_thin(self):
         eng = InsightEngine(
             player_stats={
@@ -33,12 +44,26 @@ class MatchupUnitTests(unittest.TestCase):
                 }
             },
             venue_stats={},
-            matchup_stats={"A Batter": {"A Bowler": _pair(balls=40, runs=80, dismissals=1)}},
+            matchup_stats={
+                "A Batter": {
+                    "A Bowler": _pair(
+                        balls=40, runs=80, dismissals=2,
+                        kinds={"lbw": 1, "caught": 1},
+                        venues={"Wankhede Stadium": 30, "Brabourne Stadium": 10},
+                        years=[2017, 2022, 2023],
+                    )
+                }
+            },
         )
         hit = eng.bowler_batter_matchup("A Batter", "A Bowler")
         self.assertIsNotNone(hit)
         self.assertEqual(hit["type"], "bowler_batter_matchup")
         self.assertEqual(hit["balls"], 40)
+        self.assertEqual(hit["dismissal_breakdown"], "1 caught + 1 lbw")
+        labels = {p["label"]: p["value"] for p in hit["pointers"]}
+        self.assertIn("Years", labels)
+        self.assertIn("Venues", labels)
+        self.assertIn("lbw", str(labels["Dismissals"]))
 
         thin = InsightEngine(
             player_stats={},

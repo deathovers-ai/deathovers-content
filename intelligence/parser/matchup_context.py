@@ -2,7 +2,10 @@
 F06 — Bowler–batter matchup matrix.
 
 Builds sparse matchup_stats.json from ball events:
-  batter -> bowler -> {balls, runs, dismissals, strike_rate, average, reliable}
+  batter -> bowler -> {
+    balls, runs, dismissals, dismissal_kinds,
+    venues, years, strike_rate, average, reliable
+  }
 
 Only pairs with >= MIN_MATCHUP_BALLS legal balls are written (sparse).
 Identity merges only via player_aliases.json (same rule as player_context).
@@ -17,6 +20,7 @@ from collections import defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from context_freshness import write_context_meta
+from context_repository import normalize_venue
 from player_context import (
     EVENTS_DIR,
     MANIFEST,
@@ -33,18 +37,92 @@ MATCHUP_STATS_FILE = os.path.join(CONTEXT_DIR, "matchup_stats.json")
 # Product slice for this ship (same as F04 enrichment): T20-like only.
 MATCHUP_FORMATS = {"T20", "IT20", "IPL"}
 
+# Prefer this order when formatting "2 lbw + 2 caught" style summaries.
+_KIND_ORDER = (
+    "caught", "bowled", "lbw", "stumped", "caught and bowled",
+    "hit wicket", "obstructing the field", "retired hurt", "hit the ball twice",
+)
+
 
 def _empty_pair():
-    return {"balls": 0, "runs": 0, "dismissals": 0}
+    return {
+        "balls": 0,
+        "runs": 0,
+        "dismissals": 0,
+        "dismissal_kinds": defaultdict(int),
+        "venues": defaultdict(int),  # venue_key -> balls faced there
+        "years": set(),
+    }
+
+
+def format_dismissal_kinds(kinds: dict | None) -> str | None:
+    """Turn {lbw: 2, caught: 2} into '2 lbw + 2 caught'. None if empty."""
+    if not kinds:
+        return None
+    parts = []
+    seen = set()
+    for kind in _KIND_ORDER:
+        n = int(kinds.get(kind) or 0)
+        if n:
+            parts.append(f"{n} {kind}")
+            seen.add(kind)
+    for kind, n in sorted(kinds.items()):
+        if kind in seen:
+            continue
+        n = int(n or 0)
+        if n:
+            parts.append(f"{n} {kind}")
+    return " + ".join(parts) if parts else None
+
+
+def format_years(years: list | None) -> str | None:
+    """[2017, 2021, 2022] -> '2017–2025' or '2017, 2021' when sparse."""
+    if not years:
+        return None
+    ys = sorted(int(y) for y in years)
+    if len(ys) == 1:
+        return str(ys[0])
+    # Contiguous span → en-dash range; otherwise list.
+    if ys[-1] - ys[0] + 1 == len(ys):
+        return f"{ys[0]}\u2013{ys[-1]}"
+    if len(ys) <= 4:
+        return ", ".join(str(y) for y in ys)
+    return f"{ys[0]}\u2013{ys[-1]} ({len(ys)} seasons)"
+
+
+def format_venues(venues: dict | None, limit: int = 3) -> str | None:
+    """Top venues by balls, e.g. 'Wankhede Stadium (18), Brabourne (5)'."""
+    if not venues:
+        return None
+    ranked = sorted(venues.items(), key=lambda kv: (-kv[1], kv[0]))
+    top = ranked[:limit]
+    parts = [f"{name} ({balls})" for name, balls in top]
+    extra = len(ranked) - len(top)
+    if extra > 0:
+        parts.append(f"+{extra} more")
+    return ", ".join(parts)
 
 
 def _finalize_pair(raw: dict) -> dict:
     balls = raw["balls"]
     dismissals = raw["dismissals"]
+    kinds = {k: int(v) for k, v in sorted((raw.get("dismissal_kinds") or {}).items()) if v}
+    venues = {
+        k: int(v)
+        for k, v in sorted(
+            (raw.get("venues") or {}).items(),
+            key=lambda kv: (-kv[1], kv[0]),
+        )
+        if v
+    }
+    years = sorted(int(y) for y in (raw.get("years") or set()))
     return {
         "balls": balls,
         "runs": raw["runs"],
         "dismissals": dismissals,
+        "dismissal_kinds": kinds,
+        "venues": venues,
+        "years": years,
         "strike_rate": round((raw["runs"] / balls) * 100, 2) if balls else 0.0,
         "average": round(raw["runs"] / dismissals, 2) if dismissals else None,
         "reliable": balls >= MIN_MATCHUP_BALLS,
@@ -96,10 +174,16 @@ def build_matchup_stats(
             continue
         matches_used += 1
         dates = meta.get("dates") or []
+        match_year = None
         if dates:
             d = dates[-1]
             if corpus_through is None or d > corpus_through:
                 corpus_through = d
+            try:
+                match_year = int(str(d)[:4])
+            except ValueError:
+                match_year = None
+        venue_key = normalize_venue(meta["venue"]) if meta.get("venue") else None
 
         for event in data.get("events") or []:
             batter = canonical_name(event["batter"], aliases)
@@ -109,6 +193,10 @@ def build_matchup_stats(
                 cell = pairs[batter][bowler]
                 cell["balls"] += 1
                 cell["runs"] += int(event.get("runs_batter") or 0)
+                if venue_key:
+                    cell["venues"][venue_key] += 1
+                if match_year is not None:
+                    cell["years"].add(match_year)
 
             if event.get("is_wicket"):
                 cell = pairs[batter][bowler]
@@ -116,7 +204,9 @@ def build_matchup_stats(
                     out = canonical_name(w.get("player_out") or batter, aliases)
                     # Credit bowler dismissals only (run outs are not bowler wickets).
                     if out == batter and w.get("kind") not in ("run out",):
+                        kind = (w.get("kind") or "unknown").strip().lower() or "unknown"
                         cell["dismissals"] += 1
+                        cell["dismissal_kinds"][kind] += 1
                         break
 
         if i % 1000 == 0:

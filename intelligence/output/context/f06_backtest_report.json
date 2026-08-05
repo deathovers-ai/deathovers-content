@@ -18,6 +18,16 @@
       "detail": 0
     },
     {
+      "name": "all_pairs_have_years_and_venues",
+      "ok": true,
+      "detail": 0
+    },
+    {
+      "name": "dismissal_kinds_sum_to_dismissals",
+      "ok": true,
+      "detail": 0
+    },
+    {
       "name": "kohli_bumrah_present",
       "ok": true,
       "detail": [
@@ -38,6 +48,33 @@
         "balls": 110,
         "runs": 164,
         "dismissals": 5,
+        "dismissal_kinds": {
+          "caught": 3,
+          "lbw": 2
+        },
+        "venues": {
+          "Wankhede Stadium": 56,
+          "M Chinnaswamy Stadium": 32,
+          "Dubai International Cricket Stadium": 10,
+          "Maharashtra Cricket Association Stadium": 8,
+          "MA Chidambaram Stadium": 2,
+          "Sheikh Zayed Stadium": 2
+        },
+        "years": [
+          2013,
+          2014,
+          2015,
+          2016,
+          2017,
+          2018,
+          2019,
+          2020,
+          2021,
+          2022,
+          2024,
+          2025,
+          2026
+        ],
         "strike_rate": 149.09,
         "average": 32.8,
         "reliable": true
@@ -47,6 +84,86 @@
       "name": "kohli_bumrah_balls_ge_30",
       "ok": true,
       "detail": 110
+    },
+    {
+      "name": "kohli_bumrah_has_years",
+      "ok": true,
+      "detail": [
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2024,
+        2025,
+        2026
+      ]
+    },
+    {
+      "name": "kohli_bumrah_has_venues",
+      "ok": true,
+      "detail": [
+        "Wankhede Stadium",
+        "M Chinnaswamy Stadium",
+        "Dubai International Cricket Stadium"
+      ]
+    },
+    {
+      "name": "rohit_rashid_present",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "rohit_rashid_balls_44",
+      "ok": true,
+      "detail": 44
+    },
+    {
+      "name": "rohit_rashid_dismissals_4",
+      "ok": true,
+      "detail": 4
+    },
+    {
+      "name": "rohit_rashid_kinds_2lbw_2caught",
+      "ok": true,
+      "detail": {
+        "caught": 2,
+        "lbw": 2
+      }
+    },
+    {
+      "name": "rohit_rashid_breakdown_label",
+      "ok": true,
+      "detail": "2 caught + 2 lbw"
+    },
+    {
+      "name": "rohit_rashid_years_span",
+      "ok": true,
+      "detail": [
+        2017,
+        2019,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ]
+    },
+    {
+      "name": "rohit_rashid_wankhede_present",
+      "ok": true,
+      "detail": [
+        "Maharaja Yadavindra Singh International Cricket Stadium",
+        "Rajiv Gandhi International Stadium",
+        "Wankhede Stadium",
+        "Narendra Modi Stadium",
+        "Brabourne Stadium"
+      ]
     },
     {
       "name": "insight_fires",
@@ -59,11 +176,60 @@
       "detail": null
     },
     {
+      "name": "rohit_rashid_insight_fires",
+      "ok": true,
+      "detail": "RG Sharma vs Rashid Khan: 16.0% above career rate (44 balls)"
+    },
+    {
+      "name": "rohit_rashid_pointer_kinds",
+      "ok": true,
+      "detail": "4 (2 caught + 2 lbw)"
+    },
+    {
+      "name": "rohit_rashid_pointer_years",
+      "ok": true,
+      "detail": "2017\u20132025 (7 seasons)"
+    },
+    {
+      "name": "rohit_rashid_pointer_venues",
+      "ok": true,
+      "detail": "Maharaja Yadavindra Singh International Cricket Stadium (12), Rajiv Gandhi International Stadium (11), Wankhede Stadium (8), +3 more"
+    },
+    {
       "name": "thin_refused",
       "ok": true,
       "detail": null
     }
   ],
   "failed": [],
-  "passed": true
+  "passed": true,
+  "rohit_rashid": {
+    "balls": 44,
+    "runs": 56,
+    "dismissals": 4,
+    "dismissal_kinds": {
+      "caught": 2,
+      "lbw": 2
+    },
+    "venues": {
+      "Maharaja Yadavindra Singh International Cricket Stadium": 12,
+      "Rajiv Gandhi International Stadium": 11,
+      "Wankhede Stadium": 8,
+      "Narendra Modi Stadium": 6,
+      "Brabourne Stadium": 5,
+      "Zayed Cricket Stadium": 2
+    },
+    "years": [
+      2017,
+      2019,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ],
+    "strike_rate": 127.27,
+    "average": 14.0,
+    "reliable": true
+  }
 }
