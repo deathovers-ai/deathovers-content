@@ -38,16 +38,26 @@ import React, { useState } from 'react';
  */
 
 function TossChip({ toss }) {
-  if (!toss || !toss.winner) return null;
-  const decisionLabel = toss.decision === 'bat' ? 'elected to bat' : 'elected to bowl';
+  const line = formatTossChip(toss);
+  if (!line) return null;
   return (
     <div className="info-chip">
       <span className="info-chip-icon" aria-hidden="true">🪙</span>
       <span className="info-chip-text">
-        <strong>{toss.winner}</strong> won the toss, {decisionLabel}
+        <strong>{line}</strong>
       </span>
     </div>
   );
+}
+
+function formatTossChip(toss) {
+  if (!toss) return null;
+  if (typeof toss === 'string' && toss.trim()) return toss.trim();
+  if (!toss.winner) return null;
+  const decisionLabel = toss.decision === 'bat' ? 'elected to bat' : toss.decision === 'bowl' ? 'elected to bowl' : 'won the toss';
+  return toss.decision === 'bat' || toss.decision === 'bowl'
+    ? `${toss.winner} won the toss, ${decisionLabel}`
+    : `${toss.winner} won the toss`;
 }
 
 const CONDITION_ICONS = {
@@ -155,7 +165,7 @@ function ScoreRangeSection({ scoreRange }) {
 export default function MatchInfoCard({ toss, weather, dewRisk, pregame }) {
   const [venueOpen, setVenueOpen] = useState(false);
 
-  const hasToss = toss && toss.winner;
+  const hasToss = Boolean(formatTossChip(toss));
   const tossRecord = pregame?.toss_record;
   const scoreRecord = pregame?.score_record;
   const chaseRecord = pregame?.chase_record;
