@@ -22,6 +22,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from context_repository import normalize_venue, resolve_venue_key
+from constants import determine_phase_from_over
 from insight_engine import InsightEngine
 
 _engine = None
@@ -53,21 +54,8 @@ def map_format(cricbuzz_format_str, is_ipl=False):
 
 def determine_phase(over_number, match_type):
     """Given the current over (0-indexed) and format, return which phase
-    we're in. Mirrors the boundaries used in context_repository.py."""
-    if match_type in ("ODI", "ODM"):
-        if over_number < 10:
-            return "powerplay"
-        elif over_number < 40:
-            return "middle"
-        else:
-            return "death"
-    else:
-        if over_number < 6:
-            return "powerplay"
-        elif over_number < 15:
-            return "middle"
-        else:
-            return "death"
+    we're in. Reads shared PHASE_BOUNDARIES via constants.py."""
+    return determine_phase_from_over(over_number, match_type)
 
 
 def get_match_insights(live_state):

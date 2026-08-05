@@ -1399,12 +1399,12 @@ def _build_match_tactical_fallback(shaped: dict, carousel_entry: dict | None) ->
             overs_now = None
         runs, wickets = _parse_runs_wickets(active.get("score"))
         if overs_now is not None and runs is not None:
-            if match_format in ("ODI", "ODM"):
-                phase = "powerplay" if overs_now < 10 else ("middle" if overs_now < 40 else "death")
-                total_ov = 50
+            fmt = match_format if match_format in ("ODI", "ODM", "T20", "IT20", "IPL") else "T20"
+            if determine_phase is not None:
+                phase = determine_phase(overs_now, fmt)
             else:
                 phase = "powerplay" if overs_now < 6 else ("middle" if overs_now < 15 else "death")
-                total_ov = 20
+            total_ov = 50 if fmt in ("ODI", "ODM") else 20
             balls = int(overs_now) * 6 + int(round((overs_now % 1) * 10))
             crr = round((runs / balls) * 6, 2) if balls > 0 else None
             insights.append({

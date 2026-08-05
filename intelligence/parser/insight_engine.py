@@ -46,7 +46,11 @@ fallback is ever needed again.
 """
 import json
 import os
+import sys
 from datetime import date
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from constants import phase_bounds_list
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONTEXT_DIR = os.path.join(BASE_DIR, "output", "context")
@@ -149,12 +153,7 @@ class InsightEngine:
             return None
         phases = fmt["phase_breakdown"]
 
-        # Phase over-boundaries, mirroring context_repository.py's
-        # PHASE_BOUNDARIES - kept in sync manually (small, stable table).
-        if match_type in ("ODI", "ODM"):
-            bounds = [("powerplay", 0, 10), ("middle", 10, 40), ("death", 40, 50)]
-        else:
-            bounds = [("powerplay", 0, 6), ("middle", 6, 15), ("death", 15, 20)]
+        bounds = phase_bounds_list(match_type)
 
         overs_so_far = legal_balls_so_far / 6
         projected = 0.0
