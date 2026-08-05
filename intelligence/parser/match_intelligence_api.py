@@ -174,6 +174,21 @@ def get_match_insights(live_state):
             )
             if situation:
                 insights.append(situation)
+
+            # F07 continuous momentum index — fires whenever the window is
+            # thick enough, even if no discrete situation_* alert fires.
+            phase_for_momentum = context.get("phase_name") or (
+                determine_phase(live_state["current_over_number"], match_type)
+                if match_type and "current_over_number" in live_state else None
+            )
+            momentum = engine.momentum_index_insight(
+                recent_balls=live_state["recent_balls"],
+                innings_avg_strike_rate=innings_avg_sr,
+                match_type=match_type,
+                phase_name=phase_for_momentum,
+            )
+            if momentum:
+                insights.append(momentum)
         else:
             warnings.append("recent_balls present but legal_balls_bowled missing - situation_insight skipped.")
 

@@ -54,6 +54,7 @@ from datetime import date
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from constants import phase_bounds_list
 from matchup_context import format_dismissal_kinds, format_venues, format_years
+from momentum_index import build_momentum_insight, load_baselines
 from validation_engine import (
     DATA_CONFIDENCE_CUTOFF,
     SIGNIFICANCE_THRESHOLD_PCT,
@@ -70,6 +71,7 @@ CONTEXT_DIR = os.path.join(BASE_DIR, "output", "context")
 VENUE_STATS_FILE = os.path.join(CONTEXT_DIR, "venue_stats.json")
 PLAYER_STATS_FILE = os.path.join(CONTEXT_DIR, "player_stats.json")
 MATCHUP_STATS_FILE = os.path.join(CONTEXT_DIR, "matchup_stats.json")
+MOMENTUM_BASELINES_FILE = os.path.join(CONTEXT_DIR, "momentum_baselines.json")
 
 
 def _load_json(path):
@@ -87,7 +89,7 @@ class InsightEngine:
     insight, never a low-confidence one dressed up as normal).
     """
 
-    def __init__(self, venue_stats=None, player_stats=None, matchup_stats=None):
+    def __init__(self, venue_stats=None, player_stats=None, matchup_stats=None, momentum_baselines=None):
         self.venue_stats = venue_stats or _load_json(VENUE_STATS_FILE)
         self.player_stats = player_stats or _load_json(PLAYER_STATS_FILE)
         if matchup_stats is not None:
@@ -96,6 +98,10 @@ class InsightEngine:
             self.matchup_stats = _load_json(MATCHUP_STATS_FILE)
         else:
             self.matchup_stats = {}
+        if momentum_baselines is not None:
+            self.momentum_baselines = momentum_baselines
+        else:
+            self.momentum_baselines = load_baselines(MOMENTUM_BASELINES_FILE)
 
     def _projected_score_at_point(self, venue_entry, match_type, legal_balls_so_far):
         """
@@ -548,6 +554,21 @@ class InsightEngine:
             "headline": headline,
             "pointers": pointers,
         }
+
+    def momentum_index_insight(self, recent_balls, innings_avg_strike_rate,
+                               match_type=None, phase_name=None):
+        """
+        F07 continuous −1..+1 momentum index (+ phase percentile when
+        baselines are available). Always independent of discrete
+        situation_* insights — both may fire on the same poll.
+        """
+        return build_momentum_insight(
+            recent_balls=recent_balls,
+            innings_avg_strike_rate=innings_avg_strike_rate,
+            match_type=match_type,
+            phase_name=phase_name,
+            baselines=self.momentum_baselines,
+        )
 
     # ------------------------------------------------------------------
     # Situation detection: collapse / momentum / pressure / partnership.

@@ -54,7 +54,7 @@ Legend: **HAVE** = production-usable · **PARTIAL** = code exists, incomplete vs
 | F04 | Player form / venue / phase stats | **HAVE** | form / venues / phases + insights |
 | F05 | Win probability (Monte Carlo) | **NEED** | Chase cohort ≠ ball-by-ball WP |
 | F06 | Bowler–batter matchups | **HAVE** | `matchup_stats.json` + Match Room card |
-| F07 | Momentum Index (−1..+1 + percentiles) | **PARTIAL** | Momentum *situation* exists; no continuous index / slider / Cricsheet percentile baselines |
+| F07 | Momentum Index (−1..+1 + percentiles) | **HAVE** | continuous index + phase baselines + slider |
 | F08 | AI narration + hard contract | **NEED** | Insights are template/pointer structured; no LLM layer |
 | F09 | Weather-aware projections | **PARTIAL** | Weather/dew exist; no DLS lib; no WP/projection adjustment |
 | F10 | Tactical Decision Assistant | **NEED** | — |

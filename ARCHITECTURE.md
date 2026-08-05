@@ -237,6 +237,7 @@ essentially complete.
 - `player_phase_mismatch` - live phase SR vs player phase history (F04; `MIN_PHASE_BALLS`)
 - `venue_form_convergence` - live SR vs player venue history (F04; `MIN_VENUE_INNINGS`)
 - `bowler_batter_matchup` - live batter vs live bowler H2H (F06; `MIN_MATCHUP_BALLS`)
+- `momentum_index` - continuous −1..+1 live momentum + phase percentile (F07)
 - `venue_pregame_insight` - toss / scoring / chase venue record
 - Situation detection (`situation_collapse`, `situation_wicket_pressure`,
   `situation_acceleration`, `situation_partnership`)
@@ -247,7 +248,7 @@ essentially complete.
 - AI narration layer (turns structured insight objects into flowing
   prose) - explicitly scoped to narrate ONLY pre-verified facts from the
   Insight Engine, never to generate new comparisons itself
-- Player form windows / venue / phase / matchups - **done** (F04 + F06)
+- Player form windows / venue / phase / matchups / momentum index - **done** (F04 + F06 + F07)
 - Win probability Monte Carlo (F05) — additive to Chase Engine, not a replacement
 
 ---

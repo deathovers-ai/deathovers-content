@@ -59,6 +59,7 @@ export default function MatchRoom() {
             <LiveMatchPanel view={view} />
             <EnginePanel view={view} />
           </section>
+          {view.momentum && <MomentumSlider momentum={view.momentum} />}
           {view.matchup && <MatchupCard matchup={view.matchup} />}
           <section className="dashboard-grid dashboard-grid-bottom">
             <VenuePanel view={view} open={venueOpen} onToggle={() => setVenueOpen((open) => !open)} />
@@ -122,6 +123,36 @@ function LiveMatchPanel({ view }) {
         <ContextCell label="Dew" value={view.dewText} accent={view.dewRisk?.risk === 'HIGH' ? 'danger' : view.dewRisk ? 'amber' : ''} />
       </div>
       <p className="source-note">Live context is retained for this match only. Historical data remains in the engine index.</p>
+    </section>
+  );
+}
+
+function MomentumSlider({ momentum }) {
+  const index = Number(momentum.index);
+  const pct = ((Math.max(-1, Math.min(1, index)) + 1) / 2) * 100;
+  const tone = index >= 0.2 ? 'good' : index <= -0.2 ? 'bad' : '';
+  return (
+    <section className="panel momentum-panel board-enter">
+      <PanelTitle eyebrow="MOMENTUM" title="Live momentum index" tag={momentum.label || 'EVEN'} />
+      <p className="panel-intro">{momentum.headline || 'Continuous −1 to +1 reading from the last three overs.'}</p>
+      <div className="momentum-track">
+        <span>−1</span>
+        <div className="momentum-bar">
+          <i style={{ left: `${pct}%` }} />
+          <em style={{ width: `${pct}%` }} className={tone} />
+        </div>
+        <span>+1</span>
+      </div>
+      <div className="momentum-metrics">
+        <Metric label="Index" value={Number.isFinite(index) ? `${index >= 0 ? '+' : ''}${index.toFixed(2)}` : '—'} tone={tone} />
+        <Metric label="Reading" value={momentum.label || 'EVEN'} />
+        <Metric
+          label="Phase pct"
+          value={momentum.percentile == null ? '—' : `${Math.round(momentum.percentile)}th`}
+          detail={momentum.phase ? `${momentum.phase} baseline` : 'awaiting phase'}
+        />
+        <Metric label="Window" value={`${momentum.window_balls || 18} balls`} detail="rolling" />
+      </div>
     </section>
   );
 }
@@ -261,8 +292,11 @@ function buildView(data) {
   const insights = data?.intelligence?.insights || [];
   const pregame = insights.find((item) => item.type === 'venue_pregame_summary');
   const matchup = insights.find((item) => item.type === 'bowler_batter_matchup') || null;
+  const momentum = insights.find((item) => item.type === 'momentum_index') || null;
   const timeline = insights
-    .filter((item) => item.type !== 'venue_pregame_summary' && item.type !== 'bowler_batter_matchup')
+    .filter((item) => item.type !== 'venue_pregame_summary'
+      && item.type !== 'bowler_batter_matchup'
+      && item.type !== 'momentum_index')
     .slice()
     .reverse();
   const sections = [
@@ -279,6 +313,7 @@ function buildView(data) {
     dewText: data?.dewRisk?.risk ? `${data.dewRisk.risk} risk` : 'No alert', dewRisk: data?.dewRisk,
     chase: data?.chase, timeline, venueRecords: sections, venueSample: pregame?.sample_size,
     matchup,
+    momentum,
     freshness: data?.intelligence?.data_freshness || null,
   };
 }
@@ -301,11 +336,12 @@ const styles = `
   .chase-strip { display:grid; grid-template-columns:repeat(3,1fr); margin-top:16px; border:1px solid rgba(240,242,245,.08); border-radius:5px; background:rgba(0,0,0,.17); } .metric { min-width:0; padding:10px 11px; } .metric + .metric { border-left:1px solid rgba(240,242,245,.08); } .metric strong { display:block; overflow:hidden; margin-top:5px; color:#fff; font:700 13px/1.2 'JetBrains Mono',monospace; letter-spacing:-.04em; text-overflow:ellipsis; white-space:nowrap; } .metric small { display:block; margin-top:3px; color:rgba(240,242,245,.36); font:9px 'Inter',sans-serif; } .metric-good strong { color:#6cdaa0; } .metric-bad strong { color:#ff94a7; }
   .engine-metrics { display:grid; grid-template-columns:repeat(3,1fr); margin-top:10px; }
   .matchup-panel { border-top:1px solid rgba(240,242,245,.08); background:radial-gradient(circle at 8% 0%,rgba(245,166,35,.1),transparent 28%); } .matchup-metrics { display:grid; grid-template-columns:repeat(4,1fr); border:1px solid rgba(240,242,245,.08); border-radius:5px; background:rgba(0,0,0,.17); } .matchup-metrics .metric + .metric { border-left:1px solid rgba(240,242,245,.08); } .matchup-meta { margin-top:10px; border:1px solid rgba(240,242,245,.07); border-radius:5px; background:rgba(0,0,0,.12); } .matchup-meta-row { display:flex; justify-content:space-between; gap:14px; padding:8px 11px; color:rgba(240,242,245,.55); font-size:11px; } .matchup-meta-row + .matchup-meta-row { border-top:1px solid rgba(240,242,245,.06); } .matchup-meta-row strong { color:rgba(240,242,245,.9); font:600 11px/1.35 'Inter',sans-serif; text-align:right; }
+  .momentum-panel { border-top:1px solid rgba(240,242,245,.08); background:radial-gradient(circle at 92% 0%,rgba(101,170,255,.12),transparent 30%); } .momentum-track { display:grid; grid-template-columns:28px 1fr 28px; gap:10px; align-items:center; margin:4px 0 14px; color:rgba(240,242,245,.4); font:700 9px 'JetBrains Mono',monospace; } .momentum-bar { position:relative; height:10px; border-radius:999px; background:linear-gradient(90deg,rgba(232,0,58,.35),rgba(240,242,245,.12) 50%,rgba(93,216,150,.35)); overflow:hidden; } .momentum-bar em { position:absolute; inset:0 auto 0 0; background:rgba(240,242,245,.08); } .momentum-bar em.good { background:rgba(93,216,150,.22); } .momentum-bar em.bad { background:rgba(232,0,58,.22); } .momentum-bar i { position:absolute; top:50%; width:14px; height:14px; border:2px solid #fff; border-radius:50%; background:#65aaff; box-shadow:0 0 0 4px rgba(101,170,255,.18); transform:translate(-50%,-50%); } .momentum-metrics { display:grid; grid-template-columns:repeat(4,1fr); border:1px solid rgba(240,242,245,.08); border-radius:5px; background:rgba(0,0,0,.17); } .momentum-metrics .metric + .metric { border-left:1px solid rgba(240,242,245,.08); }
   .panel-intro,.empty-copy { margin:0 0 17px; color:rgba(240,242,245,.5); font-size:12px; line-height:1.5; } .empty-copy { min-height:130px; display:grid; place-items:center; text-align:center; }
   .record-summary { display:grid; gap:8px; } .record-card { padding:12px 13px; border:1px solid rgba(240,242,245,.07); border-radius:5px; background:rgba(0,0,0,.15); } .record-head { display:flex; justify-content:space-between; gap:12px; align-items:baseline; margin-bottom:7px; } .record-head h3,.feed-item h3 { margin:0; color:#fff; font:17px/1 'Bebas Neue',sans-serif; letter-spacing:.025em; } .record-head small { color:rgba(240,242,245,.37); font:9px 'Inter',sans-serif; text-align:right; } .record-row,.feed-row { display:flex; justify-content:space-between; gap:12px; padding:4px 0; color:rgba(240,242,245,.56); font-size:11px; } .record-row + .record-row,.feed-row + .feed-row { border-top:1px solid rgba(240,242,245,.05); } .record-row strong,.feed-row strong { color:rgba(240,242,245,.94); font:700 11px 'JetBrains Mono',monospace; text-align:right; } .expand-button { margin-top:13px; padding:0; border:0; background:none; color:#f5a623; cursor:pointer; font:700 10px 'JetBrains Mono',monospace; letter-spacing:.04em; } .expand-button span { padding-left:5px; } .record-expanded { display:grid; gap:8px; margin-top:14px; }
   .feed-list { display:grid; gap:0; } .feed-item { position:relative; display:grid; grid-template-columns:15px 1fr; gap:11px; padding:0 0 15px; } .feed-item + .feed-item { padding-top:15px; border-top:1px solid rgba(240,242,245,.07); } .feed-marker { width:7px; height:7px; margin-top:5px; border-radius:50%; background:#f5a623; box-shadow:0 0 0 4px rgba(245,166,35,.08); } .feed-topline { display:flex; align-items:center; gap:7px; margin-bottom:5px; } .feed-topline small { color:rgba(240,242,245,.38); font:9px 'JetBrains Mono',monospace; letter-spacing:.06em; text-transform:uppercase; } .gauge { padding:3px 5px; border-radius:3px; font:700 8px 'JetBrains Mono',monospace; letter-spacing:.06em; } .gauge-low { color:#6cdaa0; background:rgba(93,216,150,.1); } .gauge-moderate { color:#f5c567; background:rgba(245,166,35,.1); } .gauge-high,.gauge-critical { color:#ff94a7; background:rgba(232,0,58,.1); }
   .load-state { min-height:360px; display:grid; place-content:center; gap:12px; border:1px solid rgba(240,242,245,.08); border-radius:10px; color:rgba(240,242,245,.58); font:11px 'JetBrains Mono',monospace; text-align:center; } .load-state i { width:7px; height:7px; margin:auto; border-radius:50%; background:#f5a623; animation:pulse 1s infinite; } .load-error { color:#ff94a7; border-color:rgba(232,0,58,.25); } @keyframes pulse { 50% { opacity:.35; transform:scale(.8); } } .board-enter { animation:rise .45s cubic-bezier(.16,1,.3,1) both; } @keyframes rise { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
-  @media (max-width:800px) { .board-header { padding:23px 20px; } .dashboard-grid-top,.dashboard-grid-bottom { grid-template-columns:1fr; } .dashboard-grid > .panel + .panel { border-top:1px solid rgba(240,242,245,.08); border-left:0; } .panel { padding:22px 20px; } .board-header h1 { font-size:40px; } .watch-status { display:none; } .matchup-metrics { grid-template-columns:1fr 1fr; } .matchup-metrics .metric:nth-child(3),.matchup-metrics .metric:nth-child(4) { border-top:1px solid rgba(240,242,245,.08); } .matchup-metrics .metric:nth-child(3) { border-left:0; } }
+  @media (max-width:800px) { .board-header { padding:23px 20px; } .dashboard-grid-top,.dashboard-grid-bottom { grid-template-columns:1fr; } .dashboard-grid > .panel + .panel { border-top:1px solid rgba(240,242,245,.08); border-left:0; } .panel { padding:22px 20px; } .board-header h1 { font-size:40px; } .watch-status { display:none; } .matchup-metrics,.momentum-metrics { grid-template-columns:1fr 1fr; } .matchup-metrics .metric:nth-child(3),.matchup-metrics .metric:nth-child(4),.momentum-metrics .metric:nth-child(3),.momentum-metrics .metric:nth-child(4) { border-top:1px solid rgba(240,242,245,.08); } .matchup-metrics .metric:nth-child(3),.momentum-metrics .metric:nth-child(3) { border-left:0; } }
   @media (max-width:500px) { .match-room { padding-top:14px; } .command-board { border-radius:8px; } .board-header { padding:21px 16px; } .panel { padding:20px 16px; } .score-value { font-size:46px; } .context-rail,.chase-strip,.engine-metrics { grid-template-columns:1fr 1fr; } .context-cell:nth-child(3),.chase-strip .metric:nth-child(3),.engine-metrics .metric:nth-child(3) { border-top:1px solid rgba(240,242,245,.08); } .context-cell:nth-child(3),.chase-strip .metric:nth-child(3),.engine-metrics .metric:nth-child(3) { border-left:0; } .context-cell:nth-child(3) { grid-column:1/-1; } .chase-strip .metric:nth-child(3),.engine-metrics .metric:nth-child(3) { grid-column:1/-1; } .engine-state { font-size:28px; } .signal-orb { flex-basis:64px; height:64px; } }
   @media (prefers-reduced-motion:reduce) { .board-enter,.live-kicker i,.watch-status i,.load-state i { animation:none; } }
 `;

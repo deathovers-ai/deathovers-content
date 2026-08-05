@@ -1,0 +1,212 @@
+{
+  "formats": {
+    "T20": {
+      "powerplay": 277330,
+      "middle": 560594,
+      "death": 247611
+    },
+    "IPL": {
+      "powerplay": 62238,
+      "middle": 131891,
+      "death": 64280
+    }
+  },
+  "checks": [
+    {
+      "name": "baselines_present",
+      "ok": true,
+      "detail": [
+        "T20",
+        "IPL"
+      ]
+    },
+    {
+      "name": "T20_present",
+      "ok": true,
+      "detail": [
+        "T20",
+        "IPL"
+      ]
+    },
+    {
+      "name": "T20_powerplay_n_ge_200",
+      "ok": true,
+      "detail": 277330
+    },
+    {
+      "name": "T20_powerplay_has_p50",
+      "ok": true,
+      "detail": -0.024
+    },
+    {
+      "name": "T20_powerplay_has_samples",
+      "ok": true,
+      "detail": 2500
+    },
+    {
+      "name": "T20_middle_n_ge_200",
+      "ok": true,
+      "detail": 560594
+    },
+    {
+      "name": "T20_middle_has_p50",
+      "ok": true,
+      "detail": -0.077
+    },
+    {
+      "name": "T20_middle_has_samples",
+      "ok": true,
+      "detail": 2500
+    },
+    {
+      "name": "T20_death_n_ge_200",
+      "ok": true,
+      "detail": 247611
+    },
+    {
+      "name": "T20_death_has_p50",
+      "ok": true,
+      "detail": 0.038
+    },
+    {
+      "name": "T20_death_has_samples",
+      "ok": true,
+      "detail": 2500
+    },
+    {
+      "name": "IPL_present",
+      "ok": true,
+      "detail": [
+        "T20",
+        "IPL"
+      ]
+    },
+    {
+      "name": "IPL_powerplay_n_ge_200",
+      "ok": true,
+      "detail": 62238
+    },
+    {
+      "name": "IPL_powerplay_has_p50",
+      "ok": true,
+      "detail": 0.107
+    },
+    {
+      "name": "IPL_powerplay_has_samples",
+      "ok": true,
+      "detail": 2500
+    },
+    {
+      "name": "IPL_middle_n_ge_200",
+      "ok": true,
+      "detail": 131891
+    },
+    {
+      "name": "IPL_middle_has_p50",
+      "ok": true,
+      "detail": 0.001
+    },
+    {
+      "name": "IPL_middle_has_samples",
+      "ok": true,
+      "detail": 2500
+    },
+    {
+      "name": "IPL_death_n_ge_200",
+      "ok": true,
+      "detail": 64280
+    },
+    {
+      "name": "IPL_death_has_p50",
+      "ok": true,
+      "detail": 0.164
+    },
+    {
+      "name": "IPL_death_has_samples",
+      "ok": true,
+      "detail": 2500
+    },
+    {
+      "name": "hot_positive",
+      "ok": true,
+      "detail": 0.75
+    },
+    {
+      "name": "cold_negative",
+      "ok": true,
+      "detail": -0.889
+    },
+    {
+      "name": "hot_pct_ge_70",
+      "ok": true,
+      "detail": 99.1
+    },
+    {
+      "name": "cold_pct_le_40",
+      "ok": true,
+      "detail": 0.0
+    },
+    {
+      "name": "insight_fires",
+      "ok": true,
+      "detail": {
+        "type": "momentum_index",
+        "index": 0.75,
+        "label": "SURGING",
+        "percentile": 99.1,
+        "phase": "middle",
+        "match_type": "IPL",
+        "window_balls": 18,
+        "gauge": {
+          "level": "CRITICAL"
+        },
+        "headline": "Momentum surging (+0.75) \u2014 99th pct in middle",
+        "pointers": [
+          {
+            "label": "Momentum",
+            "value": 0.75
+          },
+          {
+            "label": "Reading",
+            "value": "SURGING"
+          },
+          {
+            "label": "Window",
+            "value": 18,
+            "unit": " balls"
+          },
+          {
+            "label": "Phase percentile",
+            "value": 99.1,
+            "unit": "th"
+          },
+          {
+            "label": "Phase",
+            "value": "middle"
+          }
+        ]
+      }
+    },
+    {
+      "name": "insight_has_percentile",
+      "ok": true,
+      "detail": 99.1
+    },
+    {
+      "name": "insight_has_index",
+      "ok": true,
+      "detail": 0.75
+    },
+    {
+      "name": "thin_silent",
+      "ok": true,
+      "detail": null
+    }
+  ],
+  "failed": [],
+  "passed": true,
+  "hot_index": 0.75,
+  "cold_index": -0.889,
+  "hot_pct_ipl_middle": 99.1,
+  "cold_pct_ipl_middle": 0.0
+}
