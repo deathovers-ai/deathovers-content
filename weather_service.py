@@ -165,6 +165,70 @@ def check_dew_risk(is_second_innings: bool, local_start_hour: "int | None",
     return None
 
 
+# F09 — named ceilings for weather → model nudges (not a full weather model).
+# Dew aids batting grip in 2nd innings; rain marks uncertainty only (no DLS).
+# ponytail: fixed deltas; upgrade to venue-conditioned dew effect when samples exist.
+DEW_HIGH_WP_DELTA = 0.06
+DEW_MODERATE_WP_DELTA = 0.03
+DEW_HIGH_RR_MULT = 1.08
+DEW_MODERATE_RR_MULT = 1.04
+RAIN_PROB_UNCERTAIN_PCT = 70
+
+
+def compute_weather_adjustment(
+    dew_risk: "dict | None",
+    weather: "dict | None",
+) -> "dict | None":
+    """
+    Translate dew/rain chips into small chase-model nudges.
+
+    Returns None when nothing should move numbers. Rain never invents a
+    DLS outcome — it only raises uncertainty + a label.
+    """
+    batting_wp_delta = 0.0
+    run_rate_mult = 1.0
+    labels: list[str] = []
+    uncertain = False
+    applied = False
+
+    risk = (dew_risk or {}).get("risk")
+    if risk == "HIGH":
+        batting_wp_delta += DEW_HIGH_WP_DELTA
+        run_rate_mult *= DEW_HIGH_RR_MULT
+        labels.append("HIGH dew — batting aided")
+        applied = True
+    elif risk == "MODERATE":
+        batting_wp_delta += DEW_MODERATE_WP_DELTA
+        run_rate_mult *= DEW_MODERATE_RR_MULT
+        labels.append("MODERATE dew — slight batting aid")
+        applied = True
+
+    if weather:
+        if weather.get("is_rain_code_now"):
+            uncertain = True
+            labels.append("Rain now — interruption risk; WP not DLS-adjusted")
+            applied = True
+        else:
+            rain_p = weather.get("rain_probability_pct")
+            if isinstance(rain_p, (int, float)) and rain_p >= RAIN_PROB_UNCERTAIN_PCT:
+                uncertain = True
+                labels.append(f"Rain prob {int(rain_p)}% — interruption risk")
+                applied = True
+
+    if not applied:
+        return None
+
+    summary = "; ".join(labels)
+    return {
+        "batting_wp_delta": round(batting_wp_delta, 4),
+        "run_rate_mult": round(run_rate_mult, 4),
+        "uncertain": uncertain,
+        "labels": labels,
+        "summary": summary,
+        "applied": True,
+    }
+
+
 if __name__ == "__main__":
     print("=== TEST 1: WMO code mapping ===")
     test_codes = [(0, "Clear"), (61, "Light Rain"), (95, "Thunderstorm"), (2, "Partly Cloudy")]
@@ -230,5 +294,15 @@ if __name__ == "__main__":
     print("Evening + 2nd innings + moderate humidity:", r5)
     assert r5["risk"] == "MODERATE"
     print("PASS: all dew risk scenarios correct")
+
+    print("\n=== TEST 7: F09 weather adjustments ===")
+    high = compute_weather_adjustment({"risk": "HIGH"}, {"humidity_pct": 85, "is_rain_code_now": False})
+    assert high and high["batting_wp_delta"] == DEW_HIGH_WP_DELTA
+    assert high["run_rate_mult"] == DEW_HIGH_RR_MULT
+    none = compute_weather_adjustment(None, {"is_rain_code_now": False, "rain_probability_pct": 10})
+    assert none is None
+    rain = compute_weather_adjustment(None, {"is_rain_code_now": True})
+    assert rain and rain["uncertain"] and rain["batting_wp_delta"] == 0
+    print("PASS: weather adjustments")
 
     print("\nALL WEATHER SERVICE LOGIC TESTS PASSED")

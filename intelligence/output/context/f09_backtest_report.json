@@ -1,0 +1,8 @@
+{
+  "schema": "f09-backtest-v1",
+  "base_batting_wp": 0.5483,
+  "dew_adjusted_wp": 0.6083,
+  "dew_delta": 0.06,
+  "rain_preserves_wp": true,
+  "notes": "Named-ceiling dew delta + rain uncertainty only; no DLS library in this PR."
+}

@@ -90,12 +90,18 @@ except Exception as _intel_import_err:
 # the app. Coordinates come from Cricbuzz's own venueInfo, not a
 # geocoding step - see weather_service.py docstring.
 try:
-    from weather_service import fetch_weather, compute_local_hour, check_dew_risk
+    from weather_service import (
+        fetch_weather,
+        compute_local_hour,
+        check_dew_risk,
+        compute_weather_adjustment,
+    )
     _WEATHER_AVAILABLE = True
 except Exception as _weather_import_err:
     fetch_weather = None
     compute_local_hour = None
     check_dew_risk = None
+    compute_weather_adjustment = None
     _WEATHER_AVAILABLE = False
     log.warning("Weather service unavailable at startup (%s) - weather chip will be omitted.", _weather_import_err)
 
@@ -1659,6 +1665,14 @@ def _attach_intelligence(shaped: dict, carousel_entry: dict | None, miniscore: d
                     live_state["first_innings_phase_runs"] = fi_phase["runs"]
                     live_state["first_innings_phase_balls"] = fi_phase["balls"]
 
+        # F09: dew/rain nudges for chase_projection venue rates.
+        if compute_weather_adjustment:
+            weather_adj = compute_weather_adjustment(shaped.get("dewRisk"), shaped.get("weather"))
+            if weather_adj:
+                live_state["weather_run_rate_mult"] = weather_adj["run_rate_mult"]
+                live_state["weather_summary"] = weather_adj["summary"]
+                shaped["_weather_adjustment"] = weather_adj
+
         result = get_match_insights(live_state)
         if used_fallback:
             result.setdefault("meta", {})["score_source"] = "commentary_fallback"
@@ -1838,13 +1852,29 @@ def _attach_chase_state(shaped: dict, match_id: str, carousel_entry: dict | None
             }
         if state and _phase_distributions is not None and build_win_probability_payload is not None:
             try:
+                weather_adj = shaped.get("_weather_adjustment")
+                if weather_adj is None and compute_weather_adjustment:
+                    weather_adj = compute_weather_adjustment(
+                        shaped.get("dewRisk"), shaped.get("weather")
+                    )
                 wp = build_win_probability_payload(
-                    state, _phase_distributions, venue=venue
+                    state,
+                    _phase_distributions,
+                    venue=venue,
+                    weather_adjustment=weather_adj,
                 )
                 if wp:
                     shaped["win_probability"] = wp
+                    # Extend dew badge copy when the model actually moved.
+                    if weather_adj and weather_adj.get("applied") and shaped.get("dewRisk"):
+                        shaped["dewRisk"] = {
+                            **shaped["dewRisk"],
+                            "model_note": weather_adj.get("summary"),
+                            "model_applied": True,
+                        }
             except Exception as wp_err:
                 log.warning("Win probability failed for match %s: %s", match_id, wp_err)
+        shaped.pop("_weather_adjustment", None)
     except Exception as e:
         log.warning("Chase state unavailable for match %s: %s", match_id, e)
         shaped["chase"] = {"status": "unavailable", "reason": "invalid_live_score"}

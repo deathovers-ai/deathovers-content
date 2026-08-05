@@ -356,12 +356,61 @@ def build_win_probability_payload(
     venue: str | None = None,
     n_sims: int = DEFAULT_N_SIMS,
     seed: int | None = None,
+    weather_adjustment: dict | None = None,
 ) -> dict | None:
     """Public entry used by app.py. Silent (None) when it cannot speak."""
     if not state or not dists:
         return None
     rng = random.Random(seed) if seed is not None else random.Random()
-    return simulate_chase(state, dists, venue=venue, n_sims=n_sims, rng=rng)
+    payload = simulate_chase(state, dists, venue=venue, n_sims=n_sims, rng=rng)
+    if payload and weather_adjustment:
+        payload = apply_weather_adjustment(payload, weather_adjustment)
+    return payload
+
+
+def apply_weather_adjustment(payload: dict, adjustment: dict) -> dict:
+    """
+    F09: nudge batting WP by dew delta; rain only raises uncertainty.
+    Never invents DLS outcomes. Clamps to [0, 1].
+    """
+    if not payload or not adjustment or not adjustment.get("applied"):
+        return payload
+    out = dict(payload)
+    delta = float(adjustment.get("batting_wp_delta") or 0.0)
+    base = float(out.get("batting_wp") or 0.0)
+    if delta:
+        batting = max(0.0, min(1.0, base + delta))
+        out["batting_wp"] = round(batting, 4)
+        out["bowling_wp"] = round(1.0 - batting, 4)
+        out["base_batting_wp"] = round(base, 4)
+        pct = round(batting * 100)
+        out["gauge"] = dict(out.get("gauge") or {})
+        out["gauge"]["batting_pct"] = pct
+        # Refresh pointers that carry WP %
+        pointers = []
+        for p in out.get("pointers") or []:
+            if p.get("label") == "Batting WP":
+                pointers.append({**p, "value": round(batting * 100, 1)})
+            elif p.get("label") == "Bowling WP":
+                pointers.append({**p, "value": round((1.0 - batting) * 100, 1)})
+            else:
+                pointers.append(p)
+        pointers.append(
+            {
+                "label": "Weather adj",
+                "value": f"{delta:+.0%}" if abs(delta) >= 0.01 else adjustment.get("summary", "applied"),
+                "unit": "",
+            }
+        )
+        out["pointers"] = pointers
+        out["headline"] = f"Win probability {pct}% batting (weather-adjusted)"
+    if adjustment.get("uncertain"):
+        out["uncertain"] = True
+        if "EARLY" not in (out.get("label") or ""):
+            out["label"] = f"WEATHER · {out.get('label') or 'WP'}"
+    out["weather_adjusted"] = True
+    out["weather_summary"] = adjustment.get("summary")
+    return out
 
 
 def main(argv: list[str] | None = None) -> int:
