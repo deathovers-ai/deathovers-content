@@ -593,39 +593,97 @@ def _extract_ball_tracker(miniscore: dict | None) -> list[dict]:
 
 def _parse_toss_from_status(status_text: "str | None", team1_name: str, team2_name: str) -> "dict | None":
     """
-    Parse a toss announcement from Cricbuzz status / scorecard text.
+    Parse a toss announcement from Cricbuzz status / scorecard / commentary text.
 
     Confirmed live shapes include "Zimbabwe opt to bowl" / "France opt to bat"
-    while state == "Toss". Scorecard `status` often keeps the same line after
-    play starts ("Nepal opt to bowl"). Also accept "won the toss and elected
-    to bat/bowl/field" variants seen on completed/cards.
+    while state == "Toss". Scorecard `status` and early commentary often keep
+    the same line after play starts. Also accept "won the toss and elected
+    to bat/bowl/field" variants.
 
     Returns {"winner": str, "decision": "bat"|"bowl"} or None.
     """
     if not status_text:
         return None
-    text = status_text.strip()
+    text = " ".join(str(status_text).strip().split())
     patterns = (
-        r"^(.+?)\s+opt(?:ed)?\s+to\s+(bat|bowl|field)\b",
-        r"^(.+?)\s+won\s+the\s+toss\s+and\s+(?:elected|chose)\s+to\s+(bat|bowl|field)\b",
-        r"^(.+?)\s+won\s+the\s+toss\s*[,&]?\s*(?:elected|chose)\s+to\s+(bat|bowl|field)\b",
+        r"(.+?)\s+opt(?:ed)?\s+to\s+(bat|bowl|field)\b",
+        r"(.+?)\s+(?:have\s+)?won\s+the\s+toss\s+and\s+(?:have\s+)?(?:elected|chose|opted)\s+to\s+(bat|bowl|field)\b",
+        r"(.+?)\s+won\s+the\s+toss\s*[,&]?\s*(?:elected|chose|opted)\s+to\s+(bat|bowl|field)\b",
+        r"(.+?)\s+win(?:s|)\s+the\s+toss\s+and\s+(?:elect(?:s|ed)?|opt(?:s|ed)?)\s+to\s+(bat|bowl|field)\b",
     )
     winner_raw = None
     decision = None
     for pattern in patterns:
-        m = re.match(pattern, text, re.IGNORECASE)
+        # Prefer a full-line match, then fall back to a mid-string hit
+        # (commentary lines sometimes carry a "Toss - …" prefix).
+        m = re.match(r"^" + pattern, text, re.IGNORECASE)
+        if not m:
+            m = re.search(pattern, text, re.IGNORECASE)
         if m:
-            winner_raw = m.group(1).strip()
+            winner_raw = m.group(1).strip(" :-–—|\t")
+            # Strip leading labels like "Toss" / "Toss result"
+            winner_raw = re.sub(r"^(?:toss(?:\s+result)?)\s*[-–—:]?\s*", "", winner_raw, flags=re.IGNORECASE).strip()
             decision = m.group(2).lower()
             break
     if not winner_raw or not decision:
         return None
     if decision == "field":
         decision = "bowl"
+    # Refuse if the "winner" chunk still looks like a chase/score line.
+    low = winner_raw.lower()
+    if any(tok in low for tok in (" need ", " requires ", " vs ", " v ", "inn", "over")):
+        return None
+    if len(winner_raw) > 48:
+        return None
     for name in (team1_name, team2_name):
         if name and winner_raw.lower() == name.lower():
             return {"winner": name, "decision": decision}
+        if name and name.lower() in low:
+            return {"winner": name, "decision": decision}
     return {"winner": winner_raw, "decision": decision}
+
+
+def _extract_toss_from_commentary(
+    commentary: "list | None",
+    team1_name: str,
+    team2_name: str,
+    raw_comwrapper: "list | None" = None,
+) -> "dict | None":
+    """
+    Scan shaped commentary + raw comwrapper for a static toss line.
+
+    Toss is announced once near the start; commentary keeps that line even
+    after status flips to live chase text — so this is the reliable source
+    when the match is opened mid-innings.
+    """
+    texts: list[str] = []
+    for item in commentary or []:
+        if isinstance(item, dict):
+            t = (item.get("text") or "").strip()
+            if t:
+                texts.append(t)
+        elif isinstance(item, str) and item.strip():
+            texts.append(item.strip())
+    for entry in raw_comwrapper or []:
+        if not isinstance(entry, dict):
+            continue
+        c = entry.get("commentary") or {}
+        raw = (c.get("commtxt") or "").strip()
+        if not raw:
+            continue
+        texts.append(_resolve_commentary_placeholders(raw, c.get("commentaryformats", [])))
+
+    # Prefer older/earlier lines (toss is pre-play); scan all but stop at first hit.
+    # Commentary is usually newest-first; reverse so early announcements win.
+    for text in reversed(texts):
+        low = text.lower()
+        if "toss" not in low and "opt to" not in low and "opted to" not in low:
+            continue
+        hit = _parse_toss_from_status(text, team1_name, team2_name)
+        if hit:
+            hit = {**hit, "source": "commentary"}
+            return hit
+    return None
 
 
 def _format_toss_line(toss: "dict | None") -> "str | None":
@@ -642,14 +700,15 @@ def _resolve_toss_for_match(
     *,
     carousel_entry: "dict | None" = None,
     scorecard_data: "dict | None" = None,
+    commentary: "list | None" = None,
+    raw_comwrapper: "list | None" = None,
     existing: "dict | None" = None,
 ) -> "dict | None":
-    """Prefer archive, then any already-shaped toss, then parse known text fields."""
+    """Prefer archive, then commentary (static), then status/scorecard text."""
     toss = _get_archived_toss(match_id) or existing
     if isinstance(toss, dict) and toss.get("winner"):
         return toss
     if isinstance(toss, str) and toss.strip():
-        # Legacy/carousel string — try to parse; keep only structured shape.
         teams = (carousel_entry or {}).get("teams") or []
         parsed = _parse_toss_from_status(
             toss, teams[0] if teams else "", teams[1] if len(teams) > 1 else ""
@@ -661,6 +720,13 @@ def _resolve_toss_for_match(
     teams = (carousel_entry or {}).get("teams") or []
     team1 = teams[0] if teams else ""
     team2 = teams[1] if len(teams) > 1 else ""
+
+    # Commentary is the durable source once play has started.
+    from_comm = _extract_toss_from_commentary(commentary, team1, team2, raw_comwrapper)
+    if from_comm:
+        _record_toss_if_new(match_id, from_comm)
+        return from_comm
+
     candidates = []
     if carousel_entry:
         candidates.append(carousel_entry.get("toss"))
@@ -671,7 +737,6 @@ def _resolve_toss_for_match(
         header = scorecard_data.get("matchHeader") or scorecard_data.get("matchheader") or {}
         if isinstance(header, dict):
             candidates.append(header.get("status"))
-            # Rare but cheap: dedicated toss fields if provider adds them.
             tw = header.get("tossWinner") or header.get("tosswinner")
             td = header.get("tossDecision") or header.get("tossdecision")
             if tw and td:
@@ -2088,17 +2153,21 @@ def _refresh_match_detail(match_id: str) -> None:
     shaped = _shape_match_details_from_cricbuzz(scorecard_data, commentary, miniscore, raw_comwrapper)
     shaped = _preserve_prior_scorecard(shaped, prior_data)
 
-    # Toss result: archive → scorecard/carousel status parse → structured shape.
+    # Toss result: archive → commentary (static) → scorecard/carousel status.
     shaped["toss"] = _resolve_toss_for_match(
         match_id,
         carousel_entry=carousel_entry,
         scorecard_data=scorecard_data,
-        existing=shaped.get("toss") if isinstance(shaped.get("toss"), dict) else None,
+        commentary=commentary or shaped.get("commentary") or prior_data.get("commentary"),
+        raw_comwrapper=raw_comwrapper,
+        existing=shaped.get("toss") if isinstance(shaped.get("toss"), dict) else (
+            prior_data.get("toss") if isinstance(prior_data.get("toss"), dict) else None
+        ),
     )
     if shaped.get("toss"):
         shaped["tossLine"] = _format_toss_line(shaped["toss"])
     else:
-        shaped["tossLine"] = None
+        shaped["tossLine"] = prior_data.get("tossLine")
 
     # If this poll still has no batting card/commentary, keep the HEADER scores
     # from the carousel — but do NOT invent empty innings columns. That was the
