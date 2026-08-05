@@ -18,10 +18,23 @@ function scoreboardFromCarousel(meta) {
     innings1: null,
     innings2: null,
     innings: [],
-    toss: null,
+    toss: meta.toss || null,
+    tossLine: formatTossDisplay(meta.toss) || null,
     ballTracker: [],
     intelligence: { insights: [] },
   };
+}
+
+function formatTossDisplay(toss) {
+  if (!toss) return null;
+  if (typeof toss === 'string' && toss.trim()) return toss.trim();
+  if (toss.winner) {
+    const decision = String(toss.decision || '').toLowerCase();
+    if (decision === 'bat') return `${toss.winner} won the toss, elected to bat`;
+    if (decision === 'bowl') return `${toss.winner} won the toss, elected to bowl`;
+    return `${toss.winner} won the toss`;
+  }
+  return null;
 }
 
 export default function LiveCarousel() {
@@ -451,10 +464,10 @@ export default function LiveCarousel() {
                   </div>
                 )}
 
-                {activeData.toss && (
+                {(activeData.tossLine || formatTossDisplay(activeData.toss)) && (
                   <div className="scoreboard-toss">
                     <span className="toss-kicker">TOSS</span>
-                    <span className="toss-line">{activeData.toss}</span>
+                    <span className="toss-line">{activeData.tossLine || formatTossDisplay(activeData.toss)}</span>
                   </div>
                 )}
 

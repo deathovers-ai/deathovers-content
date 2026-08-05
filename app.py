@@ -593,29 +593,109 @@ def _extract_ball_tracker(miniscore: dict | None) -> list[dict]:
 
 def _parse_toss_from_status(status_text: "str | None", team1_name: str, team2_name: str) -> "dict | None":
     """
-    Cricbuzz's matchInfo.status field carries the toss announcement as a
-    plain string ONLY while matchInfo.state == "Toss" - e.g. "Zimbabwe
-    opt to bowl", "France opt to bat" (confirmed via real live data, 25
-    Jul 2026). Once play starts, status is overwritten with a live-state
-    description instead (e.g. "Sri Lanka Women need 117 runs") and no
-    longer contains toss info - callers MUST capture this once while
-    state is "Toss" and persist it (see _toss_archive below), not
-    re-parse status on every poll.
+    Parse a toss announcement from Cricbuzz status / scorecard text.
 
-    Returns {"winner": str, "decision": "bat"|"bowl"} or None if the
-    string doesn't match the toss-announcement pattern.
+    Confirmed live shapes include "Zimbabwe opt to bowl" / "France opt to bat"
+    while state == "Toss". Scorecard `status` often keeps the same line after
+    play starts ("Nepal opt to bowl"). Also accept "won the toss and elected
+    to bat/bowl/field" variants seen on completed/cards.
+
+    Returns {"winner": str, "decision": "bat"|"bowl"} or None.
     """
     if not status_text:
         return None
-    m = re.match(r"^(.+?)\s+opt(?:ed)?\s+to\s+(bat|bowl)\b", status_text.strip(), re.IGNORECASE)
-    if not m:
+    text = status_text.strip()
+    patterns = (
+        r"^(.+?)\s+opt(?:ed)?\s+to\s+(bat|bowl|field)\b",
+        r"^(.+?)\s+won\s+the\s+toss\s+and\s+(?:elected|chose)\s+to\s+(bat|bowl|field)\b",
+        r"^(.+?)\s+won\s+the\s+toss\s*[,&]?\s*(?:elected|chose)\s+to\s+(bat|bowl|field)\b",
+    )
+    winner_raw = None
+    decision = None
+    for pattern in patterns:
+        m = re.match(pattern, text, re.IGNORECASE)
+        if m:
+            winner_raw = m.group(1).strip()
+            decision = m.group(2).lower()
+            break
+    if not winner_raw or not decision:
         return None
-    winner_raw = m.group(1).strip()
-    decision = m.group(2).lower()
+    if decision == "field":
+        decision = "bowl"
     for name in (team1_name, team2_name):
         if name and winner_raw.lower() == name.lower():
             return {"winner": name, "decision": decision}
     return {"winner": winner_raw, "decision": decision}
+
+
+def _format_toss_line(toss: "dict | None") -> "str | None":
+    """Human line for UI: 'Nepal won the toss, elected to bowl'."""
+    if not toss or not toss.get("winner"):
+        return None
+    decision = (toss.get("decision") or "").lower()
+    verb = "elected to bat" if decision == "bat" else "elected to bowl" if decision == "bowl" else "elected to play"
+    return f"{toss['winner']} won the toss, {verb}"
+
+
+def _resolve_toss_for_match(
+    match_id: str,
+    *,
+    carousel_entry: "dict | None" = None,
+    scorecard_data: "dict | None" = None,
+    existing: "dict | None" = None,
+) -> "dict | None":
+    """Prefer archive, then any already-shaped toss, then parse known text fields."""
+    toss = _get_archived_toss(match_id) or existing
+    if isinstance(toss, dict) and toss.get("winner"):
+        return toss
+    if isinstance(toss, str) and toss.strip():
+        # Legacy/carousel string — try to parse; keep only structured shape.
+        teams = (carousel_entry or {}).get("teams") or []
+        parsed = _parse_toss_from_status(
+            toss, teams[0] if teams else "", teams[1] if len(teams) > 1 else ""
+        )
+        if parsed:
+            _record_toss_if_new(match_id, parsed)
+            return parsed
+
+    teams = (carousel_entry or {}).get("teams") or []
+    team1 = teams[0] if teams else ""
+    team2 = teams[1] if len(teams) > 1 else ""
+    candidates = []
+    if carousel_entry:
+        candidates.append(carousel_entry.get("toss"))
+        candidates.append(carousel_entry.get("chaseNote"))
+        candidates.append(carousel_entry.get("statusText"))
+    if scorecard_data:
+        candidates.append(scorecard_data.get("status"))
+        header = scorecard_data.get("matchHeader") or scorecard_data.get("matchheader") or {}
+        if isinstance(header, dict):
+            candidates.append(header.get("status"))
+            # Rare but cheap: dedicated toss fields if provider adds them.
+            tw = header.get("tossWinner") or header.get("tosswinner")
+            td = header.get("tossDecision") or header.get("tossdecision")
+            if tw and td:
+                decision = str(td).lower()
+                if "bat" in decision:
+                    decision = "bat"
+                elif "bowl" in decision or "field" in decision:
+                    decision = "bowl"
+                else:
+                    decision = None
+                if decision:
+                    parsed = {"winner": tw if isinstance(tw, str) else str(tw), "decision": decision}
+                    _record_toss_if_new(match_id, parsed)
+                    return parsed
+    for cand in candidates:
+        if isinstance(cand, dict) and cand.get("winner"):
+            _record_toss_if_new(match_id, cand)
+            return cand
+        if isinstance(cand, str):
+            parsed = _parse_toss_from_status(cand, team1, team2)
+            if parsed:
+                _record_toss_if_new(match_id, parsed)
+                return parsed
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -701,13 +781,15 @@ def _shape_match_for_carousel(m: dict) -> dict:
     home_name = team1.get("teamName", team1.get("teamname", "TBD"))
     away_name = team2.get("teamName", team2.get("teamname", "TBD"))
 
-    # Capture toss the moment we see it (state == "Toss"), before status
-    # gets overwritten by live-play text on the next poll.
+    # Capture toss whenever status still carries the announcement — not only
+    # while state == "Toss". Scorecard/status text often keeps "X opt to bowl"
+    # after play starts; archive once and reuse.
     match_id_for_toss = info.get("matchId", info.get("matchid"))
-    if (info.get("state") or "").lower() == "toss":
-        parsed_toss = _parse_toss_from_status(info.get("status"), home_name, away_name)
-        if match_id_for_toss and parsed_toss:
-            _record_toss_if_new(str(match_id_for_toss), parsed_toss)
+    status_text = info.get("status", "")
+    parsed_toss = _parse_toss_from_status(status_text, home_name, away_name)
+    if match_id_for_toss and parsed_toss:
+        _record_toss_if_new(str(match_id_for_toss), parsed_toss)
+    archived_toss = _get_archived_toss(str(match_id_for_toss)) if match_id_for_toss else None
 
     state = (info.get("state") or "").lower()
     if state in ("in progress", "innings break", "toss", "stumps"):
@@ -769,6 +851,8 @@ def _shape_match_for_carousel(m: dict) -> dict:
         "matchFormat": match_format,
         "score": {"home": _fmt(home_score), "away": _fmt(away_score)},
         "chaseNote": info.get("status", ""),
+        "statusText": info.get("status", ""),
+        "toss": archived_toss,
         "teams": [home_name, away_name],
         "homeImageId": team1.get("imageId", team1.get("imageid")) or crest_image_id(home_name),
         "awayImageId": team2.get("imageId", team2.get("imageid")) or crest_image_id(away_name),
@@ -1763,8 +1847,10 @@ def _shape_details_from_carousel(carousel_entry: dict | None, *, permanent: bool
     }
 
     if not permanent:
+        carousel_toss = (carousel_entry or {}).get("toss") if isinstance((carousel_entry or {}).get("toss"), dict) else None
         return {
-            "toss": None,
+            "toss": carousel_toss,
+            "tossLine": _format_toss_line(carousel_toss),
             "venue": (carousel_entry or {}).get("venue") or "",
             "recentBalls": [],
             "commentary": [],
@@ -1798,7 +1884,8 @@ def _shape_details_from_carousel(carousel_entry: dict | None, *, permanent: bool
             "bowlers": [],
         })
     return {
-        "toss": None,
+        "toss": (carousel_entry or {}).get("toss") if isinstance((carousel_entry or {}).get("toss"), dict) else None,
+        "tossLine": _format_toss_line((carousel_entry or {}).get("toss") if isinstance((carousel_entry or {}).get("toss"), dict) else None),
         "venue": (carousel_entry or {}).get("venue") or "",
         "recentBalls": [],
         "commentary": [],
@@ -2001,27 +2088,17 @@ def _refresh_match_detail(match_id: str) -> None:
     shaped = _shape_match_details_from_cricbuzz(scorecard_data, commentary, miniscore, raw_comwrapper)
     shaped = _preserve_prior_scorecard(shaped, prior_data)
 
-    # Toss result, if we've captured it for this match (see
-    # _record_toss_if_new - captured once, while state=="Toss", from the
-    # carousel entry). Falls back to parsing the SCORECARD endpoint's own
-    # top-level "status" field, which - confirmed via a real live
-    # scorecard response, match 155349 at over 29 - keeps the toss
-    # announcement text ("Nepal opt to bowl") even well after toss,
-    # unlike the live-matches feed's matchInfo.status which gets
-    # overwritten by live-play text. This recovers toss for matches the
-    # app started watching AFTER the "Toss" state had already passed
-    # (the one real gap in the archive-only approach) - at zero extra
-    # API cost, since scorecard_data is already being fetched every
-    # refresh for the batting/bowling card.
-    shaped["toss"] = _get_archived_toss(match_id) or shaped.get("toss")
-    if shaped["toss"] is None and scorecard_data and carousel_entry:
-        scorecard_status = scorecard_data.get("status")
-        team1_name = carousel_entry["teams"][0] if carousel_entry.get("teams") else ""
-        team2_name = carousel_entry["teams"][1] if len(carousel_entry.get("teams", [])) > 1 else ""
-        fallback_toss = _parse_toss_from_status(scorecard_status, team1_name, team2_name)
-        if fallback_toss:
-            shaped["toss"] = fallback_toss
-            _record_toss_if_new(match_id, fallback_toss)
+    # Toss result: archive → scorecard/carousel status parse → structured shape.
+    shaped["toss"] = _resolve_toss_for_match(
+        match_id,
+        carousel_entry=carousel_entry,
+        scorecard_data=scorecard_data,
+        existing=shaped.get("toss") if isinstance(shaped.get("toss"), dict) else None,
+    )
+    if shaped.get("toss"):
+        shaped["tossLine"] = _format_toss_line(shaped["toss"])
+    else:
+        shaped["tossLine"] = None
 
     # If this poll still has no batting card/commentary, keep the HEADER scores
     # from the carousel — but do NOT invent empty innings columns. That was the
