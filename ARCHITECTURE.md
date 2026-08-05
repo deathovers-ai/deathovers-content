@@ -28,8 +28,9 @@ context_repository.py     -- venue_stats.json (462 venues, phase-wise)
 player_context.py         -- player_stats.json (8,878 players)
 registry_verification.py  -- player_aliases.json (49 registry-confirmed merges)
         ↓
-insight_engine.py         -- compares live facts against historical context,
-                              WITH data-confidence guards (see below)
+validation_engine.py      -- data-confidence guards (speak / stay silent)
+insight_engine.py         -- compares live facts against historical context
+                              only after validation_engine guards pass
         ↓
 match_intelligence_api.py -- get_match_insights(live_state) entrypoint
 app_integration.py        -- translates real Cricbuzz API shapes -> live_state
@@ -41,15 +42,13 @@ LiveCarousel.jsx           -- frontend, renders insights when non-empty
 ```
 
 **Note on CLAUDE.md's stated pipeline** ("Analytics Engine → Metrics Engine
-→ Evidence Layer → Validation Layer → LLM Explanation"): the Evidence
-Layer and Validation Layer are not yet separate modules. Validation logic
-currently lives inline inside `insight_engine.py` as guard functions
-(`venue_data_is_reliable()`, `player_data_is_reliable()`). The LLM
-Explanation layer does not exist yet — all insight text today is
-template-generated in `insight_engine.py`, not AI-narrated. This is a
-planned future layer (see "Planned, Not Yet Built" below), and per
-CLAUDE.md's golden rule, when built it must only narrate pre-verified
-facts, never generate new ones.
+→ Evidence Layer → Validation Layer → LLM Explanation"): Validation is
+now a separate module (`validation_engine.py`: `venue_data_is_reliable()`,
+`player_data_is_reliable()`, cutoff + significance threshold). The
+Evidence Layer is still the context JSON + metrics path, not a named
+module. The LLM Explanation layer does not exist yet — all insight text
+today is template/pointer-generated in `insight_engine.py`, not
+AI-narrated. When built, narration must only restate pre-verified facts.
 
 ---
 
@@ -163,10 +162,9 @@ the concrete case study for why that rule exists.
 
 ---
 
-# THE INSIGHT ENGINE (`insight_engine.py`)
+# THE VALIDATION ENGINE (`validation_engine.py`)
 
-This is the Validation Layer, in practice (see note above about it not
-being formally separated from Insight generation yet).
+Owns the speak / stay-silent guards used by `insight_engine.py`.
 
 ## Hard rule: DATA_CONFIDENCE_CUTOFF
 
@@ -180,15 +178,23 @@ trades some false refusals for zero false inclusions.
 
 **This guard was caught failing its own self-test once already** (the
 initial 2003-01-01 cutoff let Kallis through, since his earliest
-*recorded* match happened to be Feb 2003). Caught via the module's own
-`__main__` test block before it shipped. Any future change to this
-guard MUST re-run that same test.
+*recorded* match happened to be Feb 2003). Regression coverage lives in
+`test_validation_engine.py`. Any future change to this guard MUST re-run
+that test.
 
 ## Significance threshold
 
-10% minimum deviation before an insight is generated at all. An engine
-that comments on every trivial wobble is noise, not intelligence.
-Silence is a valid, correct output.
+10% minimum deviation before an insight is generated at all
+(`SIGNIFICANCE_THRESHOLD_PCT`). An engine that comments on every trivial
+wobble is noise, not intelligence. Silence is a valid, correct output.
+
+---
+
+# THE INSIGHT ENGINE (`insight_engine.py`)
+
+Generates comparative insights after `validation_engine` guards pass.
+Does not own cutoff / reliability policy — import those from
+`validation_engine.py`.
 
 ## Pace-adjusted comparison (not flat average)
 
@@ -309,12 +315,11 @@ actual final score 188. Within range, 2 runs from the projection midpoint.
    (situation_collapse / acceleration / pressure / partnership); live
    `recent_balls` / partnership derived in `app.py`
 3. Phase boundary constants - **done** (F01): single `constants.py`
-4. Evidence Layer / Validation Layer not formally separated from
-   Insight Engine - works correctly today but doesn't structurally match
-   CLAUDE.md's stated pipeline diagram (F02 candidate)
+4. Validation Layer extraction - **done** (F02): `validation_engine.py`
 5. Venue-relative (vs. format-relative) thresholds for future pattern
    detection would need new aggregation work in context_repository.py
 6. Chase Engine - **built** (compact index + live bridge + Match Room /
    Tactical Read). Win probability (Monte Carlo) is still separate future work.
 7. Weather/dew - **partial**: fetched and shown in UI; not yet wired into
    projections / win models.
+8. Data freshness dashboard (F03) - not built yet.

@@ -8,7 +8,9 @@ average" instead of just reporting numbers.
 
 HARD RULE - CTO decision, July 2026 (see DATA_QUALITY_NOTES.md):
 This module NEVER generates a comparison against player or venue data
-we haven't validated as reliable.
+we haven't validated as reliable. Guards live in validation_engine.py
+(imported below) — this module generates insights only after those
+guards pass.
 
 IMPORTANT CORRECTION found during testing: the obvious guard - "refuse
 if this player's earliest RECORDED match is before the cutoff" - is
@@ -51,74 +53,23 @@ from datetime import date
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from constants import phase_bounds_list
+from validation_engine import (
+    DATA_CONFIDENCE_CUTOFF,
+    SIGNIFICANCE_THRESHOLD_PCT,
+    DataConfidenceError,
+    player_data_is_reliable,
+    venue_data_is_reliable,
+)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONTEXT_DIR = os.path.join(BASE_DIR, "output", "context")
 VENUE_STATS_FILE = os.path.join(CONTEXT_DIR, "venue_stats.json")
 PLAYER_STATS_FILE = os.path.join(CONTEXT_DIR, "player_stats.json")
 
-# Widened safety margin: refuse comparisons for any player whose earliest
-# recorded match falls before this date. This is deliberately later than
-# our corpus's real coverage start (~2003) specifically because a
-# player's EARLIEST RECORDED match can't distinguish "debuted in 2003"
-# from "career started earlier, Cricsheet just doesn't have it" - see
-# module docstring. Widening the margin trades some false refusals
-# (real early-2000s debutants excluded too) for eliminating false
-# inclusions (Kallis-style silent undercounting) entirely.
-DATA_CONFIDENCE_CUTOFF = "2005-01-01"
-
-# How far a live number needs to diverge from the historical average
-# before we consider it worth mentioning at all. Below this, silence -
-# an insight engine that comments on every trivial wobble is just noise.
-SIGNIFICANCE_THRESHOLD_PCT = 10.0
-
-
-class DataConfidenceError(Exception):
-    """Raised when an insight was about to be generated from unvalidated
-    (pre-cutoff) data. Callers should catch this and skip the insight,
-    not surface a degraded-confidence version of it."""
-    pass
-
 
 def _load_json(path):
     with open(path, encoding="utf-8") as f:
         return json.load(f)
-
-
-def venue_data_is_reliable(venue_entry, match_type):
-    """
-    Venue reliability check: do we have enough matches (not just any
-    matches) in the reliable era for this format at this venue?
-    Cricsheet coverage for T20 formats essentially only exists post-2003
-    anyway (T20 as a format didn't exist until 2003), so this mostly
-    matters for ODI venues with a long history.
-
-    Prefers the explicit "confidence" field (written by
-    context_repository.py's build_venue_stats) when present; falls back
-    to the raw matches_with_data threshold for venue_stats.json files
-    generated before that field existed, so this doesn't hard-break on
-    stale local output.
-    """
-    fmt = venue_entry.get("formats", {}).get(match_type)
-    if not fmt:
-        return False
-    if "confidence" in fmt:
-        return fmt["confidence"] in ("high", "medium")
-    # Minimum sample size for a venue average to be meaningful at all -
-    # this is a general statistical-confidence guard, separate from the
-    # date-based data-quality guard.
-    return fmt.get("matches_with_data", 0) >= 5
-
-
-def player_data_is_reliable(player_entry):
-    """
-    The hard guard: refuse comparisons for players whose earliest
-    recorded match predates our confirmed-reliable coverage window.
-    """
-    earliest = player_entry.get("earliest_match_date")
-    if earliest is None:
-        return False  # no date info at all - can't vouch for it, refuse
-    return earliest >= DATA_CONFIDENCE_CUTOFF
 
 
 class InsightEngine:
