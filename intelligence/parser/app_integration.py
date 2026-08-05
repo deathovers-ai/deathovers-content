@@ -130,6 +130,10 @@ def build_live_state(venue_name, match_format_str, is_ipl, miniscore):
         live_state["striker_current_runs"] = striker["runs"]
         live_state["striker_current_balls"] = striker["balls"]
 
+    bowler = miniscore.get("bowlerstriker")
+    if bowler and bowler.get("name"):
+        live_state["bowler_name"] = bowler["name"]
+
     # NEW: phase-runs/balls, needed for venue_phase_insight - this was
     # previously never populated, so phase insights never fired on any
     # live match regardless of innings. Cricbuzz's own miniscore.pp field
@@ -200,6 +204,10 @@ if __name__ == "__main__":
         "batsmannonstriker": {
             "id": 14701, "balls": 15, "runs": 16, "fours": 0, "sixes": 1,
             "strkrate": "106.67", "name": "Nitish Reddy", "outdec": "",
+        },
+        "bowlerstriker": {
+            "id": 8548, "overs": "2.5", "wickets": 0, "runs": 44,
+            "economy": "15.53", "name": "Taskin Ahmed",
         },
         "crr": 11.15,
         "rrr": 0,

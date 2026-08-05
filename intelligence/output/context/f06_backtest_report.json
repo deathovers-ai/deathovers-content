@@ -1,0 +1,69 @@
+{
+  "batter_count": 714,
+  "pair_count": 4782,
+  "checks": [
+    {
+      "name": "pairs_gt_500",
+      "ok": true,
+      "detail": 4782
+    },
+    {
+      "name": "batters_gt_100",
+      "ok": true,
+      "detail": 714
+    },
+    {
+      "name": "no_thin_pairs_committed",
+      "ok": true,
+      "detail": 0
+    },
+    {
+      "name": "kohli_bumrah_present",
+      "ok": true,
+      "detail": [
+        "CJ Jordan",
+        "BA Stokes",
+        "S Badree",
+        "DJ Bravo",
+        "TG Southee",
+        "Harbhajan Singh",
+        "MJ McClenaghan",
+        "JJ Bumrah"
+      ]
+    },
+    {
+      "name": "kohli_bumrah_reliable",
+      "ok": true,
+      "detail": {
+        "balls": 110,
+        "runs": 164,
+        "dismissals": 5,
+        "strike_rate": 149.09,
+        "average": 32.8,
+        "reliable": true
+      }
+    },
+    {
+      "name": "kohli_bumrah_balls_ge_30",
+      "ok": true,
+      "detail": 110
+    },
+    {
+      "name": "insight_fires",
+      "ok": true,
+      "detail": "V Kohli vs JJ Bumrah: 35.8% above career rate (110 balls)"
+    },
+    {
+      "name": "insight_type",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "thin_refused",
+      "ok": true,
+      "detail": null
+    }
+  ],
+  "failed": [],
+  "passed": true
+}

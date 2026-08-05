@@ -153,6 +153,14 @@ the data-confidence guard in the Insight Engine (see below).
 from whatever event slice is on disk (used for T20/IPL backtests without
 wiping ODI career coverage).
 
+## Matchup context (`matchup_context.py` -> `matchup_stats.json`)
+
+Sparse batter→bowler matrix from T20/IPL/IT20 events. Only pairs with
+≥`MIN_MATCHUP_BALLS` (30) legal batter-facing balls are written. Each
+cell: balls, runs, dismissals, strike_rate, average, `reliable`. Live
+Match Room shows a dedicated card when both striker and bowler are
+present and the pair clears the floor (`bowler_batter_matchup`).
+
 ## Player identity resolution (`registry_verification.py`)
 
 **Important design history, worth preserving**: an earlier attempt used
@@ -226,6 +234,7 @@ essentially complete.
 - `player_form_insight` - live strike rate vs. career strike rate (guarded by DATA_CONFIDENCE_CUTOFF)
 - `player_phase_mismatch` - live phase SR vs player phase history (F04; `MIN_PHASE_BALLS`)
 - `venue_form_convergence` - live SR vs player venue history (F04; `MIN_VENUE_INNINGS`)
+- `bowler_batter_matchup` - live batter vs live bowler H2H (F06; `MIN_MATCHUP_BALLS`)
 - `venue_pregame_insight` - toss / scoring / chase venue record
 - Situation detection (`situation_collapse`, `situation_wicket_pressure`,
   `situation_acceleration`, `situation_partnership`)
@@ -236,7 +245,7 @@ essentially complete.
 - AI narration layer (turns structured insight objects into flowing
   prose) - explicitly scoped to narrate ONLY pre-verified facts from the
   Insight Engine, never to generate new comparisons itself
-- Player form windows / venue / phase stats - **done** (F04); matchups still F06
+- Player form windows / venue / phase / matchups - **done** (F04 + F06)
 - Win probability Monte Carlo (F05) — additive to Chase Engine, not a replacement
 
 ---

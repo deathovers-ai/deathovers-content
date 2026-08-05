@@ -57,6 +57,7 @@ from validation_engine import (
     DATA_CONFIDENCE_CUTOFF,
     SIGNIFICANCE_THRESHOLD_PCT,
     DataConfidenceError,
+    matchup_is_reliable,
     player_data_is_reliable,
     player_phase_is_reliable,
     player_venue_is_reliable,
@@ -67,6 +68,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONTEXT_DIR = os.path.join(BASE_DIR, "output", "context")
 VENUE_STATS_FILE = os.path.join(CONTEXT_DIR, "venue_stats.json")
 PLAYER_STATS_FILE = os.path.join(CONTEXT_DIR, "player_stats.json")
+MATCHUP_STATS_FILE = os.path.join(CONTEXT_DIR, "matchup_stats.json")
 
 
 def _load_json(path):
@@ -84,9 +86,15 @@ class InsightEngine:
     insight, never a low-confidence one dressed up as normal).
     """
 
-    def __init__(self, venue_stats=None, player_stats=None):
+    def __init__(self, venue_stats=None, player_stats=None, matchup_stats=None):
         self.venue_stats = venue_stats or _load_json(VENUE_STATS_FILE)
         self.player_stats = player_stats or _load_json(PLAYER_STATS_FILE)
+        if matchup_stats is not None:
+            self.matchup_stats = matchup_stats
+        elif os.path.exists(MATCHUP_STATS_FILE):
+            self.matchup_stats = _load_json(MATCHUP_STATS_FILE)
+        else:
+            self.matchup_stats = {}
 
     def _projected_score_at_point(self, venue_entry, match_type, legal_balls_so_far):
         """
@@ -463,6 +471,65 @@ class InsightEngine:
             "venue": venue_name,
             "diff_pct": diff_pct,
             "headline": f"{player_name} {abs(diff_pct)}% {direction} their {venue_name} rate",
+            "pointers": pointers,
+        }
+
+    def bowler_batter_matchup(self, batter_name, bowler_name):
+        """
+        Historical head-to-head for the live batter vs live bowler.
+        Requires MIN_MATCHUP_BALLS. Silent when the pair is thin or missing.
+        """
+        if not batter_name or not bowler_name:
+            return None
+        block = (self.matchup_stats.get(batter_name) or {}).get(bowler_name)
+        if not matchup_is_reliable(block):
+            return None
+
+        sr = block["strike_rate"]
+        balls = block["balls"]
+        dismissals = block["dismissals"]
+        average = block.get("average")
+        pointers = [
+            {"label": "Matchup SR", "value": sr},
+            {"label": "Balls", "value": balls},
+            {"label": "Dismissals", "value": dismissals},
+        ]
+        if average is not None:
+            pointers.append({"label": "Matchup Avg", "value": average})
+
+        # Optional edge vs batter career SR — only when career data is reliable
+        # and the gap clears the significance floor.
+        career = self.player_stats.get(batter_name)
+        if career and player_data_is_reliable(career):
+            career_sr = (career.get("batting") or {}).get("strike_rate") or 0
+            if career_sr > 0:
+                diff_pct = round(((sr - career_sr) / career_sr) * 100, 1)
+                if abs(diff_pct) >= SIGNIFICANCE_THRESHOLD_PCT:
+                    direction = "above" if diff_pct > 0 else "below"
+                    pointers.append({
+                        "label": "Vs Career SR",
+                        "value": round(sr - career_sr, 2),
+                        "pct": diff_pct,
+                    })
+                    headline = (
+                        f"{batter_name} vs {bowler_name}: "
+                        f"{abs(diff_pct)}% {direction} career rate ({balls} balls)"
+                    )
+                else:
+                    headline = f"{batter_name} vs {bowler_name}: {sr} SR historically ({balls} balls)"
+            else:
+                headline = f"{batter_name} vs {bowler_name}: {sr} SR historically ({balls} balls)"
+        else:
+            headline = f"{batter_name} vs {bowler_name}: {sr} SR historically ({balls} balls)"
+
+        return {
+            "type": "bowler_batter_matchup",
+            "batter": batter_name,
+            "bowler": bowler_name,
+            "balls": balls,
+            "strike_rate": sr,
+            "dismissals": dismissals,
+            "headline": headline,
             "pointers": pointers,
         }
 
@@ -902,7 +969,7 @@ class InsightEngine:
           venue_key, match_type, current_score, current_wickets,
           overs_completed_str, phase_name, current_phase_runs,
           current_phase_balls, player_name, player_current_runs,
-          player_current_balls
+          player_current_balls, bowler_name
         """
         insights = []
 
@@ -948,6 +1015,13 @@ class InsightEngine:
                 i = self.venue_form_convergence(
                     context["player_name"], context["venue_key"],
                     context["player_current_runs"], context["player_current_balls"],
+                )
+                if i:
+                    insights.append(i)
+
+            if context.get("bowler_name"):
+                i = self.bowler_batter_matchup(
+                    context["player_name"], context["bowler_name"],
                 )
                 if i:
                     insights.append(i)
