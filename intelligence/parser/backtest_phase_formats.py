@@ -1,11 +1,12 @@
 """
-F11 backtest — phase windows for ODI / The Hundred / T10.
+F11 backtest — phase windows for ODI / The Hundred.
 
-Isolation rule: T20/ODI/T10 stay over-based; Hundred is ball-native
+Isolation rule: T20/ODI stay over-based; Hundred is ball-native
 (ECB 25-ball PP). Never infer Hundred from "20 overs" alone.
+T10 is deferred (not in phase tables / live maps).
 
 ODI: empirical check on venue_stats phase rates (death RR ≥ middle).
-Hundred / T10: structural + synthetic ball→phase (no HND/T10 venue corpus).
+Hundred: structural + synthetic ball→phase (no HND venue corpus yet).
 
 Usage (from intelligence/parser):
   python3 backtest_phase_formats.py
@@ -59,9 +60,9 @@ def main():
 
     # --- Isolation: over table vs ball table --------------------------
     check("hundred_not_in_over_table", "HUNDRED" not in PHASE_BOUNDARIES)
+    check("t10_not_in_over_table", "T10_LIKE" not in PHASE_BOUNDARIES)
     check("t20_still_in_over_table", PHASE_BOUNDARIES["T20_LIKE"]["powerplay"] == (0, 6))
     check("odi_still_in_over_table", PHASE_BOUNDARIES["ODI_LIKE"]["death"] == (40, 50))
-    check("t10_still_in_over_table", PHASE_BOUNDARIES["T10_LIKE"]["death"] == (7, 10))
     check(
         "hundred_ball_pp_25",
         PHASE_BOUNDARIES_BALLS["HUNDRED"]["powerplay"] == (0, 25),
@@ -73,22 +74,24 @@ def main():
     check("hundred_ball_native", is_ball_native_format("HUNDRED") is True)
     check("t20_not_ball_native", is_ball_native_format("T20") is False)
     check("odi_not_ball_native", is_ball_native_format("ODI") is False)
-    check("t10_not_ball_native", is_ball_native_format("T10") is False)
 
-    # 20 overs without match_type must remain T20 — never Hundred.
     check(
         "twenty_overs_is_t20_not_hundred",
         phase_set_for_total_overs(20) is PHASE_BOUNDARIES["T20_LIKE"],
+    )
+    check(
+        "ten_overs_is_t20_not_t10",
+        phase_set_for_total_overs(10) is PHASE_BOUNDARIES["T20_LIKE"],
     )
 
     check("hundred_balls_per_over", balls_per_over_for_match_type("HUNDRED") == 5)
     check("t20_balls_per_over", balls_per_over_for_match_type("T20") == 6)
     check("odi_balls_per_over", balls_per_over_for_match_type("ODI") == 6)
     check("hundred_legal_balls", innings_legal_balls("HND") == 100)
-    check("t10_experimental", is_experimental_format("T10") is True)
     check("odi_not_experimental", is_experimental_format("ODI") is False)
     check("format_total_odi", format_total_overs("ODI") == 50)
-    check("format_total_t10", format_total_overs("T10") == 10)
+    check("t10_deferred_maps_t20_like", phase_kind_for_match_type("T10") == "T20_LIKE")
+    check("t10_not_in_live_map", map_format("T10") is None)
 
     for code, kind in (
         ("ODI", "ODI_LIKE"),
@@ -96,7 +99,6 @@ def main():
         ("HND", "HUNDRED"),
         ("100", "HUNDRED"),
         ("HUNDRED", "HUNDRED"),
-        ("T10", "T10_LIKE"),
         ("T20", "T20_LIKE"),
         ("IPL", "T20_LIKE"),
     ):
@@ -104,7 +106,6 @@ def main():
 
     for feed, expected in (
         ("ODI", "ODI"),
-        ("T10", "T10"),
         ("Hundred", "HUNDRED"),
         ("100", "HUNDRED"),
         ("HND", "HUNDRED"),
@@ -112,7 +113,6 @@ def main():
     ):
         check(f"map_{feed}", map_format(feed) == expected, map_format(feed))
 
-    # Over edges — non-Hundred unchanged
     for over, fmt, want in (
         (9, "ODI", "powerplay"),
         (10, "ODI", "middle"),
@@ -121,15 +121,18 @@ def main():
         (5, "T20", "powerplay"),
         (6, "T20", "middle"),
         (15, "T20", "death"),
-        (2, "T10", "powerplay"),
-        (3, "T10", "middle"),
-        (7, "T10", "death"),
     ):
         got = determine_phase(over, fmt)
         check(f"edge_{fmt}_{over}", got == want, got)
 
-    # Hundred ball edges (rules)
-    for ball, want in ((0, "powerplay"), (24, "powerplay"), (25, "middle"), (74, "middle"), (75, "death"), (99, "death")):
+    for ball, want in (
+        (0, "powerplay"),
+        (24, "powerplay"),
+        (25, "middle"),
+        (74, "middle"),
+        (75, "death"),
+        (99, "death"),
+    ):
         got = determine_phase_from_balls(ball, "HUNDRED")
         check(f"hundred_ball_{ball}", got == want, got)
 
@@ -142,16 +145,9 @@ def main():
         determine_phase_from_balls(25, "HUNDRED") == "middle"
         and determine_phase(5, "T20") == "powerplay",
     )
-    check(
-        "t20_ball_bounds_36",
-        phase_bounds_balls("T20")[0] == ("powerplay", 0, 36),
-    )
-    check(
-        "hundred_ball_bounds_25",
-        phase_bounds_balls("HUNDRED")[0] == ("powerplay", 0, 25),
-    )
+    check("t20_ball_bounds_36", phase_bounds_balls("T20")[0] == ("powerplay", 0, 36))
+    check("hundred_ball_bounds_25", phase_bounds_balls("HUNDRED")[0] == ("powerplay", 0, 25))
 
-    # --- Synthetic full innings maps ---------------------------------
     hundred_ok = True
     for ball in range(100):
         phase = determine_phase_from_balls(ball, "HUNDRED")
@@ -163,54 +159,50 @@ def main():
     if hundred_ok:
         check("hundred_ball_map", True, {"balls": 100, "pp_balls": 25, "death_balls": 25})
 
-    # Cricsheet 5-ball over index must agree with ball map (adapter).
     adapter_ok = True
     for over in range(20):
         from_over = determine_phase_from_over(over, "HUNDRED")
         from_ball = determine_phase_from_balls(over * 5, "HUNDRED")
         if from_over != from_ball:
             adapter_ok = False
-            check("hundred_adapter_agrees", False, {"over": over, "from_over": from_over, "from_ball": from_ball})
+            check(
+                "hundred_adapter_agrees",
+                False,
+                {"over": over, "from_over": from_over, "from_ball": from_ball},
+            )
             break
     if adapter_ok:
         check("hundred_adapter_agrees", True)
 
-    t10_ok = True
-    for ball in range(60):
-        phase = determine_phase_from_balls(ball, "T10")
-        want = "powerplay" if ball < 18 else ("middle" if ball < 42 else "death")
-        if phase != want:
-            t10_ok = False
-            check("t10_ball_map", False, {"ball": ball, "got": phase, "want": want})
-            break
-    if t10_ok:
-        check("t10_ball_map", True, {"balls": 60, "bpo": 6, "pp_balls": 18})
-
-    for fmt in ("ODI", "T20", "T10"):
+    for fmt in ("ODI", "T20"):
         total = format_total_overs(fmt)
         phases_hit = {determine_phase_from_over(o, fmt) for o in range(total)}
         check(f"cover_{fmt}", phases_hit == {"powerplay", "middle", "death"}, sorted(phases_hit))
         bounds = phase_bounds_list(fmt)
-        check(f"contig_{fmt}", bounds[0][1] == 0 and bounds[-1][2] == total
-              and all(bounds[i][2] == bounds[i + 1][1] for i in range(len(bounds) - 1)), bounds)
+        check(
+            f"contig_{fmt}",
+            bounds[0][1] == 0
+            and bounds[-1][2] == total
+            and all(bounds[i][2] == bounds[i + 1][1] for i in range(len(bounds) - 1)),
+            bounds,
+        )
 
-    # Hundred coverage via balls
     phases_hit = {determine_phase_from_balls(b, "HUNDRED") for b in range(100)}
     check("cover_HUNDRED", phases_hit == {"powerplay", "middle", "death"}, sorted(phases_hit))
     hb = phase_bounds_balls("HUNDRED")
     check(
         "contig_HUNDRED_balls",
-        hb[0][1] == 0 and hb[-1][2] == 100
+        hb[0][1] == 0
+        and hb[-1][2] == 100
         and all(hb[i][2] == hb[i + 1][1] for i in range(len(hb) - 1)),
         hb,
     )
 
-    # --- ODI empirical (must stay green — proves we didn't break ODI) --
     odi_report = {
         "venues_ge_n": 0,
         "death_ge_mid": 0,
         "skipped_no_corpus_hundred": True,
-        "skipped_no_corpus_t10": True,
+        "t10_deferred": True,
     }
     if os.path.exists(VENUE_STATS):
         with open(VENUE_STATS, encoding="utf-8") as f:
@@ -249,11 +241,14 @@ def main():
             frac >= MIN_ODI_DEATH_GE_MID_FRAC,
             {"frac": round(frac, 4), "death_ge_mid": death_ge, "n": len(rows)},
         )
-        # T20 regression: death still ≥ middle at most grounds (isolation smoke).
         if t20_rows:
             t20_frac = sum(t20_rows) / len(t20_rows)
             odi_report["t20_death_ge_mid_frac"] = round(t20_frac, 4)
-            check("t20_death_rr_ge_middle_regression", t20_frac >= 0.85, {"frac": round(t20_frac, 4), "n": len(t20_rows)})
+            check(
+                "t20_death_rr_ge_middle_regression",
+                t20_frac >= 0.85,
+                {"frac": round(t20_frac, 4), "n": len(t20_rows)},
+            )
         fmt_keys = set()
         for meta in venues.values():
             if isinstance(meta, dict):
@@ -261,7 +256,6 @@ def main():
         check("corpus_has_odi", "ODI" in fmt_keys, sorted(fmt_keys))
         check("corpus_has_t20", "T20" in fmt_keys)
         check("corpus_lacks_hundred", "HND" not in fmt_keys and "HUNDRED" not in fmt_keys)
-        check("corpus_lacks_t10", "T10" not in fmt_keys)
     else:
         check("venue_stats_present", False, VENUE_STATS)
 
@@ -281,8 +275,8 @@ def main():
                 mid_m is not None and death_m is not None and death_m > mid_m,
                 {"middle": mid_m, "death": death_m},
             )
-        # Hundred must not appear in legacy dists (no silent T20 bleed).
         check("dists_lack_hundred", "HUNDRED" not in formats and "HND" not in formats)
+        check("dists_lack_t10", "T10" not in formats and "T10_LIKE" not in formats)
     else:
         check("phase_dists_present", False, PHASE_DISTS)
 

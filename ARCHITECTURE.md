@@ -313,11 +313,10 @@ Three-tier interval scheduling in `_background_loop`:
 
 T20-like: powerplay 0-6 overs, middle 6-15, death 15-20.
 ODI-like: powerplay 0-10, middle 10-40, death 40-50.
-T10 (experimental): powerplay 0-3, middle 3-7, death 7-10.
 The Hundred is **ball-native** (not over-based): powerplay 0-25 balls
 (official ECB PP), middle 25-75, death 75-100. Cricsheet 5-ball "overs"
 are an adapter only — never infer Hundred from "20 overs" alone (that
-stays T20).
+stays T20). T10 is deferred (not in phase tables).
 
 `PHASE_BOUNDARIES` / `PHASE_BOUNDARIES_BALLS` and helpers live in
 `constants.py`. Consumers import from there. Do not re-declare windows

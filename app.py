@@ -1575,7 +1575,7 @@ def _build_match_tactical_fallback(shaped: dict, carousel_entry: dict | None) ->
             )
 
             fmt = normalize_match_type(match_format)
-            if fmt not in ("ODI", "ODM", "T20", "IT20", "IPL", "T10", "HUNDRED", "HND", "100", "THE_HUNDRED"):
+            if fmt not in ("ODI", "ODM", "T20", "IT20", "IPL", "HUNDRED", "HND", "100", "THE_HUNDRED"):
                 fmt = "T20"
             if determine_phase is not None:
                 phase = determine_phase(overs_now, fmt)

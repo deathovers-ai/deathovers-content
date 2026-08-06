@@ -41,12 +41,11 @@ EARLY_BALLS_FRACTION = 0.40
 
 # ponytail: format-default wickets/over until event-built histograms exist.
 # Tuned to ~6–7 wickets per T20 innings / ~8–9 per ODI, with death slightly hotter.
-# Hundred / T10 borrow T20-like rates until format-specific builds exist.
+# Hundred borrow T20-like rates until format-specific builds exist.
 DEFAULT_WICKETS_PER_OVER = {
     "T20_LIKE": {"powerplay": 0.38, "middle": 0.28, "death": 0.42},
     "ODI_LIKE": {"powerplay": 0.22, "middle": 0.16, "death": 0.28},
     "HUNDRED": {"powerplay": 0.38, "middle": 0.28, "death": 0.42},
-    "T10_LIKE": {"powerplay": 0.40, "middle": 0.32, "death": 0.45},
 }
 
 
