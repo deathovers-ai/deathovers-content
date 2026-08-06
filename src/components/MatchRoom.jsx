@@ -106,14 +106,15 @@ function formatFreshDate(value) {
 
 function LiveMatchPanel({ view }) {
   const score = view.liveInnings;
+  const line = inningsScoreLine(score);
   return (
     <section className="panel live-panel board-enter">
       <PanelTitle eyebrow="MATCH CONTROL" title="Live match state" tag={score?.phase || 'IN PLAY'} />
       <div className="score-hero">
         <div>
           <p className="team-name">{score?.team || 'LIVE MATCH'}</p>
-          <p className="score-value">{score?.runs ?? 'â€”'}<span>/{score?.wickets ?? 'â€”'}</span></p>
-          <p className="over-line">{formatOvers(score)} <span>â€¢</span> {score?.phase ? `${score.phase} phase` : 'score updating'}</p>
+          <p className="score-value">{line?.runs ?? '—'}<span>/{line?.wickets ?? '—'}</span></p>
+          <p className="over-line">{formatOvers(score)} <span>•</span> {score?.phase ? `${score.phase} phase` : 'score updating'}</p>
         </div>
         <div className="innings-pill"><span>INNINGS</span><strong>{view.inningsLabel}</strong></div>
       </div>
@@ -316,8 +317,23 @@ function EmptyCopy({ children }) { return <p className="empty-copy">{children}</
 function LoadState({ label, error = false }) { return <div className={`load-state ${error ? 'load-error' : ''}`}><i />{label}</div>; }
 function number(value) { return value == null ? 'â€”' : Number(value).toFixed(2); }
 function signed(value, suffix) { if (value == null) return 'â€”'; const rounded = Math.abs(value) < 10 ? Number(value).toFixed(1) : Math.round(value); return `${value > 0 ? '+' : ''}${rounded}${suffix}`; }
-function formatOvers(innings) { if (innings?.overs != null) return `${innings.overs} overs`; if (innings?.balls != null) return `${Math.floor(innings.balls / 6)}.${innings.balls % 6} overs`; return 'Live score'; }
+function formatOvers(innings) {
+  if (innings?.overs != null && String(innings.overs).trim() !== '') {
+    const text = String(innings.overs).trim();
+    return /over/i.test(text) ? text : `${text} overs`;
+  }
+  if (innings?.balls != null) return `${Math.floor(innings.balls / 6)}.${innings.balls % 6} overs`;
+  return 'Live score';
+}
 function formatPointer(pointer) { const pct = pointer?.pct == null ? '' : ` (${pointer.pct > 0 ? '+' : ''}${pointer.pct}%)`; return `${pointer?.value ?? 'â€”'}${pointer?.unit || ''}${pct}`; }
+function inningsScoreLine(innings) {
+  if (!innings) return null;
+  if (innings.runs != null) return { runs: innings.runs, wickets: innings.wickets };
+  const text = String(innings.score || '').trim();
+  const match = text.match(/^(\d+)\s*\/\s*(\d+)/);
+  if (!match) return null;
+  return { runs: Number(match[1]), wickets: Number(match[2]) };
+}
 
 function buildView(data) {
   const innings = data?.innings || [];
