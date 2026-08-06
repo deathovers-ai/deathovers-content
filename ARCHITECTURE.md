@@ -46,9 +46,9 @@ LiveCarousel.jsx           -- frontend, renders insights when non-empty
 now a separate module (`validation_engine.py`: `venue_data_is_reliable()`,
 `player_data_is_reliable()`, cutoff + significance threshold). The
 Evidence Layer is still the context JSON + metrics path, not a named
-module. The LLM Explanation layer does not exist yet — all insight text
-today is template/pointer-generated in `insight_engine.py`, not
-AI-narrated. When built, narration must only restate pre-verified facts.
+module. The LLM Explanation layer is `narration_engine.py` (F08): it
+only restates pre-verified insight facts; numbers are validated against
+the insight allowlist before prose is attached.
 
 ---
 
@@ -247,9 +247,11 @@ essentially complete.
 
 ## Insight types planned, not yet built
 
-- AI narration layer (turns structured insight objects into flowing
-  prose) - explicitly scoped to narrate ONLY pre-verified facts from the
-  Insight Engine, never to generate new comparisons itself
+- AI narration layer - **done** (F08): `narration_engine.py` attaches
+  validated `narration` (+ `narration_source`) onto each insight. LLM
+  optional via `NARRATION_API_KEY` / `GROQ_API_KEY`; otherwise template
+  prose from headline+pointers. Number-extract validator; ≤3 LLM retries;
+  template fallback. Never skips the validator.
 - Player form windows / venue / phase / matchups / momentum index - **done** (F04 + F06 + F07)
 - Win probability Monte Carlo (F05) — **done** (additive to Chase Engine)
 
@@ -336,7 +338,8 @@ actual final score 188. Within range, 2 runs from the projection midpoint.
 
 # KNOWN GAPS / FUTURE WORK
 
-1. AI narration layer - not built (see above)
+1. AI narration layer - **done** (F08): `narration_engine.py`; Match Room /
+   Tactical Read prefer `narration` over `headline`
 2. Collapse/partnership detection - **built** in `insight_engine.py`
    (situation_collapse / acceleration / pressure / partnership); live
    `recent_balls` / partnership derived in `app.py`

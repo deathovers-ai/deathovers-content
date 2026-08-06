@@ -41,7 +41,7 @@ export default function InsightPanel({ insights }) {
       {pregame && (
         <div className="insight-pregame">
           <div className="stat-kicker">BEFORE A BALL IS BOWLED</div>
-          <PointerBlock headline={pregame.headline} pointers={pregame.pointers} />
+          <PointerBlock headline={pregame.narration || pregame.headline} pointers={pregame.pointers} />
         </div>
       )}
 
@@ -53,7 +53,7 @@ export default function InsightPanel({ insights }) {
           <div className="insight-timeline">
             {visibleTimeline.map((insight, i) => (
               <div key={i} className="insight-timeline-row">
-                <PointerBlock headline={insight.headline} pointers={insight.pointers} gauge={insight.gauge} />
+                <PointerBlock headline={insight.narration || insight.headline} pointers={insight.pointers} gauge={insight.gauge} />
               </div>
             ))}
           </div>

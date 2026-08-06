@@ -1828,11 +1828,24 @@ def _attach_intelligence(shaped: dict, carousel_entry: dict | None, miniscore: d
 
         engine_insights = result.get("insights") or []
         merged = _merge_tactical_insights(engine_insights, fallback)
+        # F08: hard-contract narration (template fallback; optional LLM via env).
+        try:
+            from narration_engine import narrate_insights
+
+            merged = narrate_insights(merged)
+        except Exception as narr_err:
+            log.warning("Narration skipped for match: %s", narr_err)
         result["insights"] = merged
         result.setdefault("meta", {})["fallback_used"] = len(merged) > len(engine_insights)
         shaped["intelligence"] = _attach_data_freshness(result)
     except Exception as e:
         log.error("Intelligence Engine failed for this match: %s", e)
+        try:
+            from narration_engine import narrate_insights
+
+            fallback = narrate_insights(fallback)
+        except Exception:
+            pass
         shaped["intelligence"] = _attach_data_freshness({
             "insights": fallback,
             "meta": {"available": True, "error": str(e), "fallback_used": bool(fallback)},
