@@ -34,7 +34,7 @@ import logging
 from datetime import datetime, timezone
 
 import requests
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 from team_crests import crest_image_id
@@ -61,6 +61,7 @@ try:
     from live_chase_bridge import build_live_chase_from_miniscore, update_first_innings_context
     from live_match_context_cache import FirstInningsContextCache
     from win_probability import build_win_probability_payload, load_phase_distributions
+    from what_if import WhatIfError, run_what_if_request
     _INTELLIGENCE_AVAILABLE = True
     _CHASE_BRIDGE_AVAILABLE = True
     log.info("Intelligence Engine loaded successfully.")
@@ -79,6 +80,8 @@ except Exception as _intel_import_err:
     normalize_venue = None
     build_win_probability_payload = None
     load_phase_distributions = None
+    WhatIfError = None
+    run_what_if_request = None
     _CHASE_BRIDGE_AVAILABLE = False
     log.warning(
         "Intelligence Engine unavailable at startup (%s) - /api/match-details will "
@@ -2589,6 +2592,27 @@ def get_match_details(match_id: str):
 @app.route("/api/quota-status", methods=["GET"])
 def quota_status():
     return jsonify(_quota_snapshot())
+
+
+@app.route("/api/what-if", methods=["POST"])
+def what_if():
+    """F12: fork a chase state and compare Monte Carlo WP (baseline vs simulated)."""
+    if not _INTELLIGENCE_AVAILABLE or run_what_if_request is None:
+        return jsonify({"error": "What-If engine unavailable"}), 503
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "JSON object body required"}), 400
+    try:
+        result = run_what_if_request(body, dists=_phase_distributions)
+        return jsonify(result)
+    except Exception as exc:
+        # WhatIfError is ValueError subclass; map validation to 400.
+        if WhatIfError is not None and isinstance(exc, WhatIfError):
+            return jsonify({"error": str(exc)}), 400
+        if isinstance(exc, ValueError):
+            return jsonify({"error": str(exc)}), 400
+        log.exception("What-If failed")
+        return jsonify({"error": "What-If simulation failed"}), 500
 
 
 @app.route("/api/health", methods=["GET"])

@@ -1,15 +1,32 @@
 ---
 import Base from '../layouts/Base.astro';
+import Navbar from '../components/Navbar.astro';
 import ArticleCard from '../components/ArticleCard.astro';
+import WhatIfSimulator from '../components/WhatIfSimulator.jsx';
 import { getCollection } from 'astro:content';
 
 const posts = await getCollection('posts', ({ data }) => data.category === 'simulations' && !data.draft);
 const sorted = posts.sort((a, b) => (b.data.date ?? 0) - (a.data.date ?? 0));
 ---
-<Base title="Simulations">
-  <h1 class="display" style="font-size: 2rem; margin-top: 2rem;">Simulations</h1>
-  <section class="article-grid">
-    {sorted.length === 0 && <p>No what-if projections yet.</p>}
-    {sorted.map((post) => <ArticleCard post={post} />)}
-  </section>
+<Base title="Simulations — DeathOvers">
+  <Navbar />
+  <WhatIfSimulator client:load />
+  {sorted.length > 0 && (
+    <section class="published-section">
+      <h2 class="published-heading">PUBLISHED WHAT-IFS</h2>
+      <div class="article-grid">
+        {sorted.map((post) => <ArticleCard post={post} />)}
+      </div>
+    </section>
+  )}
 </Base>
+
+<style>
+  .published-heading {
+    margin: 2.5rem 0 1rem;
+    color: rgba(240, 242, 245, 0.58);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+  }
+</style>
