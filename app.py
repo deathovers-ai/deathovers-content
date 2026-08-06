@@ -1568,14 +1568,23 @@ def _build_match_tactical_fallback(shaped: dict, carousel_entry: dict | None) ->
             overs_now = None
         runs, wickets = _parse_runs_wickets(active.get("score"))
         if overs_now is not None and runs is not None:
-            fmt = match_format if match_format in ("ODI", "ODM", "T20", "IT20", "IPL") else "T20"
+            from constants import (
+                balls_per_over_for_match_type,
+                format_total_overs,
+                normalize_match_type,
+            )
+
+            fmt = normalize_match_type(match_format)
+            if fmt not in ("ODI", "ODM", "T20", "IT20", "IPL", "T10", "HUNDRED", "HND", "100", "THE_HUNDRED"):
+                fmt = "T20"
             if determine_phase is not None:
                 phase = determine_phase(overs_now, fmt)
             else:
                 phase = "powerplay" if overs_now < 6 else ("middle" if overs_now < 15 else "death")
-            total_ov = 50 if fmt in ("ODI", "ODM") else 20
-            balls = int(overs_now) * 6 + int(round((overs_now % 1) * 10))
-            crr = round((runs / balls) * 6, 2) if balls > 0 else None
+            total_ov = format_total_overs(fmt)
+            bpo = balls_per_over_for_match_type(fmt)
+            balls = int(overs_now) * bpo + int(round((overs_now % 1) * 10))
+            crr = round((runs / balls) * bpo, 2) if balls > 0 else None
             insights.append({
                 "type": "phase_snapshot",
                 "headline": f"{phase.title()} phase — {active.get('team') or 'batting side'}",

@@ -52,7 +52,7 @@ import sys
 from datetime import date
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from constants import phase_bounds_list
+from constants import balls_per_over_for_match_type, phase_bounds_list
 from matchup_context import format_dismissal_kinds, format_venues, format_years
 from momentum_index import build_momentum_insight, load_baselines
 from validation_engine import (
@@ -122,8 +122,9 @@ class InsightEngine:
         phases = fmt["phase_breakdown"]
 
         bounds = phase_bounds_list(match_type)
+        bpo = balls_per_over_for_match_type(match_type)
 
-        overs_so_far = legal_balls_so_far / 6
+        overs_so_far = legal_balls_so_far / float(bpo)
         projected = 0.0
         for phase_name, start_over, end_over in bounds:
             phase_data = phases.get(phase_name)

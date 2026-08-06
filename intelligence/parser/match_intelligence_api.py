@@ -41,8 +41,14 @@ CRICBUZZ_FORMAT_MAP = {
     # using IT20 here would create an empty historical cohort.
     "T20I": "T20",
     "ODI": "ODI",
+    "ODM": "ODI",
     "TEST": None,
     "IPL": "IPL",
+    "T10": "T10",
+    "HUNDRED": "HUNDRED",
+    "100": "HUNDRED",
+    "THE_HUNDRED": "HUNDRED",
+    "HND": "HUNDRED",
 }
 
 

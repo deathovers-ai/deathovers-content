@@ -1,0 +1,611 @@
+{
+  "windows_overs": {
+    "T20_LIKE": {
+      "powerplay": [
+        0,
+        6
+      ],
+      "middle": [
+        6,
+        15
+      ],
+      "death": [
+        15,
+        20
+      ]
+    },
+    "ODI_LIKE": {
+      "powerplay": [
+        0,
+        10
+      ],
+      "middle": [
+        10,
+        40
+      ],
+      "death": [
+        40,
+        50
+      ]
+    },
+    "T10_LIKE": {
+      "powerplay": [
+        0,
+        3
+      ],
+      "middle": [
+        3,
+        7
+      ],
+      "death": [
+        7,
+        10
+      ]
+    }
+  },
+  "windows_balls": {
+    "HUNDRED": {
+      "powerplay": [
+        0,
+        25
+      ],
+      "middle": [
+        25,
+        75
+      ],
+      "death": [
+        75,
+        100
+      ]
+    }
+  },
+  "odi_empirical": {
+    "venues_ge_n": 112,
+    "death_ge_mid": 112,
+    "skipped_no_corpus_hundred": true,
+    "skipped_no_corpus_t10": true,
+    "death_ge_mid_frac": 1.0,
+    "t20_death_ge_mid_frac": 0.9884,
+    "chase_edge_hits": {
+      "pp_end": 397,
+      "death_start": 259
+    }
+  },
+  "checks": [
+    {
+      "name": "hundred_not_in_over_table",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "t20_still_in_over_table",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "odi_still_in_over_table",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "t10_still_in_over_table",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "hundred_ball_pp_25",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "hundred_ball_death_last_25",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "hundred_ball_native",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "t20_not_ball_native",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "odi_not_ball_native",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "t10_not_ball_native",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "twenty_overs_is_t20_not_hundred",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "hundred_balls_per_over",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "t20_balls_per_over",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "odi_balls_per_over",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "hundred_legal_balls",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "t10_experimental",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "odi_not_experimental",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "format_total_odi",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "format_total_t10",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "kind_ODI",
+      "ok": true,
+      "detail": "ODI_LIKE"
+    },
+    {
+      "name": "kind_ODM",
+      "ok": true,
+      "detail": "ODI_LIKE"
+    },
+    {
+      "name": "kind_HND",
+      "ok": true,
+      "detail": "HUNDRED"
+    },
+    {
+      "name": "kind_100",
+      "ok": true,
+      "detail": "HUNDRED"
+    },
+    {
+      "name": "kind_HUNDRED",
+      "ok": true,
+      "detail": "HUNDRED"
+    },
+    {
+      "name": "kind_T10",
+      "ok": true,
+      "detail": "T10_LIKE"
+    },
+    {
+      "name": "kind_T20",
+      "ok": true,
+      "detail": "T20_LIKE"
+    },
+    {
+      "name": "kind_IPL",
+      "ok": true,
+      "detail": "T20_LIKE"
+    },
+    {
+      "name": "map_ODI",
+      "ok": true,
+      "detail": "ODI"
+    },
+    {
+      "name": "map_T10",
+      "ok": true,
+      "detail": "T10"
+    },
+    {
+      "name": "map_Hundred",
+      "ok": true,
+      "detail": "HUNDRED"
+    },
+    {
+      "name": "map_100",
+      "ok": true,
+      "detail": "HUNDRED"
+    },
+    {
+      "name": "map_HND",
+      "ok": true,
+      "detail": "HUNDRED"
+    },
+    {
+      "name": "map_T20I",
+      "ok": true,
+      "detail": "T20"
+    },
+    {
+      "name": "edge_ODI_9",
+      "ok": true,
+      "detail": "powerplay"
+    },
+    {
+      "name": "edge_ODI_10",
+      "ok": true,
+      "detail": "middle"
+    },
+    {
+      "name": "edge_ODI_39",
+      "ok": true,
+      "detail": "middle"
+    },
+    {
+      "name": "edge_ODI_40",
+      "ok": true,
+      "detail": "death"
+    },
+    {
+      "name": "edge_T20_5",
+      "ok": true,
+      "detail": "powerplay"
+    },
+    {
+      "name": "edge_T20_6",
+      "ok": true,
+      "detail": "middle"
+    },
+    {
+      "name": "edge_T20_15",
+      "ok": true,
+      "detail": "death"
+    },
+    {
+      "name": "edge_T10_2",
+      "ok": true,
+      "detail": "powerplay"
+    },
+    {
+      "name": "edge_T10_3",
+      "ok": true,
+      "detail": "middle"
+    },
+    {
+      "name": "edge_T10_7",
+      "ok": true,
+      "detail": "death"
+    },
+    {
+      "name": "hundred_ball_0",
+      "ok": true,
+      "detail": "powerplay"
+    },
+    {
+      "name": "hundred_ball_24",
+      "ok": true,
+      "detail": "powerplay"
+    },
+    {
+      "name": "hundred_ball_25",
+      "ok": true,
+      "detail": "middle"
+    },
+    {
+      "name": "hundred_ball_74",
+      "ok": true,
+      "detail": "middle"
+    },
+    {
+      "name": "hundred_ball_75",
+      "ok": true,
+      "detail": "death"
+    },
+    {
+      "name": "hundred_ball_99",
+      "ok": true,
+      "detail": "death"
+    },
+    {
+      "name": "odi_vs_t20_over8",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "hundred_vs_t20_ball25",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "t20_ball_bounds_36",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "hundred_ball_bounds_25",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "hundred_ball_map",
+      "ok": true,
+      "detail": {
+        "balls": 100,
+        "pp_balls": 25,
+        "death_balls": 25
+      }
+    },
+    {
+      "name": "hundred_adapter_agrees",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "t10_ball_map",
+      "ok": true,
+      "detail": {
+        "balls": 60,
+        "bpo": 6,
+        "pp_balls": 18
+      }
+    },
+    {
+      "name": "cover_ODI",
+      "ok": true,
+      "detail": [
+        "death",
+        "middle",
+        "powerplay"
+      ]
+    },
+    {
+      "name": "contig_ODI",
+      "ok": true,
+      "detail": [
+        [
+          "powerplay",
+          0,
+          10
+        ],
+        [
+          "middle",
+          10,
+          40
+        ],
+        [
+          "death",
+          40,
+          50
+        ]
+      ]
+    },
+    {
+      "name": "cover_T20",
+      "ok": true,
+      "detail": [
+        "death",
+        "middle",
+        "powerplay"
+      ]
+    },
+    {
+      "name": "contig_T20",
+      "ok": true,
+      "detail": [
+        [
+          "powerplay",
+          0,
+          6
+        ],
+        [
+          "middle",
+          6,
+          15
+        ],
+        [
+          "death",
+          15,
+          20
+        ]
+      ]
+    },
+    {
+      "name": "cover_T10",
+      "ok": true,
+      "detail": [
+        "death",
+        "middle",
+        "powerplay"
+      ]
+    },
+    {
+      "name": "contig_T10",
+      "ok": true,
+      "detail": [
+        [
+          "powerplay",
+          0,
+          3
+        ],
+        [
+          "middle",
+          3,
+          7
+        ],
+        [
+          "death",
+          7,
+          10
+        ]
+      ]
+    },
+    {
+      "name": "cover_HUNDRED",
+      "ok": true,
+      "detail": [
+        "death",
+        "middle",
+        "powerplay"
+      ]
+    },
+    {
+      "name": "contig_HUNDRED_balls",
+      "ok": true,
+      "detail": [
+        [
+          "powerplay",
+          0,
+          25
+        ],
+        [
+          "middle",
+          25,
+          75
+        ],
+        [
+          "death",
+          75,
+          100
+        ]
+      ]
+    },
+    {
+      "name": "odi_venues_present",
+      "ok": true,
+      "detail": 112
+    },
+    {
+      "name": "odi_death_rr_ge_middle",
+      "ok": true,
+      "detail": {
+        "frac": 1.0,
+        "death_ge_mid": 112,
+        "n": 112
+      }
+    },
+    {
+      "name": "t20_death_rr_ge_middle_regression",
+      "ok": true,
+      "detail": {
+        "frac": 0.9884,
+        "n": 173
+      }
+    },
+    {
+      "name": "corpus_has_odi",
+      "ok": true,
+      "detail": [
+        "IPL",
+        "IT20",
+        "ODI",
+        "ODM",
+        "T20"
+      ]
+    },
+    {
+      "name": "corpus_has_t20",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "corpus_lacks_hundred",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "corpus_lacks_t10",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "ODI_dist_powerplay_n",
+      "ok": true,
+      "detail": 251
+    },
+    {
+      "name": "ODI_dist_middle_n",
+      "ok": true,
+      "detail": 251
+    },
+    {
+      "name": "ODI_dist_death_n",
+      "ok": true,
+      "detail": 251
+    },
+    {
+      "name": "ODI_dist_death_gt_middle",
+      "ok": true,
+      "detail": {
+        "middle": 5.015,
+        "death": 5.863
+      }
+    },
+    {
+      "name": "T20_dist_powerplay_n",
+      "ok": true,
+      "detail": 319
+    },
+    {
+      "name": "T20_dist_middle_n",
+      "ok": true,
+      "detail": 319
+    },
+    {
+      "name": "T20_dist_death_n",
+      "ok": true,
+      "detail": 319
+    },
+    {
+      "name": "T20_dist_death_gt_middle",
+      "ok": true,
+      "detail": {
+        "middle": 7.045,
+        "death": 7.818
+      }
+    },
+    {
+      "name": "dists_lack_hundred",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "chase_edge_pp_end_phase",
+      "ok": true,
+      "detail": {
+        "balls": 60,
+        "phase": "middle"
+      }
+    },
+    {
+      "name": "chase_odi_pp_end_present",
+      "ok": true,
+      "detail": 397
+    },
+    {
+      "name": "chase_edge_death_start_phase",
+      "ok": true,
+      "detail": {
+        "balls": 240,
+        "phase": "death"
+      }
+    },
+    {
+      "name": "chase_odi_death_start_present",
+      "ok": true,
+      "detail": 259
+    }
+  ],
+  "failed": [],
+  "passed": true
+}

@@ -59,7 +59,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from context_repository import normalize_venue
-from constants import phase_bounds_list
+from constants import balls_per_over_for_match_type, phase_bounds_list
 from insight_engine import InsightEngine
 
 _engine = None
@@ -77,7 +77,13 @@ CRICBUZZ_FORMAT_MAP = {
     # Keep the live key aligned with Cricsheet's parsed T20I match_type.
     "T20I": "T20",
     "ODI": "ODI",
+    "ODM": "ODI",
     "TEST": None,
+    "T10": "T10",
+    "HUNDRED": "HUNDRED",
+    "100": "HUNDRED",
+    "THE_HUNDRED": "HUNDRED",
+    "HND": "HUNDRED",
 }
 
 
@@ -148,7 +154,7 @@ def build_live_state(venue_name, match_format_str, is_ipl, miniscore):
     if current_innings and "overs" in (current_innings or {}):
         overs_now = current_innings.get("overs") or 0
         total_runs = current_innings.get("runs") or 0
-        match_type_for_phase = "ODI" if match_format_str.upper() in ("ODI", "ODM") else "T20"
+        match_type_for_phase = map_format(match_format_str, is_ipl) or "T20"
         bounds = phase_bounds_list(match_type_for_phase)
         current_phase = None
         for name, start, end in bounds:
@@ -176,7 +182,10 @@ def build_live_state(venue_name, match_format_str, is_ipl, miniscore):
                 pp_entry = pp_data[0]
                 live_state["phase_name"] = "powerplay"
                 live_state["current_phase_runs"] = pp_entry.get("run", 0)
-                live_state["current_phase_balls"] = round((min(overs_now, phase_end) - phase_start) * 6)
+                live_state["current_phase_balls"] = round(
+                    (min(overs_now, phase_end) - phase_start)
+                    * balls_per_over_for_match_type(match_type_for_phase)
+                )
 
     return live_state
 
