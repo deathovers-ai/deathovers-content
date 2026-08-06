@@ -190,6 +190,16 @@ function MatchupCard({ matchup }) {
   );
 }
 
+function wpSideNames(view) {
+  const batting = view.liveInnings?.team || null;
+  const sides = [view.teamOne, view.teamTwo].filter((name) => name && name !== 'MATCH' && name !== 'ROOM');
+  const bowling =
+    sides.find((name) => name !== batting)
+    || (view.firstInnings?.team && view.firstInnings.team !== batting ? view.firstInnings.team : null)
+    || null;
+  return { batting: batting || 'Batting', bowling: bowling || 'Bowling' };
+}
+
 function EnginePanel({ view }) {
   const { chase, winProbability: wp } = view;
   const active = chase?.state;
@@ -202,6 +212,7 @@ function EnginePanel({ view }) {
     : active ? 'Live chase confirmed. The engine is matching the score to comparable chases.'
     : 'Watching the match. The chase comparison starts automatically in a valid second innings.';
   const wpPct = wp ? Math.round((wp.batting_wp || 0) * 100) : null;
+  const sides = wp ? wpSideNames(view) : null;
 
   return (
     <section className={`panel engine-panel ${qualified ? (ahead ? 'engine-good' : 'engine-alert') : 'engine-wait'} board-enter`}>
@@ -214,7 +225,7 @@ function EnginePanel({ view }) {
         <div className="signal-pair">
           <div className="signal-orb"><strong>{qualified ? `${Math.round((cohort?.recovery_rate || 0) * 100)}%` : 'LIVE'}</strong><span>{qualified ? 'RECOVERY' : 'READY'}</span></div>
           {wpPct != null && (
-            <div className={`signal-orb wp-orb ${wp.uncertain ? 'wp-uncertain' : ''}`}>
+            <div className={`signal-orb wp-orb ${wp.uncertain ? 'wp-uncertain' : ''}`} title={`${sides.batting} win probability`}>
               <strong>{wpPct}%</strong>
               <span>{wp.uncertain ? 'EARLY WP' : 'WIN PROB'}</span>
             </div>
@@ -223,7 +234,11 @@ function EnginePanel({ view }) {
       </div>
       {wp && (
         <div className="wp-bar-wrap">
-          <div className="wp-bar-labels"><span>Batting {wpPct}%</span><span>{wp.label || 'WP'}</span><span>Bowling {Math.round((wp.bowling_wp || 0) * 100)}%</span></div>
+          <div className="wp-bar-labels">
+            <span title={sides.batting}>{sides.batting} {wpPct}%</span>
+            <span>{wp.label || 'WP'}</span>
+            <span title={sides.bowling}>{sides.bowling} {Math.round((wp.bowling_wp || 0) * 100)}%</span>
+          </div>
           <div className="wp-bar"><em style={{ width: `${wpPct}%` }} /></div>
           {wp.weather_summary && <p className="wp-weather-note">{wp.weather_summary}</p>}
         </div>
@@ -358,7 +373,7 @@ const styles = `
   .panel-title { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:20px; } .panel-title span { display:block; margin-bottom:6px; } .panel-title h2 { margin:0; color:#fff; font:25px/1 'Bebas Neue',sans-serif; letter-spacing:.035em; } .panel-title b { padding:5px 7px; border:1px solid rgba(240,242,245,.12); border-radius:3px; color:rgba(240,242,245,.55); font:700 9px 'JetBrains Mono',monospace; letter-spacing:.07em; white-space:nowrap; }
   .score-hero { display:flex; justify-content:space-between; align-items:flex-end; padding-bottom:20px; } .team-name,.over-line { margin:0; color:rgba(240,242,245,.52); font:700 10px 'JetBrains Mono',monospace; letter-spacing:.08em; text-transform:uppercase; } .score-value { margin:5px 0; color:#fff; font:52px/.88 'Bebas Neue',sans-serif; letter-spacing:.025em; } .score-value span { color:rgba(240,242,245,.56); } .over-line span { color:#f5a623; padding:0 6px; } .innings-pill { display:grid; place-items:center; width:58px; height:58px; border:1px solid rgba(245,166,35,.35); border-radius:8px; background:rgba(245,166,35,.07); } .innings-pill span { color:rgba(240,242,245,.5); font:700 8px 'JetBrains Mono',monospace; } .innings-pill strong { color:#fff; font:24px/1 'Bebas Neue',sans-serif; }
   .context-rail { display:grid; grid-template-columns:repeat(3,1fr); border:1px solid rgba(240,242,245,.08); border-radius:5px; background:rgba(0,0,0,.17); } .context-cell { min-width:0; padding:11px 12px; } .context-cell + .context-cell { border-left:1px solid rgba(240,242,245,.08); } .context-cell span,.metric span { display:block; color:rgba(240,242,245,.4); font:700 8px 'JetBrains Mono',monospace; letter-spacing:.08em; text-transform:uppercase; } .context-cell strong { display:block; overflow:hidden; margin-top:5px; color:rgba(240,242,245,.9); font:600 11px/1.3 'Inter',sans-serif; text-overflow:ellipsis; white-space:nowrap; } .context-danger strong { color:#ff94a7; } .context-amber strong { color:#f5c567; white-space:normal; } .source-note { margin:12px 0 0; color:rgba(240,242,245,.34); font-size:10px; line-height:1.4; }
-  .engine-panel { position:relative; background:radial-gradient(circle at 92% 12%,rgba(101,170,255,.14),transparent 33%); } .engine-good { background:radial-gradient(circle at 92% 12%,rgba(93,216,150,.12),transparent 33%); } .engine-alert { background:radial-gradient(circle at 92% 12%,rgba(232,0,58,.15),transparent 33%); } .engine-main { display:flex; justify-content:space-between; gap:18px; align-items:center; min-height:92px; } .engine-state { margin:0; color:#fff; font:32px/1 'Bebas Neue',sans-serif; letter-spacing:.025em; } .engine-alert .engine-state { color:#ff97aa; } .engine-good .engine-state { color:#76d9a1; } .engine-description { max-width:370px; margin:8px 0 0; color:rgba(240,242,245,.57); font-size:12px; line-height:1.45; } .signal-pair { display:flex; gap:10px; flex:0 0 auto; } .signal-orb { flex:0 0 75px; height:75px; display:grid; place-content:center; border:1px solid rgba(101,170,255,.45); border-radius:50%; background:rgba(58,112,190,.09); text-align:center; } .engine-good .signal-orb { border-color:rgba(93,216,150,.45); } .engine-alert .signal-orb { border-color:rgba(232,0,58,.48); } .signal-orb strong { color:#fff; font:20px/1 'JetBrains Mono',monospace; letter-spacing:-.06em; } .signal-orb span { margin-top:4px; color:rgba(240,242,245,.44); font:700 7px 'JetBrains Mono',monospace; letter-spacing:.08em; } .wp-orb { border-color:rgba(245,166,35,.45); background:rgba(245,166,35,.08); } .wp-orb.wp-uncertain { border-style:dashed; opacity:.92; } .wp-bar-wrap { margin-top:14px; } .wp-bar-labels { display:flex; justify-content:space-between; gap:8px; margin-bottom:6px; color:rgba(240,242,245,.48); font:700 8px 'JetBrains Mono',monospace; letter-spacing:.06em; text-transform:uppercase; } .wp-bar { height:8px; border-radius:999px; background:rgba(240,242,245,.08); overflow:hidden; } .wp-bar em { display:block; height:100%; background:linear-gradient(90deg,rgba(232,0,58,.55),rgba(245,166,35,.7) 45%,rgba(93,216,150,.75)); } .wp-weather-note,.dew-model-note { margin:8px 0 0; color:rgba(245,166,35,.85); font:10px/1.4 'JetBrains Mono',monospace; }
+  .engine-panel { position:relative; background:radial-gradient(circle at 92% 12%,rgba(101,170,255,.14),transparent 33%); } .engine-good { background:radial-gradient(circle at 92% 12%,rgba(93,216,150,.12),transparent 33%); } .engine-alert { background:radial-gradient(circle at 92% 12%,rgba(232,0,58,.15),transparent 33%); } .engine-main { display:flex; justify-content:space-between; gap:18px; align-items:center; min-height:92px; } .engine-state { margin:0; color:#fff; font:32px/1 'Bebas Neue',sans-serif; letter-spacing:.025em; } .engine-alert .engine-state { color:#ff97aa; } .engine-good .engine-state { color:#76d9a1; } .engine-description { max-width:370px; margin:8px 0 0; color:rgba(240,242,245,.57); font-size:12px; line-height:1.45; } .signal-pair { display:flex; gap:10px; flex:0 0 auto; } .signal-orb { flex:0 0 75px; height:75px; display:grid; place-content:center; border:1px solid rgba(101,170,255,.45); border-radius:50%; background:rgba(58,112,190,.09); text-align:center; } .engine-good .signal-orb { border-color:rgba(93,216,150,.45); } .engine-alert .signal-orb { border-color:rgba(232,0,58,.48); } .signal-orb strong { color:#fff; font:20px/1 'JetBrains Mono',monospace; letter-spacing:-.06em; } .signal-orb span { margin-top:4px; color:rgba(240,242,245,.44); font:700 7px 'JetBrains Mono',monospace; letter-spacing:.08em; } .wp-orb { border-color:rgba(245,166,35,.45); background:rgba(245,166,35,.08); } .wp-orb.wp-uncertain { border-style:dashed; opacity:.92; } .wp-bar-wrap { margin-top:14px; } .wp-bar-labels { display:flex; justify-content:space-between; gap:8px; margin-bottom:6px; color:rgba(240,242,245,.48); font:700 8px 'JetBrains Mono',monospace; letter-spacing:.06em; text-transform:uppercase; } .wp-bar-labels > span:first-child,.wp-bar-labels > span:last-child { max-width:38%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .wp-bar-labels > span:last-child { text-align:right; } .wp-bar { height:8px; border-radius:999px; background:rgba(240,242,245,.08); overflow:hidden; } .wp-bar em { display:block; height:100%; background:linear-gradient(90deg,rgba(232,0,58,.55),rgba(245,166,35,.7) 45%,rgba(93,216,150,.75)); } .wp-weather-note,.dew-model-note { margin:8px 0 0; color:rgba(245,166,35,.85); font:10px/1.4 'JetBrains Mono',monospace; }
   .chase-strip { display:grid; grid-template-columns:repeat(3,1fr); margin-top:16px; border:1px solid rgba(240,242,245,.08); border-radius:5px; background:rgba(0,0,0,.17); } .metric { min-width:0; padding:10px 11px; } .metric + .metric { border-left:1px solid rgba(240,242,245,.08); } .metric strong { display:block; overflow:hidden; margin-top:5px; color:#fff; font:700 13px/1.2 'JetBrains Mono',monospace; letter-spacing:-.04em; text-overflow:ellipsis; white-space:nowrap; } .metric small { display:block; margin-top:3px; color:rgba(240,242,245,.36); font:9px 'Inter',sans-serif; } .metric-good strong { color:#6cdaa0; } .metric-bad strong { color:#ff94a7; }
   .engine-metrics { display:grid; grid-template-columns:repeat(3,1fr); margin-top:10px; }
   .matchup-panel { border-top:1px solid rgba(240,242,245,.08); background:radial-gradient(circle at 8% 0%,rgba(245,166,35,.1),transparent 28%); } .matchup-metrics { display:grid; grid-template-columns:repeat(4,1fr); border:1px solid rgba(240,242,245,.08); border-radius:5px; background:rgba(0,0,0,.17); } .matchup-metrics .metric + .metric { border-left:1px solid rgba(240,242,245,.08); } .matchup-meta { margin-top:10px; border:1px solid rgba(240,242,245,.07); border-radius:5px; background:rgba(0,0,0,.12); } .matchup-meta-row { display:flex; justify-content:space-between; gap:14px; padding:8px 11px; color:rgba(240,242,245,.55); font-size:11px; } .matchup-meta-row + .matchup-meta-row { border-top:1px solid rgba(240,242,245,.06); } .matchup-meta-row strong { color:rgba(240,242,245,.9); font:600 11px/1.35 'Inter',sans-serif; text-align:right; }
