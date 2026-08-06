@@ -361,3 +361,7 @@ actual final score 188. Within range, 2 runs from the projection midpoint.
    runs F05 Monte Carlo for baseline vs fork, enforces XI ≤11 /
    batting_order ⊆ XI, returns disclaimer; `/api/what-if` + Simulations
    tab UI. Historical actual attached when event files are present.
+10. Tactical Decision Assistant (F10) - **done**: `decision_assistant.py`
+    emits medium-confidence promote/consolidate/death/matchup cards that
+    cite chase cohort or F04/F06 samples; attached as `tactical_board` on
+    match-details; Tactical Board tab in Tactical Read.

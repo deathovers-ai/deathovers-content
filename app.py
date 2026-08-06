@@ -62,6 +62,7 @@ try:
     from live_match_context_cache import FirstInningsContextCache
     from win_probability import build_win_probability_payload, load_phase_distributions
     from what_if import WhatIfError, run_what_if_request
+    from decision_assistant import build_tactical_board_from_shaped
     _INTELLIGENCE_AVAILABLE = True
     _CHASE_BRIDGE_AVAILABLE = True
     log.info("Intelligence Engine loaded successfully.")
@@ -82,6 +83,7 @@ except Exception as _intel_import_err:
     load_phase_distributions = None
     WhatIfError = None
     run_what_if_request = None
+    build_tactical_board_from_shaped = None
     _CHASE_BRIDGE_AVAILABLE = False
     log.warning(
         "Intelligence Engine unavailable at startup (%s) - /api/match-details will "
@@ -2057,6 +2059,21 @@ def _attach_chase_state(shaped: dict, match_id: str, carousel_entry: dict | None
         shaped["chase"] = {"status": "unavailable", "reason": "invalid_live_score"}
 
 
+def _attach_tactical_board(shaped: dict) -> None:
+    """F10: attach medium-confidence decision cards when samples exist."""
+    if build_tactical_board_from_shaped is None:
+        return
+    try:
+        board = build_tactical_board_from_shaped(shaped)
+        if board:
+            shaped["tactical_board"] = board
+        else:
+            shaped.pop("tactical_board", None)
+    except Exception as exc:
+        log.warning("Tactical board unavailable: %s", exc)
+        shaped.pop("tactical_board", None)
+
+
 def _refresh_match_detail(match_id: str) -> None:
     cricbuzz_match_id = str(match_id)
     if not cricbuzz_match_id:
@@ -2077,6 +2094,7 @@ def _refresh_match_detail(match_id: str) -> None:
     if not _is_cricbuzz_match_id(cricbuzz_match_id):
         shaped = _shape_details_from_carousel(carousel_entry, permanent=True)
         _attach_intelligence(shaped, carousel_entry, None, match_id=match_id, commentary=[])
+        _attach_tactical_board(shaped)
         with _detail_cache_lock:
             _detail_cache[match_id] = {
                 "data": shaped,
@@ -2263,6 +2281,7 @@ def _refresh_match_detail(match_id: str) -> None:
     # docstring for what each optional field unlocks).
     _attach_intelligence(shaped, carousel_entry, miniscore, match_id=match_id, commentary=commentary)
     _attach_chase_state(shaped, match_id, carousel_entry, miniscore)
+    _attach_tactical_board(shaped)
 
     incomplete = _detail_is_incomplete(shaped)
     with _detail_cache_lock:
@@ -2497,6 +2516,7 @@ def _rehydrate_intelligence_if_empty(match_id: str, entry: dict) -> dict:
         match_id=str(match_id),
         commentary=shaped.get("commentary") or [],
     )
+    _attach_tactical_board(shaped)
     entry = {**entry, "data": shaped}
     with _detail_cache_lock:
         if match_id in _detail_cache:
@@ -2542,6 +2562,7 @@ def get_match_details(match_id: str):
                     # Product surface: scores only — no availability/API copy.
                     shaped.pop("detailNote", None)
                     _attach_intelligence(shaped, carousel_entry, None, match_id=match_id, commentary=[])
+                    _attach_tactical_board(shaped)
                     return jsonify({
                         **shaped,
                         "lastRefreshed": datetime.now(timezone.utc).isoformat(),
@@ -2566,6 +2587,7 @@ def get_match_details(match_id: str):
             shaped = _shape_details_from_carousel(carousel_entry, permanent=False)
             shaped.pop("detailNote", None)
             _attach_intelligence(shaped, carousel_entry, None, match_id=match_id, commentary=[])
+            _attach_tactical_board(shaped)
             return jsonify({
                 **shaped,
                 "lastRefreshed": datetime.now(timezone.utc).isoformat(),
