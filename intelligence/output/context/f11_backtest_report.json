@@ -27,20 +27,6 @@
         40,
         50
       ]
-    },
-    "T10_LIKE": {
-      "powerplay": [
-        0,
-        3
-      ],
-      "middle": [
-        3,
-        7
-      ],
-      "death": [
-        7,
-        10
-      ]
     }
   },
   "windows_balls": {
@@ -63,7 +49,7 @@
     "venues_ge_n": 112,
     "death_ge_mid": 112,
     "skipped_no_corpus_hundred": true,
-    "skipped_no_corpus_t10": true,
+    "t10_deferred": true,
     "death_ge_mid_frac": 1.0,
     "t20_death_ge_mid_frac": 0.9884,
     "chase_edge_hits": {
@@ -78,17 +64,17 @@
       "detail": null
     },
     {
+      "name": "t10_not_in_over_table",
+      "ok": true,
+      "detail": null
+    },
+    {
       "name": "t20_still_in_over_table",
       "ok": true,
       "detail": null
     },
     {
       "name": "odi_still_in_over_table",
-      "ok": true,
-      "detail": null
-    },
-    {
-      "name": "t10_still_in_over_table",
       "ok": true,
       "detail": null
     },
@@ -118,12 +104,12 @@
       "detail": null
     },
     {
-      "name": "t10_not_ball_native",
+      "name": "twenty_overs_is_t20_not_hundred",
       "ok": true,
       "detail": null
     },
     {
-      "name": "twenty_overs_is_t20_not_hundred",
+      "name": "ten_overs_is_t20_not_t10",
       "ok": true,
       "detail": null
     },
@@ -148,11 +134,6 @@
       "detail": null
     },
     {
-      "name": "t10_experimental",
-      "ok": true,
-      "detail": null
-    },
-    {
       "name": "odi_not_experimental",
       "ok": true,
       "detail": null
@@ -163,7 +144,12 @@
       "detail": null
     },
     {
-      "name": "format_total_t10",
+      "name": "t10_deferred_maps_t20_like",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "t10_not_in_live_map",
       "ok": true,
       "detail": null
     },
@@ -193,11 +179,6 @@
       "detail": "HUNDRED"
     },
     {
-      "name": "kind_T10",
-      "ok": true,
-      "detail": "T10_LIKE"
-    },
-    {
       "name": "kind_T20",
       "ok": true,
       "detail": "T20_LIKE"
@@ -211,11 +192,6 @@
       "name": "map_ODI",
       "ok": true,
       "detail": "ODI"
-    },
-    {
-      "name": "map_T10",
-      "ok": true,
-      "detail": "T10"
     },
     {
       "name": "map_Hundred",
@@ -269,21 +245,6 @@
     },
     {
       "name": "edge_T20_15",
-      "ok": true,
-      "detail": "death"
-    },
-    {
-      "name": "edge_T10_2",
-      "ok": true,
-      "detail": "powerplay"
-    },
-    {
-      "name": "edge_T10_3",
-      "ok": true,
-      "detail": "middle"
-    },
-    {
-      "name": "edge_T10_7",
       "ok": true,
       "detail": "death"
     },
@@ -352,15 +313,6 @@
       "detail": null
     },
     {
-      "name": "t10_ball_map",
-      "ok": true,
-      "detail": {
-        "balls": 60,
-        "bpo": 6,
-        "pp_balls": 18
-      }
-    },
-    {
       "name": "cover_ODI",
       "ok": true,
       "detail": [
@@ -417,36 +369,6 @@
           "death",
           15,
           20
-        ]
-      ]
-    },
-    {
-      "name": "cover_T10",
-      "ok": true,
-      "detail": [
-        "death",
-        "middle",
-        "powerplay"
-      ]
-    },
-    {
-      "name": "contig_T10",
-      "ok": true,
-      "detail": [
-        [
-          "powerplay",
-          0,
-          3
-        ],
-        [
-          "middle",
-          3,
-          7
-        ],
-        [
-          "death",
-          7,
-          10
         ]
       ]
     },
@@ -524,11 +446,6 @@
       "detail": null
     },
     {
-      "name": "corpus_lacks_t10",
-      "ok": true,
-      "detail": null
-    },
-    {
       "name": "ODI_dist_powerplay_n",
       "ok": true,
       "detail": 251
@@ -576,6 +493,11 @@
     },
     {
       "name": "dists_lack_hundred",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "dists_lack_t10",
       "ok": true,
       "detail": null
     },

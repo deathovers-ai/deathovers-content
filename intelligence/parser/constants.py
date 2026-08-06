@@ -5,9 +5,10 @@ Single source of truth for powerplay / middle / death windows.
 Import from here — do not re-declare these overs elsewhere.
 
 F11:
-  - T20 / ODI / T10 stay **over-based** (6-ball overs; T10 experimental).
+  - T20 / ODI stay **over-based** (6-ball overs).
   - The Hundred is **ball-native** (ECB: 100 balls, 25-ball powerplay).
     Cricsheet 5-ball "overs" are an adapter only — never treat Hundred as T20.
+  - T10 deferred (not supported yet).
 """
 
 # ---------------------------------------------------------------------------
@@ -16,9 +17,6 @@ F11:
 PHASE_BOUNDARIES = {
     "T20_LIKE": {"powerplay": (0, 6), "middle": (6, 15), "death": (15, 20)},
     "ODI_LIKE": {"powerplay": (0, 10), "middle": (10, 40), "death": (40, 50)},
-    # ponytail: T10 fielding restrictions differ by league; 0-3 / 3-7 / 7-10 is
-    # an analytic default until we ingest league-specific rules (upgrade: per-comp override).
-    "T10_LIKE": {"powerplay": (0, 3), "middle": (3, 7), "death": (7, 10)},
 }
 
 # Ball-native (ECB / The Hundred FAQ). Official PP = first 25 balls.
@@ -27,13 +25,12 @@ PHASE_BOUNDARIES_BALLS = {
     "HUNDRED": {"powerplay": (0, 25), "middle": (25, 75), "death": (75, 100)},
 }
 
-EXPERIMENTAL_PHASE_KINDS = frozenset({"T10_LIKE"})
+EXPERIMENTAL_PHASE_KINDS = frozenset()
 BALL_NATIVE_KINDS = frozenset({"HUNDRED"})
 
 BALLS_PER_OVER = {
     "T20_LIKE": 6,
     "ODI_LIKE": 6,
-    "T10_LIKE": 6,
     # Cricsheet storage only — product phases use PHASE_BOUNDARIES_BALLS.
     "HUNDRED": 5,
 }
@@ -41,7 +38,6 @@ BALLS_PER_OVER = {
 INNINGS_LEGAL_BALLS = {
     "T20_LIKE": 120,
     "ODI_LIKE": 300,
-    "T10_LIKE": 60,
     "HUNDRED": 100,
 }
 
@@ -50,7 +46,6 @@ INNINGS_LEGAL_BALLS = {
 _FORMAT_TO_KIND = {
     "ODI": "ODI_LIKE",
     "ODM": "ODI_LIKE",
-    "T10": "T10_LIKE",
     "HND": "HUNDRED",
     "HUNDRED": "HUNDRED",
     "100": "HUNDRED",
@@ -59,7 +54,6 @@ _FORMAT_TO_KIND = {
 
 ODI_LIKE_FORMATS = frozenset({"ODI", "ODM"})
 HUNDRED_FORMATS = frozenset({"HND", "HUNDRED", "100", "THE_HUNDRED"})
-T10_FORMATS = frozenset({"T10"})
 
 
 def normalize_match_type(match_type: str | None) -> str:
@@ -107,7 +101,7 @@ def phase_set_for_match_type(match_type: str) -> dict:
 def phase_bounds_balls(match_type: str) -> list[tuple[str, int, int]]:
     """
     [(name, start_ball, end_ball), ...] half-open.
-    Over-based formats are converted via balls_per_over (T20/ODI/T10 unchanged).
+    Over-based formats are converted via balls_per_over (T20/ODI unchanged).
     """
     kind = phase_kind_for_match_type(match_type)
     if kind in PHASE_BOUNDARIES_BALLS:
@@ -126,11 +120,10 @@ def phase_set_for_total_overs(total_overs: int | float, match_type: str | None =
 
     Prefer match_type when known. Without match_type, never infer Hundred:
     20 overs alone means T20 (6-ball), not 100-ball cricket.
+    Short innings (≤10) also fall through to T20_LIKE — T10 not supported yet.
     """
     if match_type:
         return phase_set_for_match_type(match_type)
-    if total_overs <= 10:
-        return PHASE_BOUNDARIES["T10_LIKE"]
     if total_overs > 20:
         return PHASE_BOUNDARIES["ODI_LIKE"]
     return PHASE_BOUNDARIES["T20_LIKE"]
@@ -206,8 +199,6 @@ def format_total_overs(match_type: str) -> int:
     kind = phase_kind_for_match_type(match_type)
     if kind == "ODI_LIKE":
         return 50
-    if kind == "T10_LIKE":
-        return 10
     if kind == "HUNDRED":
         return 20
     return 20

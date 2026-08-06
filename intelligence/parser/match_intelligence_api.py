@@ -44,7 +44,6 @@ CRICBUZZ_FORMAT_MAP = {
     "ODM": "ODI",
     "TEST": None,
     "IPL": "IPL",
-    "T10": "T10",
     "HUNDRED": "HUNDRED",
     "100": "HUNDRED",
     "THE_HUNDRED": "HUNDRED",
