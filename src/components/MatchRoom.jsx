@@ -309,7 +309,7 @@ function RecordCard({ record, compact = false }) {
 }
 
 function FeedItem({ item }) {
-  return <article className="feed-item"><div className="feed-marker" /><div><div className="feed-topline">{item.gauge?.level && <span className={`gauge gauge-${item.gauge.level.toLowerCase()}`}>{item.gauge.level}</span>}<small>{item.type?.replaceAll('_', ' ') || 'match read'}</small></div><h3>{item.headline || 'Match update'}</h3>{item.pointers?.map((pointer, index) => <div className="feed-row" key={index}><span>{pointer.label}</span><strong>{formatPointer(pointer)}</strong></div>)}</div></article>;
+  return <article className="feed-item"><div className="feed-marker" /><div><div className="feed-topline">{item.gauge?.level && <span className={`gauge gauge-${item.gauge.level.toLowerCase()}`}>{item.gauge.level}</span>}<small>{item.type?.replaceAll('_', ' ') || 'match read'}</small></div><h3>{item.narration || item.headline || 'Match update'}</h3>{item.pointers?.map((pointer, index) => <div className="feed-row" key={index}><span>{pointer.label}</span><strong>{formatPointer(pointer)}</strong></div>)}</div></article>;
 }
 
 function EmptyCopy({ children }) { return <p className="empty-copy">{children}</p>; }

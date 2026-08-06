@@ -55,7 +55,7 @@ Legend: **HAVE** = production-usable · **PARTIAL** = code exists, incomplete vs
 | F05 | Win probability (Monte Carlo) | **HAVE** | phase dists + MC beside Chase; early uncertainty label |
 | F06 | Bowler–batter matchups | **HAVE** | `matchup_stats.json` + Match Room card |
 | F07 | Momentum Index (−1..+1 + percentiles) | **HAVE** | continuous index + phase baselines + slider |
-| F08 | AI narration + hard contract | **NEED** | Insights are template/pointer structured; no LLM layer |
+| F08 | AI narration + hard contract | **HAVE** | `narration_engine.py`; validated `narration` on insights; template / optional LLM |
 | F09 | Weather-aware projections | **HAVE** | Dew HIGH/MOD moves WP + chase projection rates; rain → uncertainty only (no DLS) |
 | F10 | Tactical Decision Assistant | **NEED** | — |
 | F11 | Multi-format adaptive engine | **PARTIAL** | T20/IPL/IT20/ODI/ODM only; no Test / Hundred / T10 phase models |
@@ -264,7 +264,7 @@ Ship in dependency order. Prefer smallest vertical slices that hit Match Room + 
 
 1. **F05** Monte Carlo WP using venue phase run + wicket distributions; sit **beside** Chase Engine recovery/pace (do not replace). Early-innings uncertainty label. Backtest offline on completed chases before UI. **DONE** (`win_probability.py`, Match Room WP orb + bar).
 2. **F09** Dew/humidity/rain adjustments into WP + chase projections; DLS via established library only; weather already in UI — extend badge copy when model adjusts. **DONE** (`compute_weather_adjustment`; dew HIGH can move WP; rain marks uncertainty only — no custom DLS).
-3. **F08** Narration only after B+C facts are rich: LLM receives structured insights only; number-extract validator; ≤3 retries; template fallback. Never skip validator.
+3. **F08** Narration — **DONE** (`narration_engine.py`): LLM optional; number-extract validator; ≤3 retries; template fallback. Never skip validator.
 
 **Exit check:** WP bar + chase signal both visible; dew HIGH can move WP; any narrated number matches insight object.
 
