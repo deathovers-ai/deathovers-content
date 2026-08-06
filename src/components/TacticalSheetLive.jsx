@@ -5,6 +5,7 @@ const tabs = [
   { id: 'venue', label: 'VENUE RECORD' },
   { id: 'read', label: 'TACTICAL READ' },
   { id: 'innings', label: 'INNINGS ENGINE' },
+  { id: 'board', label: 'TACTICAL BOARD' },
 ];
 
 const matchName = (match) => match?.teams?.filter(Boolean).join(' v ') || match?.matchName || 'Live match';
@@ -124,6 +125,7 @@ export default function TacticalSheetLive() {
         {!error && activeTab === 'venue' ? <VenueRecord brief={venueBrief} weather={detail?.weather} toss={detail?.tossLine || detail?.toss} dewRisk={detail?.dewRisk} /> : null}
         {!error && activeTab === 'read' ? <TacticalRead insights={tacticalInsights} /> : null}
         {!error && activeTab === 'innings' ? <InningsEngine detail={detail} insights={tacticalInsights} /> : null}
+        {!error && activeTab === 'board' ? <TacticalBoard board={detail?.tactical_board} /> : null}
       </> : null}
       <style>{styles}</style>
     </section>
@@ -198,6 +200,53 @@ function InningsEngine({ detail, insights }) {
   </section>;
 }
 
+function TacticalBoard({ board }) {
+  if (!board?.decisions?.length) {
+    return (
+      <section className="tab-panel" role="tabpanel">
+        <PanelHead title="Tactical board" note="Decision patterns with cited samples" />
+        <NoData>No medium-confidence decision pattern is available for this match state yet. Chase cohort or matchup samples are required.</NoData>
+      </section>
+    );
+  }
+  return (
+    <section className="tab-panel" role="tabpanel">
+      <PanelHead title="Tactical board" note={`${board.confidence || 'medium'} confidence · sample-cited`} />
+      <p className="board-disclaimer">{board.disclaimer}</p>
+      <div className="board-list">
+        {board.decisions.map((decision) => (
+          <article className="board-card" key={decision.id}>
+            <div className="board-card-top">
+              <span className="board-action">{decision.action}</span>
+              <small>{(decision.confidence || 'medium').toUpperCase()}</small>
+            </div>
+            <h3>{decision.headline}</h3>
+            {decision.rationale ? <p className="board-rationale">{decision.rationale}</p> : null}
+            {decision.sample ? (
+              <div className="board-sample">
+                <span>SAMPLE</span>
+                <strong>
+                  {decision.sample.sample_size}
+                  {decision.sample.source === 'matchup_stats' || decision.sample.source === 'player_phase' ? ' balls' : ' chases'}
+                  {decision.sample.venue_scope ? ` · ${decision.sample.venue_scope}` : ''}
+                  {decision.sample.recovery_rate != null ? ` · ${Math.round(decision.sample.recovery_rate * 100)}% recovery` : ''}
+                </strong>
+              </div>
+            ) : null}
+            {decision.pointers?.length ? (
+              <div className="board-pointers">
+                {decision.pointers.slice(0, 4).map((pointer, index) => (
+                  <div className="pointer" key={index}><span>{pointer.label}</span><strong>{value(pointer)}</strong></div>
+                ))}
+              </div>
+            ) : null}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function PanelHead({ title, note }) { return <div className="panel-head"><div><span>DEATH OVERS INTELLIGENCE</span><h2>{title}</h2></div><small>{note}</small></div>; }
 function formatToss(toss) {
   if (!toss) return null;
@@ -227,7 +276,8 @@ const styles = `
   .tab-panel{padding:25px 28px 30px}.panel-head{display:flex;justify-content:space-between;gap:15px;align-items:end;margin-bottom:18px}.panel-head h2{margin:5px 0 0;color:#fff;font:28px/1 'Bebas Neue',sans-serif;letter-spacing:.035em}.panel-head>small{max-width:220px;color:rgba(240,242,245,.4);font:10px 'Inter',sans-serif;text-align:right}.conditions-grid{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid rgba(240,242,245,.08);border-radius:5px;background:rgba(0,0,0,.16)}.info{min-width:0;padding:12px}.info+.info{border-left:1px solid rgba(240,242,245,.08)}.info strong{display:block;overflow:hidden;margin-top:6px;color:rgba(240,242,245,.9);font:600 12px/1.35 'Inter',sans-serif;text-overflow:ellipsis;white-space:nowrap}.info.risk strong{color:#ff96aa}.records-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px}.record{padding:14px;border:1px solid rgba(240,242,245,.07);border-radius:5px;background:rgba(0,0,0,.15)}.record>div{display:flex;justify-content:space-between;gap:14px;align-items:baseline;margin-bottom:7px}.record h3,.read-item h3,.innings-card h3{margin:0;color:#fff;font:18px/1 'Bebas Neue',sans-serif;letter-spacing:.025em}.record small{color:rgba(240,242,245,.37);font:9px 'Inter',sans-serif;text-align:right}.pointer{display:flex;justify-content:space-between;gap:14px;padding:4px 0;color:rgba(240,242,245,.56);font-size:11px}.pointer+.pointer{border-top:1px solid rgba(240,242,245,.05)}.pointer strong{color:rgba(240,242,245,.94);font:700 11px 'JetBrains Mono',monospace;text-align:right}.range{display:flex;gap:10px;align-items:center;margin:13px 0 3px}.range strong{color:#fff;font:700 14px 'JetBrains Mono',monospace}.range i{height:5px;flex:1;border-radius:4px;background:linear-gradient(90deg,#f5a623,#e8003a)}
   .venue-panel .panel-head h2{font-size:32px;letter-spacing:.045em}.venue-panel .panel-head>small{font-size:11px;line-height:1.45}.venue-panel .info{padding:15px 16px}.venue-panel .info span{color:rgba(240,242,245,.46);font-size:9px;letter-spacing:.11em;text-transform:uppercase}.venue-panel .info strong{margin-top:8px;font-size:13px;line-height:1.45;letter-spacing:.005em;white-space:normal}.venue-panel .info.live strong{color:#fff}.venue-panel .record{padding:17px 18px}.venue-panel .record>div{margin-bottom:10px}.venue-panel .record h3{font-size:20px;letter-spacing:.04em}.venue-panel .record small{font-size:10px;line-height:1.4}.venue-panel .pointer{padding:6px 0;font:500 11px/1.4 'Inter',sans-serif}.venue-panel .pointer strong{font:700 12px/1.35 'JetBrains Mono',monospace}.venue-panel .range strong{font-size:16px}.toss-result-banner{display:flex;justify-content:space-between;gap:14px;align-items:baseline;margin-top:12px;padding:12px 14px;border:1px solid rgba(245,166,35,.35);border-radius:5px;background:rgba(245,166,35,.08)}.toss-result-banner span{color:#f5a623;font:700 9px 'JetBrains Mono',monospace;letter-spacing:.1em}.toss-result-banner strong{color:#fff;font:600 13px/1.4 'Inter',sans-serif;text-align:right}
   .read-list{display:grid}.read-item{display:grid;grid-template-columns:36px 1fr;gap:13px;padding:16px 0;border-bottom:1px solid rgba(240,242,245,.07)}.read-index{display:grid;place-content:center;width:29px;height:29px;border:1px solid rgba(101,170,255,.34);border-radius:3px;background:rgba(63,129,209,.1);color:#9ac5ff;font:700 10px 'JetBrains Mono',monospace}.read-meta{display:flex;gap:10px;align-items:center;margin-bottom:6px;color:#8dbdff;font:700 9px 'JetBrains Mono',monospace;letter-spacing:.07em;text-transform:uppercase}.read-meta small{color:rgba(240,242,245,.36);font:9px 'JetBrains Mono',monospace}.read-item .pointer{max-width:560px}
-  .innings-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.innings-card{min-height:255px;padding:18px;border:1px solid rgba(245,166,35,.23);border-radius:6px;background:linear-gradient(135deg,rgba(245,166,35,.08),rgba(0,0,0,.12))}.innings-card.second{border-color:rgba(101,170,255,.25);background:linear-gradient(135deg,rgba(57,112,191,.13),rgba(0,0,0,.12))}.innings-card.second.qualified{border-color:rgba(99,216,154,.32);background:linear-gradient(135deg,rgba(69,150,103,.13),rgba(0,0,0,.12))}.innings-label{color:#f5a623}.second .innings-label{color:#8dbdff}.innings-label span{display:inline;color:rgba(240,242,245,.38);font-size:8px}.innings-card h3{margin-top:11px}.innings-score{margin:7px 0 3px;color:#fff;font:36px/.95 'Bebas Neue',sans-serif;letter-spacing:.035em}.innings-detail{margin:0;color:rgba(240,242,245,.48);font:11px 'Inter',sans-serif}.comparison-list{display:grid;gap:9px;margin-top:18px}.comparison-list>div{padding-top:9px;border-top:1px solid rgba(240,242,245,.08)}.comparison-list strong{display:block;color:#fff;font:13px 'Inter',sans-serif}.comparison-list span{display:block;margin-top:4px;color:rgba(240,242,245,.53);font:10px 'JetBrains Mono',monospace}.chase-facts{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:18px;border:1px solid rgba(240,242,245,.08);border-radius:4px;background:rgba(0,0,0,.14)}.chase-facts>div{min-width:0;padding:10px}.chase-facts>div+div{border-left:1px solid rgba(240,242,245,.08)}.chase-facts strong{display:block;overflow:hidden;margin-top:5px;color:#fff;font:700 11px 'JetBrains Mono',monospace;text-overflow:ellipsis;white-space:nowrap}.innings-link{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px;margin-top:12px;padding:12px;border-top:1px solid rgba(240,242,245,.08)}.innings-link span{color:#f5a623}.innings-link strong{color:#fff;font:700 12px 'JetBrains Mono',monospace}.innings-link small{color:rgba(240,242,245,.38);font:10px 'Inter',sans-serif}
+  .innings-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.innings-card{min-height:255px;padding:18px;border:1px solid rgba(245,166,35,.23);border-radius:6px;background:linear-gradient(135deg,rgba(245,166,35,.08),rgba(0,0,0,.12))}.innings-card.second{border-color:rgba(101,170,255,.25);background:linear-gradient(135deg,rgba(57,112,191,.13),rgba(0,0,0,.12))}.innings-card.second.qualified{border-color:rgba(99,216,154,.32);background:linear-gradient(135deg,rgba(69,150,103,.13),rgba(0,0,0,.12))}.innings-label{color:#f5a623}.second .innings-label{color:#8dbdff}.innings-label span{display:inline;color:rgba(240,242,245,.38);font-size:8px}.innings-card h3{margin-top:11px}.innings-score{margin:7px 0 3px;color:#fff;font:36px/.95 'Bebas Neue',sans-serif;letter-spacing:.035em}.innings-detail{margin:0;color:rgba(240,242,245,.48);font:11px 'Inter',sans-serif}.comparison-list{display:grid;gap:9px;margin-top:18px}.comparison-list>div{padding-top:9px;border-top:1px solid rgba(240,242,245,.08)}.comparison-list strong{display:block;color:#fff;font:13px 'Inter',sans-serif}.comparison-list span{display:block;margin-top:4px;color:rgba(240,242,245,.53);font:10px 'JetBrains Mono',monospace}.chase-facts{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:18px;border:1px solid rgba(240,242,245,.08);border-radius:4px;background:rgba(0,0,0,.14)}.chase-facts>div{min-width:0;padding:10px}.chase-facts>div+div{border-left:1px solid rgba(240,242,245,.08)}.chase-facts strong{display:block;overflow:hidden;margin-top:5px;color:#fff;font:700 11px 'JetBrains Mono',monospace;text-overflow:ellipsis;white-space:nowrap}  .innings-link{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px;margin-top:12px;padding:12px;border-top:1px solid rgba(240,242,245,.08)}.innings-link span{color:#f5a623}.innings-link strong{color:#fff;font:700 12px 'JetBrains Mono',monospace}.innings-link small{color:rgba(240,242,245,.38);font:10px 'Inter',sans-serif}
+  .board-disclaimer{margin:0 0 14px;padding:11px 12px;border:1px solid rgba(245,166,35,.28);border-radius:5px;background:rgba(245,166,35,.06);color:rgba(240,242,245,.62);font:11px/1.45 'Inter',sans-serif}.board-list{display:grid;gap:11px}.board-card{padding:16px;border:1px solid rgba(240,242,245,.1);border-radius:6px;background:rgba(0,0,0,.18)}.board-card-top{display:flex;justify-content:space-between;gap:10px;align-items:center}.board-action{color:#ff6689;font:700 10px 'JetBrains Mono',monospace;letter-spacing:.1em}.board-card-top small{color:var(--bail-amber);font:700 9px 'JetBrains Mono',monospace;letter-spacing:.08em}.board-card h3{margin:10px 0 0;color:#fff;font:600 14px/1.4 'Inter',sans-serif}.board-rationale{margin:8px 0 0;color:rgba(240,242,245,.5);font:12px/1.45 'Inter',sans-serif}.board-sample{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin-top:12px;padding-top:10px;border-top:1px solid rgba(240,242,245,.08)}.board-sample span{color:rgba(240,242,245,.4);font:700 8px 'JetBrains Mono',monospace;letter-spacing:.08em}.board-sample strong{color:rgba(240,242,245,.88);font:700 11px 'JetBrains Mono',monospace;text-align:right}.board-pointers{margin-top:8px}
   .no-data{display:grid;min-height:110px;place-items:center;margin:0;color:rgba(240,242,245,.43);font:12px/1.5 'Inter',sans-serif;text-align:center}.weather-model-note{margin:8px 0 0;color:rgba(245,166,35,.85);font:10px/1.4 'JetBrains Mono',monospace}.state-copy{padding:28px;color:rgba(240,242,245,.52);font:11px 'JetBrains Mono',monospace;text-align:center}.state-copy.error{color:#ff9ab4;border-top:1px solid rgba(232,0,58,.22);background:rgba(232,0,58,.06)}
   @media(max-width:720px){.tactical-header,.tab-panel{padding-right:18px;padding-left:18px}.tactical-header{padding-top:22px}.tactical-status{display:none}.header-aside{justify-items:start}.match-summary{grid-template-columns:1fr 1fr;padding:16px 18px}.match-summary>div:first-child{grid-column:1/-1;padding-bottom:13px;margin-bottom:13px;border-bottom:1px solid rgba(240,242,245,.08)}.match-summary>div+div{padding-left:12px}.intel-tabs{overflow-x:auto;padding:0 18px}.intel-tabs button{white-space:nowrap}.conditions-grid,.innings-grid{grid-template-columns:1fr}.info+.info{border-top:1px solid rgba(240,242,245,.08);border-left:0}.records-grid{grid-template-columns:1fr}.chase-facts{grid-template-columns:1fr}.chase-facts>div+div{border-top:1px solid rgba(240,242,245,.08);border-left:0}.panel-head>small{display:none}}
   @media(prefers-reduced-motion:reduce){.tactical-kicker i,.tactical-status i,.match-tab span i{box-shadow:none}}
