@@ -10,8 +10,31 @@ const tabs = [
 
 const matchName = (match) => match?.teams?.filter(Boolean).join(' v ') || match?.matchName || 'Live match';
 const value = (pointer) => `${pointer?.value ?? '—'}${pointer?.unit || ''}${pointer?.pct == null ? '' : ` (${pointer.pct > 0 ? '+' : ''}${pointer.pct}%)`}`;
-const score = (innings) => innings?.runs == null ? '—' : `${innings.runs}/${innings.wickets ?? '—'}`;
-const overs = (innings) => innings?.overs != null ? `${innings.overs} overs` : innings?.balls != null ? `${Math.floor(innings.balls / 6)}.${innings.balls % 6} overs` : 'Overs not available';
+const parseScoreLine = (raw) => {
+  if (raw == null) return null;
+  if (typeof raw === 'object' && (raw.runs != null || raw.wickets != null)) {
+    return { runs: raw.runs, wickets: raw.wickets };
+  }
+  const text = String(raw).trim();
+  const match = text.match(/^(\d+)\s*\/\s*(\d+)/);
+  if (!match) return null;
+  return { runs: Number(match[1]), wickets: Number(match[2]) };
+};
+const score = (innings) => {
+  if (!innings) return '—';
+  const parsed = parseScoreLine(innings) || parseScoreLine(innings.score);
+  if (parsed?.runs == null) return innings.score && innings.score !== 'yet to bat' ? String(innings.score) : '—';
+  return `${parsed.runs}/${parsed.wickets ?? '—'}`;
+};
+const overs = (innings) => {
+  if (!innings) return 'Overs not available';
+  if (innings.overs != null && String(innings.overs).trim() !== '') {
+    const text = String(innings.overs).trim();
+    return /over/i.test(text) ? text : `${text} overs`;
+  }
+  if (innings.balls != null) return `${Math.floor(innings.balls / 6)}.${innings.balls % 6} overs`;
+  return 'Overs not available';
+};
 
 export default function TacticalSheetLive() {
   const [matches, setMatches] = useState([]);
@@ -190,13 +213,16 @@ function InningsEngine({ detail, insights }) {
   const state = chase?.state;
   const qualified = chase?.status === 'qualified';
   const wp = detail?.win_probability;
-  const comparison = insights.filter((insight) => ['venue_score_comparison', 'venue_phase_comparison'].includes(insight.type));
+  const comparison = insights.filter((insight) => ['venue_score_comparison', 'venue_phase_comparison', 'phase_snapshot'].includes(insight.type));
+  const resultNote = detail?.liveScore?.customStatus || detail?.detailNote || null;
+  const hasSecondScore = Boolean(second && (second.runs != null || (second.score && second.score !== 'yet to bat')));
   return <section className="tab-panel" role="tabpanel"><PanelHead title="Innings engine" note="First-innings par and second-innings chase analysis" />
     <div className="innings-grid">
-      <article className="innings-card first"><div className="innings-label">FIRST INNINGS <span>HISTORICAL PAR</span></div><h3>{first?.team || 'First innings'}</h3><p className="innings-score">{score(first)}</p><p className="innings-detail">{overs(first)}{first?.phase ? ` • ${first.phase} phase` : ''}</p>{comparison.length ? <div className="comparison-list">{comparison.map((item, index) => <div key={index}><strong>{item.narration || item.headline}</strong>{item.pointers?.slice(0, 2).map((pointer, pointerIndex) => <span key={pointerIndex}>{pointer.label}: {value(pointer)}</span>)}</div>)}</div> : <NoData>The historical first-innings comparison is not available for this match.</NoData>}</article>
-      <article className={`innings-card second ${qualified ? 'qualified' : ''}`}><div className="innings-label">SECOND INNINGS <span>CHASE ENGINE</span></div><h3>{second?.team || 'Second innings'}</h3><p className="innings-score">{state ? `${state.runs}/${state.wickets}` : score(second)}</p><p className="innings-detail">{state ? `${state.runs_required} required from ${state.legal_balls_remaining} balls` : overs(second)}</p>{state ? <div className="chase-facts"><Fact label="Required rate" value={Number(state.required_run_rate).toFixed(2)} />{qualified ? <><Fact label="Pace gap" value={`${chase.cohort?.pace_gap_runs > 0 ? '+' : ''}${chase.cohort?.pace_gap_runs ?? '—'} runs`} /><Fact label="Historical recovery" value={`${Math.round((chase.cohort?.recovery_rate || 0) * 100)}%`} /></> : <Fact label="Historical match" value="In progress" />}{wp ? <Fact label={wp.uncertain ? 'Early win prob' : 'Win probability'} value={`${Math.round((wp.batting_wp || 0) * 100)}%`} /> : null}</div> : <NoData>The second-innings chase analysis begins when a target is set.</NoData>}</article>
+      <article className="innings-card first"><div className="innings-label">FIRST INNINGS <span>HISTORICAL PAR</span></div><h3>{first?.team || 'First innings'}</h3><p className="innings-score">{score(first)}</p><p className="innings-detail">{overs(first)}{first?.phase ? ` • ${first.phase} phase` : ''}</p>{comparison.length ? <div className="comparison-list">{comparison.map((item, index) => <div key={`${item.type}-${index}`}><strong>{item.narration || item.headline}</strong>{item.pointers?.slice(0, 2).map((pointer, pointerIndex) => <span key={pointerIndex}>{pointer.label}: {value(pointer)}</span>)}</div>)}</div> : <NoData>The historical first-innings comparison is not available for this match.</NoData>}</article>
+      <article className={`innings-card second ${qualified ? 'qualified' : ''}`}><div className="innings-label">SECOND INNINGS <span>CHASE ENGINE</span></div><h3>{second?.team || 'Second innings'}</h3><p className="innings-score">{state ? `${state.runs}/${state.wickets}` : score(second)}</p><p className="innings-detail">{state ? `${state.runs_required} required from ${state.legal_balls_remaining} balls` : overs(second)}</p>{state ? <div className="chase-facts"><Fact label="Required rate" value={Number(state.required_run_rate).toFixed(2)} />{qualified ? <><Fact label="Pace gap" value={`${chase.cohort?.pace_gap_runs > 0 ? '+' : ''}${chase.cohort?.pace_gap_runs ?? '—'} runs`} /><Fact label="Historical recovery" value={`${Math.round((chase.cohort?.recovery_rate || 0) * 100)}%`} /></> : <Fact label="Historical match" value="In progress" />}{wp ? <Fact label={wp.uncertain ? 'Early win prob' : 'Win probability'} value={`${Math.round((wp.batting_wp || 0) * 100)}%`} /> : null}</div> : hasSecondScore ? <div className="chase-facts"><Fact label="Scorecard" value={score(second)} /><Fact label="Overs" value={overs(second)} />{resultNote ? <Fact label="Result" value={resultNote} /> : <Fact label="Chase engine" value="Needs live Cricbuzz feed" />}</div> : <NoData>The second-innings chase analysis begins when a target is set.</NoData>}</article>
     </div>
     {first && state ? <div className="innings-link"><span>FIRST-INNINGS CONTEXT</span><strong>{first.team}: {score(first)}</strong><small>Target {state.target} • retained only for this match analysis</small></div> : null}
+    {!state && resultNote ? <div className="innings-link"><span>MATCH NOTE</span><strong>{resultNote}</strong><small>Full chase cohort needs a live ball feed</small></div> : null}
   </section>;
 }
 

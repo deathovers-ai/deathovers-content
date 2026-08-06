@@ -1958,19 +1958,25 @@ def _shape_details_from_carousel(carousel_entry: dict | None, *, permanent: bool
 
     innings = []
     if home and len(teams) >= 1:
+        runs, wickets = _parse_runs_wickets(home.get("score"))
         innings.append({
             "inningsId": 1,
             "team": teams[0],
             "score": home.get("score") or "",
+            "runs": runs,
+            "wickets": wickets,
             "overs": str(home.get("info") or ""),
             "batters": [],
             "bowlers": [],
         })
     if away and len(teams) >= 2:
+        runs, wickets = _parse_runs_wickets(away.get("score"))
         innings.append({
             "inningsId": 2,
             "team": teams[1],
             "score": away.get("score") or "",
+            "runs": runs,
+            "wickets": wickets,
             "overs": str(away.get("info") or ""),
             "batters": [],
             "bowlers": [],
