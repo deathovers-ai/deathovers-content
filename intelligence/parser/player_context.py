@@ -214,11 +214,13 @@ def build_player_stats(events_dir: str = EVENTS_DIR, manifest_path: str = MANIFE
                 if event["runs_batter"] == 6:
                     line["sixes"] += 1
 
-                phase_bucket = players[batter]["_phases"].setdefault(match_format, {}).setdefault(
-                    phase, {"runs": 0, "balls": 0}
-                )
-                phase_bucket["balls"] += 1
-                phase_bucket["runs"] += event["runs_batter"]
+                phase_bucket = None
+                if phase:
+                    phase_bucket = players[batter]["_phases"].setdefault(match_format, {}).setdefault(
+                        phase, {"runs": 0, "balls": 0}
+                    )
+                    phase_bucket["balls"] += 1
+                    phase_bucket["runs"] += event["runs_batter"]
 
                 bat_seen_key = f"{innings_key}:{batter}"
                 if bat_seen_key not in players[batter]["_bat_innings_seen"]:

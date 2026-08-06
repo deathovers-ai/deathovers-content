@@ -53,6 +53,18 @@ class PhaseConstantsTests(unittest.TestCase):
         self.assertFalse(is_experimental_format("ODI"))
         self.assertEqual(format_total_overs("T10"), 20)  # T20_LIKE path
 
+    def test_test_format_unsupported(self):
+        from constants import is_phase_supported, is_test_format, UNSUPPORTED_PHASE_KIND
+        self.assertTrue(is_test_format("TEST"))
+        self.assertTrue(is_test_format("MDM"))
+        self.assertFalse(is_phase_supported("TEST"))
+        self.assertEqual(phase_kind_for_match_type("TEST"), UNSUPPORTED_PHASE_KIND)
+        self.assertEqual(phase_bounds_list("TEST"), [])
+        self.assertIsNone(determine_phase_from_over(10, "TEST"))
+        self.assertIsNone(determine_phase_from_balls(60, "TEST"))
+        self.assertIsNone(format_total_overs("TEST"))
+        self.assertIsNone(map_format("TEST"))
+
     def test_ipl_matches_t20_windows(self):
         self.assertEqual(phase_bounds_list("IPL"), phase_bounds_list("T20"))
         self.assertEqual(phase_bounds_list("IT20"), phase_bounds_list("T20"))

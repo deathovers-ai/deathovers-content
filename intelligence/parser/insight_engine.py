@@ -63,6 +63,7 @@ from validation_engine import (
     player_data_is_reliable,
     player_phase_is_reliable,
     player_venue_is_reliable,
+    significance_threshold_pct,
     venue_data_is_reliable,
 )
 
@@ -181,7 +182,7 @@ class InsightEngine:
         diff = current_score - baseline
         diff_pct = round((diff / baseline) * 100, 1)
 
-        if abs(diff_pct) < SIGNIFICANCE_THRESHOLD_PCT:
+        if abs(diff_pct) < significance_threshold_pct(match_type):
             return None  # too close to the fair baseline to be worth saying anything
 
         direction = "above" if diff > 0 else "below"
@@ -228,7 +229,7 @@ class InsightEngine:
             return None
 
         diff_pct = round(((current_rate - avg_rate) / avg_rate) * 100, 1)
-        if abs(diff_pct) < SIGNIFICANCE_THRESHOLD_PCT:
+        if abs(diff_pct) < significance_threshold_pct(match_type):
             return None
 
         direction = "faster than" if diff_pct > 0 else "slower than"
@@ -420,7 +421,7 @@ class InsightEngine:
             return None
         current_sr = round((current_runs / current_balls) * 100, 2)
         diff_pct = round(((current_sr - hist_sr) / hist_sr) * 100, 1)
-        if abs(diff_pct) < SIGNIFICANCE_THRESHOLD_PCT:
+        if abs(diff_pct) < significance_threshold_pct(match_type):
             return None
 
         direction = "above" if diff_pct > 0 else "below"

@@ -275,6 +275,8 @@ def build_baselines(
             if idx is None:
                 continue
             phase = determine_phase_from_over(ball["over"], code)
+            if phase is None:
+                continue
             buckets[code][phase].append(idx)
 
         if i % 1000 == 0:

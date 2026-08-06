@@ -9,6 +9,7 @@ F11:
   - The Hundred is **ball-native** (ECB: 100 balls, 25-ball powerplay).
     Cricsheet 5-ball "overs" are an adapter only — never treat Hundred as T20.
   - T10 deferred (not supported yet).
+  - Test / first-class: **unsupported** for limited-overs phases (no PP/middle/death).
 """
 
 # ---------------------------------------------------------------------------
@@ -27,6 +28,7 @@ PHASE_BOUNDARIES_BALLS = {
 
 EXPERIMENTAL_PHASE_KINDS = frozenset()
 BALL_NATIVE_KINDS = frozenset({"HUNDRED"})
+UNSUPPORTED_PHASE_KIND = "UNSUPPORTED"
 
 BALLS_PER_OVER = {
     "T20_LIKE": 6,
@@ -52,6 +54,16 @@ _FORMAT_TO_KIND = {
     "THE_HUNDRED": "HUNDRED",
 }
 
+# Multi-day / red-ball — no limited-overs phase windows.
+TEST_FORMATS = frozenset({
+    "TEST",
+    "MDM",
+    "FC",
+    "FIRSTCLASS",
+    "FIRST-CLASS",
+    "FIRST_CLASS",
+})
+
 ODI_LIKE_FORMATS = frozenset({"ODI", "ODM"})
 HUNDRED_FORMATS = frozenset({"HND", "HUNDRED", "100", "THE_HUNDRED"})
 
@@ -61,9 +73,27 @@ def normalize_match_type(match_type: str | None) -> str:
     return (match_type or "").strip().upper()
 
 
+def is_test_format(match_type: str | None) -> bool:
+    """True for Test / first-class codes (no limited-overs phases)."""
+    code = normalize_match_type(match_type)
+    if not code:
+        return False
+    if code in TEST_FORMATS:
+        return True
+    compact = code.replace("-", "").replace("_", "").replace(" ", "")
+    return code.startswith("TEST") or compact in {"FIRSTCLASS", "FIRSTCLASSMATCH"}
+
+
+def is_phase_supported(match_type: str | None) -> bool:
+    """False for Test/FC — callers must stay silent rather than borrow T20 windows."""
+    return not is_test_format(match_type)
+
+
 def phase_kind_for_match_type(match_type: str) -> str:
     """Return phase-kind key for a competition / match type code."""
     code = normalize_match_type(match_type)
+    if is_test_format(code):
+        return UNSUPPORTED_PHASE_KIND
     if code in _FORMAT_TO_KIND:
         return _FORMAT_TO_KIND[code]
     return "T20_LIKE"
@@ -91,8 +121,11 @@ def phase_set_for_match_type(match_type: str) -> dict:
 
     For Hundred this is the Cricsheet 5-ball-over adapter. Prefer
     phase_bounds_balls() / determine_phase_from_balls() for live logic.
+    Empty dict for unsupported formats (Test).
     """
     kind = phase_kind_for_match_type(match_type)
+    if kind == UNSUPPORTED_PHASE_KIND:
+        return {}
     if kind == "HUNDRED":
         return _hundred_cricsheet_over_windows()
     return PHASE_BOUNDARIES[kind]
@@ -102,8 +135,11 @@ def phase_bounds_balls(match_type: str) -> list[tuple[str, int, int]]:
     """
     [(name, start_ball, end_ball), ...] half-open.
     Over-based formats are converted via balls_per_over (T20/ODI unchanged).
+    Empty list for unsupported formats (Test).
     """
     kind = phase_kind_for_match_type(match_type)
+    if kind == UNSUPPORTED_PHASE_KIND:
+        return []
     if kind in PHASE_BOUNDARIES_BALLS:
         phases = PHASE_BOUNDARIES_BALLS[kind]
         return [(name, start, end) for name, (start, end) in phases.items()]
@@ -149,25 +185,34 @@ def overs_to_legal_balls(overs, match_type: str) -> int:
     return max(0, whole * bpo + balls_in_over)
 
 
-def determine_phase_from_balls(legal_balls_bowled, match_type: str) -> str:
-    """Map legal balls bowled (0-indexed count) into powerplay / middle / death."""
+def determine_phase_from_balls(legal_balls_bowled, match_type: str) -> str | None:
+    """Map legal balls bowled (0-indexed count) into powerplay / middle / death.
+
+    Returns None for unsupported formats (Test) — never invent T20 phases.
+    """
+    bounds = phase_bounds_balls(match_type)
+    if not bounds:
+        return None
     try:
         balls = float(legal_balls_bowled)
     except (TypeError, ValueError):
         balls = 0.0
-    for name, start, end in phase_bounds_balls(match_type):
+    for name, start, end in bounds:
         if start <= balls < end:
             return name
     return "death"
 
 
-def determine_phase_from_over(over_number, match_type: str) -> str:
+def determine_phase_from_over(over_number, match_type: str) -> str | None:
     """
     Map a 0-indexed over number into powerplay / middle / death.
 
     Hundred: treat overs as Cricsheet 5-ball sets, convert to balls, then
     use ball-native windows (keeps T20/ODI on pure over windows).
+    None for unsupported formats (Test).
     """
+    if not is_phase_supported(match_type):
+        return None
     if is_ball_native_format(match_type):
         return determine_phase_from_balls(
             overs_to_legal_balls(over_number, match_type), match_type
@@ -183,20 +228,31 @@ def determine_phase_from_over(over_number, match_type: str) -> str:
 
 
 def balls_per_over_for_match_type(match_type: str) -> int:
-    return BALLS_PER_OVER[phase_kind_for_match_type(match_type)]
+    kind = phase_kind_for_match_type(match_type)
+    if kind == UNSUPPORTED_PHASE_KIND:
+        return 6  # unused when phase-unsupported; avoid KeyError in callers
+    return BALLS_PER_OVER[kind]
 
 
 def innings_legal_balls(match_type: str) -> int:
-    return INNINGS_LEGAL_BALLS[phase_kind_for_match_type(match_type)]
+    kind = phase_kind_for_match_type(match_type)
+    if kind == UNSUPPORTED_PHASE_KIND:
+        return 0
+    return INNINGS_LEGAL_BALLS[kind]
 
 
 def is_experimental_format(match_type: str) -> bool:
     return phase_kind_for_match_type(match_type) in EXPERIMENTAL_PHASE_KINDS
 
 
-def format_total_overs(match_type: str) -> int:
-    """Scheduled overs for context builds (Hundred = 20 five-ball Cricsheet overs)."""
+def format_total_overs(match_type: str) -> int | None:
+    """Scheduled overs for context builds (Hundred = 20 five-ball Cricsheet overs).
+
+    None for Test — no limited-overs schedule.
+    """
     kind = phase_kind_for_match_type(match_type)
+    if kind == UNSUPPORTED_PHASE_KIND:
+        return None
     if kind == "ODI_LIKE":
         return 50
     if kind == "HUNDRED":
