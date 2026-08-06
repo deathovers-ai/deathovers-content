@@ -1,5 +1,5 @@
 {
-  "windows": {
+  "windows_overs": {
     "T20_LIKE": {
       "powerplay": [
         0,
@@ -28,20 +28,6 @@
         50
       ]
     },
-    "HUNDRED": {
-      "powerplay": [
-        0,
-        5
-      ],
-      "middle": [
-        5,
-        15
-      ],
-      "death": [
-        15,
-        20
-      ]
-    },
     "T10_LIKE": {
       "powerplay": [
         0,
@@ -57,12 +43,29 @@
       ]
     }
   },
+  "windows_balls": {
+    "HUNDRED": {
+      "powerplay": [
+        0,
+        25
+      ],
+      "middle": [
+        25,
+        75
+      ],
+      "death": [
+        75,
+        100
+      ]
+    }
+  },
   "odi_empirical": {
     "venues_ge_n": 112,
     "death_ge_mid": 112,
     "skipped_no_corpus_hundred": true,
     "skipped_no_corpus_t10": true,
     "death_ge_mid_frac": 1.0,
+    "t20_death_ge_mid_frac": 0.9884,
     "chase_edge_hits": {
       "pp_end": 397,
       "death_start": 259
@@ -70,17 +73,57 @@
   },
   "checks": [
     {
-      "name": "odi_pp",
+      "name": "hundred_not_in_over_table",
       "ok": true,
       "detail": null
     },
     {
-      "name": "odi_death",
+      "name": "t20_still_in_over_table",
       "ok": true,
       "detail": null
     },
     {
-      "name": "hundred_pp_25_balls",
+      "name": "odi_still_in_over_table",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "t10_still_in_over_table",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "hundred_ball_pp_25",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "hundred_ball_death_last_25",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "hundred_ball_native",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "t20_not_ball_native",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "odi_not_ball_native",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "t10_not_ball_native",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "twenty_overs_is_t20_not_hundred",
       "ok": true,
       "detail": null
     },
@@ -90,17 +133,17 @@
       "detail": null
     },
     {
+      "name": "t20_balls_per_over",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "odi_balls_per_over",
+      "ok": true,
+      "detail": null
+    },
+    {
       "name": "hundred_legal_balls",
-      "ok": true,
-      "detail": null
-    },
-    {
-      "name": "t10_pp",
-      "ok": true,
-      "detail": null
-    },
-    {
-      "name": "t10_death",
       "ok": true,
       "detail": null
     },
@@ -121,11 +164,6 @@
     },
     {
       "name": "format_total_t10",
-      "ok": true,
-      "detail": null
-    },
-    {
-      "name": "format_total_hundred",
       "ok": true,
       "detail": null
     },
@@ -195,6 +233,11 @@
       "detail": "HUNDRED"
     },
     {
+      "name": "map_T20I",
+      "ok": true,
+      "detail": "T20"
+    },
+    {
       "name": "edge_ODI_9",
       "ok": true,
       "detail": "powerplay"
@@ -215,22 +258,17 @@
       "detail": "death"
     },
     {
-      "name": "edge_HUNDRED_4",
+      "name": "edge_T20_5",
       "ok": true,
       "detail": "powerplay"
     },
     {
-      "name": "edge_HUNDRED_5",
+      "name": "edge_T20_6",
       "ok": true,
       "detail": "middle"
     },
     {
-      "name": "edge_HND_14",
-      "ok": true,
-      "detail": "middle"
-    },
-    {
-      "name": "edge_HND_15",
+      "name": "edge_T20_15",
       "ok": true,
       "detail": "death"
     },
@@ -245,12 +283,37 @@
       "detail": "middle"
     },
     {
-      "name": "edge_T10_6",
+      "name": "edge_T10_7",
+      "ok": true,
+      "detail": "death"
+    },
+    {
+      "name": "hundred_ball_0",
+      "ok": true,
+      "detail": "powerplay"
+    },
+    {
+      "name": "hundred_ball_24",
+      "ok": true,
+      "detail": "powerplay"
+    },
+    {
+      "name": "hundred_ball_25",
       "ok": true,
       "detail": "middle"
     },
     {
-      "name": "edge_T10_7",
+      "name": "hundred_ball_74",
+      "ok": true,
+      "detail": "middle"
+    },
+    {
+      "name": "hundred_ball_75",
+      "ok": true,
+      "detail": "death"
+    },
+    {
+      "name": "hundred_ball_99",
       "ok": true,
       "detail": "death"
     },
@@ -260,7 +323,17 @@
       "detail": null
     },
     {
-      "name": "hundred_vs_t20_over5",
+      "name": "hundred_vs_t20_ball25",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "t20_ball_bounds_36",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "hundred_ball_bounds_25",
       "ok": true,
       "detail": null
     },
@@ -269,9 +342,14 @@
       "ok": true,
       "detail": {
         "balls": 100,
-        "bpo": 5,
-        "pp_balls": 25
+        "pp_balls": 25,
+        "death_balls": 25
       }
+    },
+    {
+      "name": "hundred_adapter_agrees",
+      "ok": true,
+      "detail": null
     },
     {
       "name": "t10_ball_map",
@@ -290,16 +368,6 @@
         "middle",
         "powerplay"
       ]
-    },
-    {
-      "name": "contig_start_ODI",
-      "ok": true,
-      "detail": null
-    },
-    {
-      "name": "contig_end_ODI",
-      "ok": true,
-      "detail": null
     },
     {
       "name": "contig_ODI",
@@ -323,7 +391,7 @@
       ]
     },
     {
-      "name": "cover_HUNDRED",
+      "name": "cover_T20",
       "ok": true,
       "detail": [
         "death",
@@ -332,27 +400,17 @@
       ]
     },
     {
-      "name": "contig_start_HUNDRED",
-      "ok": true,
-      "detail": null
-    },
-    {
-      "name": "contig_end_HUNDRED",
-      "ok": true,
-      "detail": null
-    },
-    {
-      "name": "contig_HUNDRED",
+      "name": "contig_T20",
       "ok": true,
       "detail": [
         [
           "powerplay",
           0,
-          5
+          6
         ],
         [
           "middle",
-          5,
+          6,
           15
         ],
         [
@@ -370,16 +428,6 @@
         "middle",
         "powerplay"
       ]
-    },
-    {
-      "name": "contig_start_T10",
-      "ok": true,
-      "detail": null
-    },
-    {
-      "name": "contig_end_T10",
-      "ok": true,
-      "detail": null
     },
     {
       "name": "contig_T10",
@@ -403,6 +451,36 @@
       ]
     },
     {
+      "name": "cover_HUNDRED",
+      "ok": true,
+      "detail": [
+        "death",
+        "middle",
+        "powerplay"
+      ]
+    },
+    {
+      "name": "contig_HUNDRED_balls",
+      "ok": true,
+      "detail": [
+        [
+          "powerplay",
+          0,
+          25
+        ],
+        [
+          "middle",
+          25,
+          75
+        ],
+        [
+          "death",
+          75,
+          100
+        ]
+      ]
+    },
+    {
       "name": "odi_venues_present",
       "ok": true,
       "detail": 112
@@ -417,6 +495,14 @@
       }
     },
     {
+      "name": "t20_death_rr_ge_middle_regression",
+      "ok": true,
+      "detail": {
+        "frac": 0.9884,
+        "n": 173
+      }
+    },
+    {
       "name": "corpus_has_odi",
       "ok": true,
       "detail": [
@@ -426,6 +512,11 @@
         "ODM",
         "T20"
       ]
+    },
+    {
+      "name": "corpus_has_t20",
+      "ok": true,
+      "detail": null
     },
     {
       "name": "corpus_lacks_hundred",
@@ -438,27 +529,55 @@
       "detail": null
     },
     {
-      "name": "odi_dist_powerplay_n",
+      "name": "ODI_dist_powerplay_n",
       "ok": true,
       "detail": 251
     },
     {
-      "name": "odi_dist_middle_n",
+      "name": "ODI_dist_middle_n",
       "ok": true,
       "detail": 251
     },
     {
-      "name": "odi_dist_death_n",
+      "name": "ODI_dist_death_n",
       "ok": true,
       "detail": 251
     },
     {
-      "name": "odi_dist_death_gt_middle",
+      "name": "ODI_dist_death_gt_middle",
       "ok": true,
       "detail": {
         "middle": 5.015,
         "death": 5.863
       }
+    },
+    {
+      "name": "T20_dist_powerplay_n",
+      "ok": true,
+      "detail": 319
+    },
+    {
+      "name": "T20_dist_middle_n",
+      "ok": true,
+      "detail": 319
+    },
+    {
+      "name": "T20_dist_death_n",
+      "ok": true,
+      "detail": 319
+    },
+    {
+      "name": "T20_dist_death_gt_middle",
+      "ok": true,
+      "detail": {
+        "middle": 7.045,
+        "death": 7.818
+      }
+    },
+    {
+      "name": "dists_lack_hundred",
+      "ok": true,
+      "detail": null
     },
     {
       "name": "chase_edge_pp_end_phase",

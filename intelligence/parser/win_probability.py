@@ -22,6 +22,8 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from constants import (
+    balls_per_over_for_match_type,
+    determine_phase_from_balls,
     determine_phase_from_over,
     innings_legal_balls,
     phase_kind_for_match_type,
@@ -264,15 +266,16 @@ def simulate_chase(
 
     rng = rng or random.Random()
     wins = 0
+    # Format balls-per-over: T20/ODI stay at 6; Hundred uses 5. Never hardcode 6.
+    bpo = balls_per_over_for_match_type(fmt)
     for _ in range(n_sims):
         r, w, b_left = runs, wickets, balls_remaining
         balls_bowled = legal_balls
         while b_left > 0 and w < 10 and r < target:
-            over_idx = balls_bowled // 6
-            phase = determine_phase_from_over(over_idx, fmt)
+            phase = determine_phase_from_balls(balls_bowled, fmt)
             dist = resolve_phase_dist(dists, fmt, phase, venue) or probe
-            balls_this = min(6, b_left)
-            scale = balls_this / 6.0
+            balls_this = min(bpo, b_left)
+            scale = balls_this / float(bpo)
             mean = float(dist["runs_per_over_mean"]) * scale
             std = float(dist["runs_per_over_std"]) * math.sqrt(scale)
             w_mean = float(dist["wickets_per_over_mean"]) * scale
