@@ -21,7 +21,11 @@ from collections import defaultdict
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from constants import determine_phase_from_over
+from constants import (
+    determine_phase_from_over,
+    innings_legal_balls,
+    phase_kind_for_match_type,
+)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONTEXT_DIR = os.path.join(BASE_DIR, "output", "context")
 VENUE_STATS_FILE = os.path.join(CONTEXT_DIR, "venue_stats.json")
@@ -35,18 +39,21 @@ EARLY_BALLS_FRACTION = 0.40
 
 # ponytail: format-default wickets/over until event-built histograms exist.
 # Tuned to ~6–7 wickets per T20 innings / ~8–9 per ODI, with death slightly hotter.
+# Hundred / T10 borrow T20-like rates until format-specific builds exist.
 DEFAULT_WICKETS_PER_OVER = {
     "T20_LIKE": {"powerplay": 0.38, "middle": 0.28, "death": 0.42},
     "ODI_LIKE": {"powerplay": 0.22, "middle": 0.16, "death": 0.28},
+    "HUNDRED": {"powerplay": 0.38, "middle": 0.28, "death": 0.42},
+    "T10_LIKE": {"powerplay": 0.40, "middle": 0.32, "death": 0.45},
 }
 
 
 def _phase_kind(match_format: str) -> str:
-    return "ODI_LIKE" if (match_format or "").upper() in {"ODI", "ODM"} else "T20_LIKE"
+    return phase_kind_for_match_type(match_format)
 
 
 def _max_balls(match_format: str) -> int:
-    return 300 if _phase_kind(match_format) == "ODI_LIKE" else 120
+    return innings_legal_balls(match_format)
 
 
 def _default_wickets(match_format: str, phase: str) -> float:

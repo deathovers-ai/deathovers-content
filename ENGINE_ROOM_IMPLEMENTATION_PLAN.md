@@ -58,7 +58,7 @@ Legend: **HAVE** = production-usable · **PARTIAL** = code exists, incomplete vs
 | F08 | AI narration + hard contract | **HAVE** | `narration_engine.py`; validated `narration` on insights; template / optional LLM |
 | F09 | Weather-aware projections | **HAVE** | Dew HIGH/MOD moves WP + chase projection rates; rain → uncertainty only (no DLS) |
 | F10 | Tactical Decision Assistant | **NEED** | — |
-| F11 | Multi-format adaptive engine | **PARTIAL** | T20/IPL/IT20/ODI/ODM only; no Test / Hundred / T10 phase models |
+| F11 | Multi-format adaptive engine | **PARTIAL** | Phase windows for T20/ODI/Hundred/T10 in `constants.py`; Test still out; T10 experimental; corpus rebuild for HND/T10 venue stats not done |
 | F12 | Historical What-If simulator | **PARTIAL** | `replay_engine.replay_to` exists; no user sim / Monte Carlo fork UI |
 | F13 | Fantasy API | **NEED** | External scoring + squad data |
 | F14 | Youth / domestic expansion | **NEED** | Corpus is Cricsheet majors |

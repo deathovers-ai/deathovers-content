@@ -27,7 +27,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from replay_engine import ReplayEngine, MatchState
 from metrics_engine import current_run_rate
-from constants import phase_set_for_total_overs
+from constants import phase_set_for_total_overs, format_total_overs as format_total_overs
 from context_freshness import write_context_meta
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -190,8 +190,8 @@ def build_venue_alias_map():
     return alias_map, canonical_display
 
 
-def phase_set_for_format(total_overs):
-    return phase_set_for_total_overs(total_overs)
+def phase_set_for_format(total_overs, match_type=None):
+    return phase_set_for_total_overs(total_overs, match_type=match_type)
 
 
 def compute_match_result_facts(meta, innings_facts):
@@ -243,7 +243,7 @@ def compute_match_venue_facts(match_id, match_type, total_overs):
     Returns a list of per-innings fact dicts.
     """
     engine = ReplayEngine(match_id)
-    phases = phase_set_for_format(total_overs)
+    phases = phase_set_for_format(total_overs, match_type=match_type)
 
     results = []
     for innings_num in engine._innings_states.keys() if False else [1, 2]:
@@ -287,12 +287,6 @@ def compute_match_venue_facts(match_id, match_type, total_overs):
         })
 
     return results
-
-
-def format_total_overs(match_type):
-    if match_type in ("ODI", "ODM"):
-        return 50
-    return 20  # T20-family default
 
 
 def build_venue_stats():
@@ -372,7 +366,7 @@ def build_venue_stats():
                 sum(i["final_wickets"] for i in first_innings) / n, 1
             )
 
-            phases = phase_set_for_format(format_total_overs(match_type))
+            phases = phase_set_for_format(format_total_overs(match_type), match_type=match_type)
             phase_avg = {}
             for phase_name in phases:
                 total_runs = sum(i["phase_runs"][phase_name] for i in first_innings)

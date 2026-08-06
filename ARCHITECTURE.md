@@ -313,6 +313,9 @@ Three-tier interval scheduling in `_background_loop`:
 
 T20-like: powerplay 0-6 overs, middle 6-15, death 15-20.
 ODI-like: powerplay 0-10, middle 10-40, death 40-50.
+The Hundred: powerplay 0-5, middle 5-15, death 15-20 (5-ball overs;
+official first-25-ball powerplay).
+T10 (experimental): powerplay 0-3, middle 3-7, death 7-10.
 
 `PHASE_BOUNDARIES` and helpers live in `constants.py`. Consumers
 (`context_repository.py`, `match_intelligence_api.py`, `insight_engine.py`,
