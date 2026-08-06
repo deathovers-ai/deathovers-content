@@ -58,7 +58,9 @@ def _max_balls(match_format: str) -> int:
 
 
 def _default_wickets(match_format: str, phase: str) -> float:
-    table = DEFAULT_WICKETS_PER_OVER[_phase_kind(match_format)]
+    table = DEFAULT_WICKETS_PER_OVER.get(_phase_kind(match_format))
+    if not table:
+        return 0.3
     return float(table.get(phase) or table["middle"])
 
 
@@ -272,6 +274,8 @@ def simulate_chase(
         balls_bowled = legal_balls
         while b_left > 0 and w < 10 and r < target:
             phase = determine_phase_from_balls(balls_bowled, fmt)
+            if phase is None:
+                return None
             dist = resolve_phase_dist(dists, fmt, phase, venue) or probe
             balls_this = min(bpo, b_left)
             scale = balls_this / float(bpo)

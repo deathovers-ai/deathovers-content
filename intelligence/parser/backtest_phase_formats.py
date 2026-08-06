@@ -1,9 +1,10 @@
 """
-F11 backtest — phase windows for ODI / The Hundred.
+F11 backtest — phase windows for ODI / The Hundred / Test guard.
 
 Isolation rule: T20/ODI stay over-based; Hundred is ball-native
 (ECB 25-ball PP). Never infer Hundred from "20 overs" alone.
 T10 is deferred (not in phase tables / live maps).
+Test/FC is unsupported — must not borrow T20 phase windows.
 
 ODI: empirical check on venue_stats phase rates (death RR ≥ middle).
 Hundred: structural + synthetic ball→phase (no HND venue corpus yet).
@@ -22,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from constants import (
     PHASE_BOUNDARIES,
     PHASE_BOUNDARIES_BALLS,
+    UNSUPPORTED_PHASE_KIND,
     balls_per_over_for_match_type,
     determine_phase_from_balls,
     determine_phase_from_over,
@@ -29,12 +31,15 @@ from constants import (
     innings_legal_balls,
     is_ball_native_format,
     is_experimental_format,
+    is_phase_supported,
+    is_test_format,
     phase_bounds_balls,
     phase_bounds_list,
     phase_kind_for_match_type,
     phase_set_for_total_overs,
 )
 from match_intelligence_api import determine_phase, map_format
+from validation_engine import significance_threshold_pct
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VENUE_STATS = os.path.join(BASE_DIR, "output", "context", "venue_stats.json")
@@ -92,6 +97,16 @@ def main():
     check("format_total_odi", format_total_overs("ODI") == 50)
     check("t10_deferred_maps_t20_like", phase_kind_for_match_type("T10") == "T20_LIKE")
     check("t10_not_in_live_map", map_format("T10") is None)
+    check("test_is_test_format", is_test_format("TEST") is True)
+    check("test_phase_unsupported", is_phase_supported("TEST") is False)
+    check("test_kind_unsupported", phase_kind_for_match_type("TEST") == UNSUPPORTED_PHASE_KIND)
+    check("test_no_phase_from_over", determine_phase_from_over(10, "TEST") is None)
+    check("test_no_phase_from_balls", determine_phase_from_balls(60, "TEST") is None)
+    check("test_empty_bounds", phase_bounds_list("TEST") == [])
+    check("test_live_map_none", map_format("TEST") is None)
+    check("sig_odi_lower", significance_threshold_pct("ODI") == 8.0)
+    check("sig_hundred_higher", significance_threshold_pct("HUNDRED") == 12.0)
+    check("sig_t20_default", significance_threshold_pct("T20") == 10.0)
 
     for code, kind in (
         ("ODI", "ODI_LIKE"),

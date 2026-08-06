@@ -58,7 +58,7 @@ Legend: **HAVE** = production-usable · **PARTIAL** = code exists, incomplete vs
 | F08 | AI narration + hard contract | **HAVE** | `narration_engine.py`; validated `narration` on insights; template / optional LLM |
 | F09 | Weather-aware projections | **HAVE** | Dew HIGH/MOD moves WP + chase projection rates; rain → uncertainty only (no DLS) |
 | F10 | Tactical Decision Assistant | **HAVE** | `decision_assistant.py` + `tactical_board` on match-details; Tactical Board tab; medium confidence + sample cites |
-| F11 | Multi-format adaptive engine | **PARTIAL** | Ball-native Hundred (25-ball PP); over-based T20/ODI; T10 deferred; Test still out; HND venue corpus rebuild not done |
+| F11 | Multi-format adaptive engine | **HAVE** | Ball-native Hundred; over-based T20/ODI; Test/FC explicitly unsupported (no T20 borrow); format-specific significance; T10 deferred; HND venue corpus still ops-blocked |
 | F12 | Historical What-If simulator | **HAVE** | `what_if.py` + `/api/what-if` + Simulations tab; XI guard; actual vs fork WP; historical replay when events exist |
 | F13 | Fantasy API | **NEED** | External scoring + squad data |
 | F14 | Youth / domestic expansion | **NEED** | Corpus is Cricsheet majors |
@@ -271,7 +271,7 @@ Ship in dependency order. Prefer smallest vertical slices that hit Match Room + 
 ### Slice D — Expansion (after core is sticky)
 **F11 → F12 → F10**
 
-1. **F11** Format auto-detect; Test / Hundred phase defs in `constants.py`; T10 flagged experimental; format-specific significance thresholds.
+1. **F11** Multi-format — **DONE** for code path: Hundred ball-native; Test/FC refuse limited-overs phases; format-specific significance thresholds; T10 deferred. HND venue corpus rebuild remains an ops/data step when events are available.
 2. **F12** What-If — **DONE** (`what_if.py`, `/api/what-if`, Simulations tab): fork chase facts + F05 MC; XI ⊆11; disclaimer; historical actual when events present.
 3. **F10** Tactical Decision Assistant — **DONE** (`decision_assistant.py`, `tactical_board` on match-details, Tactical Board tab): promote/consolidate/death/matchup patterns; medium confidence + disclaimer; cites cohort/matchup/phase samples.
 

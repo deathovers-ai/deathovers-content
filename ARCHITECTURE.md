@@ -316,7 +316,10 @@ ODI-like: powerplay 0-10, middle 10-40, death 40-50.
 The Hundred is **ball-native** (not over-based): powerplay 0-25 balls
 (official ECB PP), middle 25-75, death 75-100. Cricsheet 5-ball "overs"
 are an adapter only — never infer Hundred from "20 overs" alone (that
-stays T20). T10 is deferred (not in phase tables).
+stays T20). T10 is deferred (not in phase tables). Test / first-class
+are **unsupported** for limited-overs phases (`is_phase_supported` /
+`UNSUPPORTED`) — never borrow T20 windows. Significance floors vary by
+format kind via `significance_threshold_pct` (T20 10%, ODI 8%, Hundred 12%).
 
 `PHASE_BOUNDARIES` / `PHASE_BOUNDARIES_BALLS` and helpers live in
 `constants.py`. Consumers import from there. Do not re-declare windows

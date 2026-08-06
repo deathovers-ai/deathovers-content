@@ -20,6 +20,29 @@ DATA_CONFIDENCE_CUTOFF = "2005-01-01"
 # emitting. Below this, silence — commenting on every wobble is noise.
 SIGNIFICANCE_THRESHOLD_PCT = 10.0
 
+# F11: format-kind thresholds. Hundred stays slightly higher until a real
+# HND venue corpus lands (noisier samples). ODI slightly lower — longer
+# innings make smaller relative edges more meaningful.
+SIGNIFICANCE_THRESHOLD_BY_KIND = {
+    "T20_LIKE": 10.0,
+    "ODI_LIKE": 8.0,
+    "HUNDRED": 12.0,
+}
+
+
+def significance_threshold_pct(match_type: str | None = None) -> float:
+    """Return the significance floor for a competition / match type."""
+    if not match_type:
+        return SIGNIFICANCE_THRESHOLD_PCT
+    try:
+        from constants import UNSUPPORTED_PHASE_KIND, phase_kind_for_match_type
+    except ImportError:
+        return SIGNIFICANCE_THRESHOLD_PCT
+    kind = phase_kind_for_match_type(match_type)
+    if kind == UNSUPPORTED_PHASE_KIND:
+        return SIGNIFICANCE_THRESHOLD_PCT
+    return float(SIGNIFICANCE_THRESHOLD_BY_KIND.get(kind, SIGNIFICANCE_THRESHOLD_PCT))
+
 # Venue sample floor when the explicit confidence field is absent (older
 # venue_stats.json builds).
 MIN_VENUE_MATCHES = 5

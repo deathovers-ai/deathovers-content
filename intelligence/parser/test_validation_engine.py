@@ -6,8 +6,10 @@ import unittest
 from validation_engine import (
     DATA_CONFIDENCE_CUTOFF,
     MIN_VENUE_MATCHES,
+    SIGNIFICANCE_THRESHOLD_BY_KIND,
     SIGNIFICANCE_THRESHOLD_PCT,
     player_data_is_reliable,
+    significance_threshold_pct,
     venue_data_is_reliable,
 )
 
@@ -20,6 +22,12 @@ class ValidationEngineTests(unittest.TestCase):
         self.assertEqual(DATA_CONFIDENCE_CUTOFF, "2005-01-01")
         self.assertEqual(SIGNIFICANCE_THRESHOLD_PCT, 10.0)
         self.assertEqual(MIN_VENUE_MATCHES, 5)
+        self.assertEqual(SIGNIFICANCE_THRESHOLD_BY_KIND["ODI_LIKE"], 8.0)
+        self.assertEqual(SIGNIFICANCE_THRESHOLD_BY_KIND["HUNDRED"], 12.0)
+        self.assertEqual(significance_threshold_pct("ODI"), 8.0)
+        self.assertEqual(significance_threshold_pct("T20"), 10.0)
+        self.assertEqual(significance_threshold_pct("HUNDRED"), 12.0)
+        self.assertEqual(significance_threshold_pct("TEST"), 10.0)
 
     def test_player_missing_date_refused(self):
         self.assertFalse(player_data_is_reliable({}))

@@ -154,6 +154,56 @@
       "detail": null
     },
     {
+      "name": "test_is_test_format",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "test_phase_unsupported",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "test_kind_unsupported",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "test_no_phase_from_over",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "test_no_phase_from_balls",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "test_empty_bounds",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "test_live_map_none",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "sig_odi_lower",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "sig_hundred_higher",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "sig_t20_default",
+      "ok": true,
+      "detail": null
+    },
+    {
       "name": "kind_ODI",
       "ok": true,
       "detail": "ODI_LIKE"
