@@ -357,3 +357,7 @@ actual final score 188. Within range, 2 runs from the projection midpoint.
 8. Data freshness dashboard (F03) - **done**: `context_freshness.py` +
    `context_meta.json` sidecar; exposed as `intelligence.data_freshness`
    on match-details; chip on Match Room + Tactical Read.
+9. What-If simulator (F12) - **done**: `what_if.py` forks chase state,
+   runs F05 Monte Carlo for baseline vs fork, enforces XI ≤11 /
+   batting_order ⊆ XI, returns disclaimer; `/api/what-if` + Simulations
+   tab UI. Historical actual attached when event files are present.

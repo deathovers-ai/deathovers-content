@@ -59,7 +59,7 @@ Legend: **HAVE** = production-usable · **PARTIAL** = code exists, incomplete vs
 | F09 | Weather-aware projections | **HAVE** | Dew HIGH/MOD moves WP + chase projection rates; rain → uncertainty only (no DLS) |
 | F10 | Tactical Decision Assistant | **NEED** | — |
 | F11 | Multi-format adaptive engine | **PARTIAL** | Ball-native Hundred (25-ball PP); over-based T20/ODI; T10 deferred; Test still out; HND venue corpus rebuild not done |
-| F12 | Historical What-If simulator | **PARTIAL** | `replay_engine.replay_to` exists; no user sim / Monte Carlo fork UI |
+| F12 | Historical What-If simulator | **HAVE** | `what_if.py` + `/api/what-if` + Simulations tab; XI guard; actual vs fork WP; historical replay when events exist |
 | F13 | Fantasy API | **NEED** | External scoring + squad data |
 | F14 | Youth / domestic expansion | **NEED** | Corpus is Cricsheet majors |
 | F15 | Integrity monitor | **NEED** | Blocked on legal review |
@@ -272,7 +272,7 @@ Ship in dependency order. Prefer smallest vertical slices that hit Match Room + 
 **F11 → F12 → F10**
 
 1. **F11** Format auto-detect; Test / Hundred phase defs in `constants.py`; T10 flagged experimental; format-specific significance thresholds.
-2. **F12** What-If on top of `replay_engine` + F05; only XI players; actual vs simulated comparison; disclaimer.
+2. **F12** What-If — **DONE** (`what_if.py`, `/api/what-if`, Simulations tab): fork chase facts + F05 MC; XI ⊆11; disclaimer; historical actual when events present.
 3. **F10** Historical decision-outcome patterns (“promote hitter at RRR>X”); medium confidence + disclaimer; Tactical Board tab — after F04/F06 so recommendations cite real samples.
 
 ### Slice E — Monetize last (gated)
